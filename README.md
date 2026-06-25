@@ -1,3 +1,10 @@
+---
+title: Frimeet API NLP
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Frimeet API NLP
 
 Servicio NLP independiente para busqueda semantica, recomendaciones, ranking, embeddings y redaccion conversacional con Llama via Groq.
@@ -163,6 +170,30 @@ Documentacion local:
 
 ```text
 http://127.0.0.1:8080/docs
+```
+
+## Hugging Face Docker Space
+
+El proyecto incluye `Dockerfile` para Hugging Face Spaces. El contenedor expone el puerto `7860` y arranca:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}
+```
+
+En Hugging Face configura estas variables/secrets:
+
+```env
+ENV=production
+API_HOST=0.0.0.0
+API_PORT=7860
+VECTOR_STORE_PROVIDER=aws_pgvector
+PGVECTOR_HOST=...
+PGVECTOR_PORT=5432
+PGVECTOR_DATABASE=...
+PGVECTOR_USER=nlp_reader
+PGVECTOR_PASSWORD=...
+PGVECTOR_SSL_MODE=require
+GROQ_API_KEY=...
 ```
 
 ## Endpoints
