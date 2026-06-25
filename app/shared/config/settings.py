@@ -47,39 +47,16 @@ class Settings(BaseSettings):
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
     groq_model: str = Field(default="llama-3.1-8b-instant", alias="GROQ_MODEL")
 
-    chroma_host: str = Field(default="localhost", alias="CHROMA_HOST")
-    chroma_port: int = Field(default=8000, alias="CHROMA_PORT")
-    chroma_places_collection: str = Field(
-        default="places_collection",
-        alias="CHROMA_PLACES_COLLECTION",
-    )
-    chroma_posts_collection: str = Field(
-        default="posts_collection",
-        alias="CHROMA_POSTS_COLLECTION",
-    )
-    vector_store_mode: str = Field(default="mock", alias="VECTOR_STORE_MODE")
     vector_store_provider: str = Field(default="mock", alias="VECTOR_STORE_PROVIDER")
 
-    pgvector_dsn: str | None = Field(default=None, alias="PGVECTOR_DSN")
-    pgvector_ssl: str | None = Field(default="require", alias="PGVECTOR_SSL")
     pgvector_host: str | None = Field(default=None, alias="PGVECTOR_HOST")
     pgvector_port: int = Field(default=5432, alias="PGVECTOR_PORT")
     pgvector_database: str | None = Field(default=None, alias="PGVECTOR_DATABASE")
     pgvector_user: str | None = Field(default=None, alias="PGVECTOR_USER")
     pgvector_password: str | None = Field(default=None, alias="PGVECTOR_PASSWORD")
     pgvector_ssl_mode: str = Field(default="require", alias="PGVECTOR_SSL_MODE")
-    pgvector_places_table: str = Field(
-        default="place_embeddings",
-        alias="PGVECTOR_PLACES_TABLE",
-    )
-    pgvector_posts_table: str = Field(
-        default="post_embeddings",
-        alias="PGVECTOR_POSTS_TABLE",
-    )
-    pgvector_embedding_dimension: int = Field(
-        default=16,
-        alias="PGVECTOR_EMBEDDING_DIMENSION",
-    )
+    pgvector_places_table: str = "place_embeddings"
+    pgvector_posts_table: str = "post_embeddings"
     embedding_dimension: int = Field(default=16, alias="EMBEDDING_DIMENSION")
     embedding_model: str = Field(default="mock-embedding", alias="EMBEDDING_MODEL")
     embedding_version: str = Field(default="v1", alias="EMBEDDING_VERSION")

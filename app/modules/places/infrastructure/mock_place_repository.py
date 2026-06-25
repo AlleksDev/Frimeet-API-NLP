@@ -60,7 +60,7 @@ SAMPLE_PLACES = [
 
 
 class MockPlaceVectorRepository(PlaceVectorRepository):
-    """In-memory repository used until ChromaDB is connected in production."""
+    """In-memory repository used for local development and tests."""
 
     def __init__(self, embedding_provider: EmbeddingProvider) -> None:
         self._records = []

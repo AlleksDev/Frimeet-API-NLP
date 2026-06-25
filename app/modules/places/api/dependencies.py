@@ -6,42 +6,20 @@ from app.modules.places.application.use_cases.search_places import SearchPlacesU
 from app.modules.places.infrastructure.aws_pgvector_place_repository import (
     AwsPgvectorPlaceRepository,
 )
-from app.modules.places.infrastructure.chroma_place_repository import ChromaPlaceVectorRepository
 from app.modules.places.infrastructure.mock_place_repository import MockPlaceVectorRepository
-from app.modules.places.infrastructure.pgvector_place_repository import PgVectorPlaceVectorRepository
 from app.modules.places.infrastructure.simple_place_ranker import SimplePlaceRanker
 from app.shared.cache.memory import SimpleTTLCache
-from app.shared.chroma.client import ChromaHttpClientFactory
-from app.shared.chroma.vector_store import ChromaVectorStore
 from app.shared.config.settings import get_settings
 from app.shared.dependencies import get_embedding_provider, get_llm_provider
 from app.shared.nlp.llm.output_guard import PlaceChatOutputGuard
-from app.shared.pgvector.client import PgVectorConnectionFactory
 from app.shared.vector_store.aws_pgvector import AwsPgvectorClient
 
 
 @lru_cache
-def get_place_repository() -> (
-    MockPlaceVectorRepository
-    | ChromaPlaceVectorRepository
-    | PgVectorPlaceVectorRepository
-    | AwsPgvectorPlaceRepository
-):
+def get_place_repository() -> MockPlaceVectorRepository | AwsPgvectorPlaceRepository:
     settings = get_settings()
     if settings.vector_store_provider == "aws_pgvector":
         return AwsPgvectorPlaceRepository(vector_client=AwsPgvectorClient(settings))
-    if settings.vector_store_mode == "chroma":
-        return ChromaPlaceVectorRepository(
-            vector_store=ChromaVectorStore(
-                client_factory=ChromaHttpClientFactory(settings),
-                collection_name=settings.chroma_places_collection,
-            )
-        )
-    if settings.vector_store_mode == "pgvector":
-        return PgVectorPlaceVectorRepository(
-            connection_factory=PgVectorConnectionFactory(settings),
-            settings=settings,
-        )
     return MockPlaceVectorRepository(embedding_provider=get_embedding_provider())
 
 

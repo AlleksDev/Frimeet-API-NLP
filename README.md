@@ -1,269 +1,155 @@
-# Independent NLP Service
+# Frimeet API NLP
 
-Servicio backend NLP independiente para busqueda semantica, recomendaciones, ranking, embeddings, ChromaDB y redaccion de respuestas conversacionales con Llama via Groq.
+Servicio NLP independiente para busqueda semantica, recomendaciones, ranking, embeddings y redaccion conversacional con Llama via Groq.
 
-Este servicio esta pensado para ser consumido por una API principal mediante REST. La app movil no debe llamar directamente a este servicio. La API principal mantiene autenticacion, usuarios, sesiones, permisos, reportes de respuestas y logica general de producto.
+La API principal sigue siendo la fuente de verdad de lugares, posts, usuarios, sesiones, permisos y reportes. Este servicio NLP solo trabaja con datos derivados para busqueda semantica.
 
-## 1. Descripcion del proyecto
+## Arquitectura
 
-El servicio NLP apoya una aplicacion movil para planear salidas con amigos, familia o pareja y recomendar lugares o publicaciones relacionadas. La primera region objetivo es Chiapas, Mexico, con posibilidad de crecer a todo Mexico.
+```text
+API principal
+  ├─ fuente de verdad de places/posts
+  └─ consume la API NLP por REST
 
-La primera version queda lista como un modular monolith en FastAPI: modular por recursos, mantenible, preparada para produccion moderada y sin Docker por ahora.
+Hugging Face API NLP
+  ├─ usa nlp_reader
+  ├─ consulta RDS PostgreSQL + pgvector
+  ├─ genera embedding solo del query del usuario
+  └─ usa Groq/Llama solo para embellecer chat
 
-## 2. Objetivo del servicio NLP
+Hugging Face Jobs
+  ├─ usan nlp_writer
+  ├─ consumen endpoints internos paginados/incrementales de la API principal
+  ├─ generan embeddings por batch
+  └─ hacen upsert via funciones SQL controladas
 
-Responsabilidades principales:
+RDS PostgreSQL + pgvector
+  ├─ place_embeddings
+  ├─ post_embeddings
+  ├─ match_places
+  ├─ match_posts
+  ├─ upsert_place_embedding
+  └─ upsert_post_embedding
+```
 
-- Procesar y normalizar texto de entrada.
-- Generar embeddings de queries de usuario.
-- Consultar ChromaDB como vector store.
-- Recomendar y rankear lugares.
-- Recomendar publicaciones.
-- Exponer clusters de publicaciones previamente calculados.
-- Usar Llama via Groq solo para embellecer la respuesta final del chat.
-
-Fuera de alcance:
-
-- Autenticacion de usuarios.
-- Sesiones.
-- Reportes de respuestas por usuarios.
-- Permisos de producto.
-- Llamadas directas desde la app movil.
-- Generacion masiva de embeddings durante requests normales.
-- Clustering de publicaciones durante requests normales.
-
-## 3. Arquitectura general
-
-La arquitectura es un modular monolith service:
-
-- `places`: busqueda, recomendaciones, chat y ranking de lugares.
-- `posts`: recomendaciones, clusters y ranking de publicaciones.
-- `shared`: capacidades reutilizables de NLP, ChromaDB, configuracion, cache, errores, logging y seguridad.
-- `jobs`: tareas pesadas o batch que se ejecutan fuera del flujo normal de requests.
-
-Dentro de cada modulo se usa una arquitectura limpia ligera:
-
-- `api`: routers y schemas Pydantic.
-- `application/use_cases`: casos de uso.
-- `application/ports`: interfaces hacia dependencias externas.
-- `domain`: modelos del dominio.
-- `infrastructure`: implementaciones concretas o mocks iniciales.
-
-Los casos de uso no dependen directamente de ChromaDB, Groq, Llama ni proveedores concretos.
-
-## 4. Estructura de carpetas
+## Estructura
 
 ```text
 app/
 ├── main.py
 ├── modules/
 │   ├── places/
-│   │   ├── api/
-│   │   ├── application/
-│   │   │   ├── use_cases/
-│   │   │   └── ports/
-│   │   ├── domain/
-│   │   └── infrastructure/
 │   └── posts/
-│       ├── api/
-│       ├── application/
-│       │   ├── use_cases/
-│       │   └── ports/
-│       ├── domain/
-│       └── infrastructure/
 ├── shared/
+│   ├── vector_store/
 │   ├── nlp/
-│   │   ├── embeddings/
-│   │   ├── preprocessing/
-│   │   ├── llm/
-│   │   └── prompts/
-│   ├── chroma/
 │   ├── config/
 │   ├── cache/
 │   ├── errors/
 │   ├── logging/
 │   └── security/
 └── jobs/
+
+sql/
+└── aws_pgvector_contract.sql
 ```
 
-## 5. Flujo de busqueda de lugares
+## Vector Store
 
-Endpoint:
+Los casos de uso no dependen directamente de PostgreSQL. Dependen de puertos por modulo:
 
-```http
-POST /places/search
+- `PlaceVectorRepository`
+- `PostVectorRepository`
+
+Implementaciones actuales:
+
+- `MockPlaceVectorRepository` y `MockPostVectorRepository` para desarrollo/tests.
+- `AwsPgvectorPlaceRepository` y `AwsPgvectorPostRepository` para RDS/Aurora PostgreSQL + pgvector.
+
+La API NLP solo lee mediante:
+
+- `match_places`
+- `match_posts`
+
+Los jobs escriben mediante:
+
+- `upsert_place_embedding`
+- `upsert_post_embedding`
+
+No se usan credenciales master/admin desde Hugging Face.
+
+## Variables De Entorno
+
+```env
+ENV=local
+API_HOST=0.0.0.0
+API_PORT=8080
+
+MAIN_API_BASE_URL=http://52.86.8.11
+MAIN_API_PLACES_SEARCH_PATH=/api/v1/places/search
+MAIN_API_POSTS_SEARCH_PATH=/api/v1/posts/search
+MAIN_API_INTERNAL_TOKEN=
+MAIN_API_TIMEOUT_SECONDS=15
+MAIN_API_PLACES_PAGE_LIMIT=100
+MAIN_API_POSTS_PAGE_LIMIT=100
+MAIN_API_PLACES_PAGINATION_MODE=page
+MAIN_API_POSTS_PAGINATION_MODE=page
+
+GROQ_API_KEY=
+GROQ_MODEL=llama-3.1-8b-instant
+
+VECTOR_STORE_PROVIDER=mock
+
+PGVECTOR_HOST=
+PGVECTOR_PORT=5432
+PGVECTOR_DATABASE=
+PGVECTOR_USER=
+PGVECTOR_PASSWORD=
+PGVECTOR_SSL_MODE=require
+
+EMBEDDING_DIMENSION=16
+EMBEDDING_MODEL=mock-embedding
+EMBEDDING_VERSION=v1
+
+LOG_LEVEL=INFO
+REQUEST_TIMEOUT_SECONDS=10
+LLM_TIMEOUT_SECONDS=12
+MAX_LLM_CONCURRENT_REQUESTS=4
 ```
 
-Flujo:
+Para la API NLP en Hugging Face:
 
-1. Recibe `query`, ciudad, estado y filtros.
-2. Limpia y normaliza el texto.
-3. Genera embedding solo del query del usuario.
-4. Consulta la coleccion de lugares en ChromaDB.
-5. Aplica filtros por metadata cuando existan:
-   - `city`
-   - `state`
-   - `category`
-   - `price_range`
-   - `is_active`
-   - `occasion`
-6. Rankea candidatos.
-7. Devuelve lugares estructurados.
-
-Importante: los embeddings de lugares se generan offline con jobs y se guardan en ChromaDB. La request solo genera el embedding del query.
-
-## 6. Flujo de chat con Llama via Groq
-
-Endpoint:
-
-```http
-POST /places/chat
+```env
+VECTOR_STORE_PROVIDER=aws_pgvector
+PGVECTOR_USER=nlp_reader
 ```
 
-Flujo:
+Para Hugging Face Jobs:
 
-1. Recibe mensaje, ciudad/region y filtros.
-2. Preprocesa el texto.
-3. Genera embedding del mensaje.
-4. Busca lugares reales en ChromaDB o repositorio configurado.
-5. Aplica ranking.
-6. Construye un contexto limitado con candidatos reales.
-7. Envia a Llama via Groq solo la intencion, region aproximada y lugares candidatos.
-8. Llama redacta una respuesta conversacional.
-9. Se valida la salida con una capa simple de guardrails.
-10. La API responde con:
-    - `response_id`
-    - `nlp_trace_id`
-    - `message`
-    - `places`
-    - `metadata`
-
-Llama no decide recomendaciones, no hace busqueda y no debe inventar lugares. Las cards de la app deben salir del arreglo estructurado `places`, no del texto libre.
-
-## 7. Flujo de embeddings con ChromaDB
-
-La capa compartida esta en:
-
-```text
-app/shared/chroma/
-app/shared/nlp/embeddings/
+```env
+VECTOR_STORE_PROVIDER=aws_pgvector
+PGVECTOR_USER=nlp_writer
 ```
 
-Hay una interfaz `EmbeddingProvider` con:
+Todas las conexiones a RDS deben usar:
 
-- `embed_text(text: str) -> list[float]`
-- `embed_batch(texts: list[str]) -> list[list[float]]`
-
-La version inicial usa `MockEmbeddingProvider`, deterministico y util para desarrollo/tests. En produccion se puede reemplazar por un provider real sin cambiar los casos de uso.
-
-ChromaDB esta preparado para modo servidor via HTTP:
-
-```text
-CHROMA_HOST=localhost
-CHROMA_PORT=8000
-CHROMA_PLACES_COLLECTION=places_collection
-CHROMA_POSTS_COLLECTION=posts_collection
+```env
+PGVECTOR_SSL_MODE=require
 ```
 
-Las colecciones de lugares y publicaciones deben mantenerse separadas.
-
-## 8. Flujo de clustering de publicaciones
-
-Endpoint:
-
-```http
-GET /posts/clusters
-```
-
-Este endpoint solo lee clusters ya calculados. El clustering no se ejecuta durante una request normal.
-
-El job responsable es:
-
-```bash
-python -m app.jobs.rebuild_post_clusters
-```
-
-La implementacion inicial es un placeholder listo para conectar una fuente real de embeddings y persistencia de clusters.
-
-## 9. Variables de entorno
-
-Crear `.env` a partir de `.env.example`:
-
-```bash
-cp .env.example .env
-```
-
-Variables principales:
-
-```text
-ENV
-API_HOST
-API_PORT
-MAIN_API_BASE_URL
-MAIN_API_PLACES_SEARCH_PATH
-MAIN_API_POSTS_SEARCH_PATH
-MAIN_API_INTERNAL_TOKEN
-MAIN_API_AUTH_TOKEN
-MAIN_API_TIMEOUT_SECONDS
-MAIN_API_PLACES_PAGE_LIMIT
-MAIN_API_POSTS_PAGE_LIMIT
-MAIN_API_PLACES_PAGINATION_MODE
-MAIN_API_POSTS_PAGINATION_MODE
-GROQ_API_KEY
-GROQ_MODEL
-CHROMA_HOST
-CHROMA_PORT
-CHROMA_PLACES_COLLECTION
-CHROMA_POSTS_COLLECTION
-VECTOR_STORE_PROVIDER
-VECTOR_STORE_MODE
-PGVECTOR_HOST
-PGVECTOR_PORT
-PGVECTOR_DATABASE
-PGVECTOR_USER
-PGVECTOR_PASSWORD
-PGVECTOR_SSL_MODE
-EMBEDDING_DIMENSION
-EMBEDDING_MODEL
-EMBEDDING_VERSION
-LOG_LEVEL
-REQUEST_TIMEOUT_SECONDS
-LLM_TIMEOUT_SECONDS
-MAX_LLM_CONCURRENT_REQUESTS
-```
-
-`.env` esta incluido en `.gitignore` y no debe subirse al repositorio.
-
-## 10. Instalar dependencias
-
-Crear entorno virtual:
-
-```bash
-python -m venv .venv
-```
-
-Activar en Windows PowerShell:
+## Instalacion Local
 
 ```powershell
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
 ```
 
-Activar en macOS/Linux:
+## Ejecutar API
 
-```bash
-source .venv/bin/activate
-```
-
-Instalar dependencias:
-
-```bash
-pip install -r requirements.txt
-```
-
-## 11. Ejecutar la API sin Docker
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+```powershell
+uvicorn app.main:app --host 127.0.0.1 --port 8080 --reload
 ```
 
 Endpoints de sistema:
@@ -276,149 +162,12 @@ GET /ready
 Documentacion local:
 
 ```text
-http://localhost:8080/docs
+http://127.0.0.1:8080/docs
 ```
 
-## 12. Ejecutar ChromaDB en modo servidor
-
-El servicio FastAPI usa `chromadb-client` para conectarse por HTTP y evitar acoplar cada worker a almacenamiento embebido. Para levantar el servidor ChromaDB local, instala el paquete completo de ChromaDB en un entorno separado o en una maquina preparada para ese proceso:
-
-```bash
-python -m venv .venv-chroma
-source .venv-chroma/bin/activate
-pip install -r requirements-chroma-server.txt
-```
-
-En Windows PowerShell:
-
-```powershell
-python -m venv .venv-chroma
-.\.venv-chroma\Scripts\Activate.ps1
-pip install -r requirements-chroma-server.txt
-```
-
-Luego ejecutar:
-
-```bash
-chroma run --host localhost --port 8000
-```
-
-Nota para Windows: si el paquete completo `chromadb` intenta compilar `chroma-hnswlib`, puede requerir Microsoft C++ Build Tools o una version de Python con wheel disponible. La API no necesita ese paquete completo para correr; solo lo necesita el proceso servidor de ChromaDB.
-
-En esta version inicial los endpoints usan repositorios mock por defecto para poder desarrollar y probar sin una instancia real. Para conectar Chroma real, reemplaza las dependencias en:
-
-```text
-app/modules/places/api/dependencies.py
-app/modules/posts/api/dependencies.py
-```
-
-por repositorios `ChromaPlaceVectorRepository` y `ChromaPostVectorRepository` usando `ChromaVectorStore`.
-
-## 13. Ejecutar jobs
-
-Reconstruir embeddings de lugares:
-
-```bash
-python -m app.jobs.rebuild_place_embeddings
-```
-
-Ese job lee lugares reales desde la API principal configurada en `.env`:
-
-```env
-MAIN_API_BASE_URL=http://52.86.8.11
-MAIN_API_PLACES_SEARCH_PATH=/api/v1/places/search
-MAIN_API_PLACES_PAGE_LIMIT=100
-MAIN_API_PLACES_PAGINATION_MODE=page
-```
-
-Para probar la lectura y generacion de embeddings sin escribir en ChromaDB:
-
-```bash
-python -m app.jobs.rebuild_place_embeddings --dry-run --max-pages 1
-```
-
-Para guardar en ChromaDB, primero levanta Chroma y luego ejecuta:
-
-```bash
-python -m app.jobs.rebuild_place_embeddings
-```
-
-Para que los endpoints consulten ChromaDB en vez de datos mock, cambia en `.env`:
-
-```env
-VECTOR_STORE_MODE=chroma
-```
-
-En desarrollo puedes volver al modo local sin Chroma:
-
-```env
-VECTOR_STORE_MODE=mock
-```
-
-Para AWS RDS/Aurora PostgreSQL con pgvector, usa:
-
-```env
-VECTOR_STORE_PROVIDER=aws_pgvector
-PGVECTOR_HOST=your-rds-endpoint.amazonaws.com
-PGVECTOR_PORT=5432
-PGVECTOR_DATABASE=frimeet
-PGVECTOR_USER=nlp_reader
-PGVECTOR_PASSWORD=...
-PGVECTOR_SSL_MODE=require
-EMBEDDING_DIMENSION=16
-EMBEDDING_MODEL=mock-embedding
-EMBEDDING_VERSION=v1
-```
-
-La API NLP debe usar `nlp_reader`. Los jobs deben usar otro entorno con `PGVECTOR_USER=nlp_writer`.
-
-El contrato SQL de referencia esta en:
-
-```text
-sql/aws_pgvector_contract.sql
-```
-
-Ese SQL se ejecuta una vez con un rol administrador fuera de Hugging Face. La API y los jobs no usan credenciales master/admin.
-
-Sincronizar embeddings de lugares hacia RDS:
-
-```bash
-python -m app.jobs.sync_place_embeddings
-```
-
-Sincronizar embeddings de publicaciones hacia RDS:
-
-```bash
-python -m app.jobs.sync_post_embeddings
-```
-
-Prueba de lectura/procesamiento sin upsert:
-
-```bash
-python -m app.jobs.sync_place_embeddings --dry-run --max-pages 1
-python -m app.jobs.sync_post_embeddings --dry-run --max-pages 1
-```
-
-Reconstruir embeddings de publicaciones:
-
-```bash
-python -m app.jobs.rebuild_post_embeddings
-```
-
-Reconstruir clusters de publicaciones:
-
-```bash
-python -m app.jobs.rebuild_post_clusters
-```
-
-Los jobs actuales son placeholders ejecutables. La intencion es conectar ahi la base de datos fuente, generar embeddings por lotes y hacer upsert a ChromaDB sin cargar trabajo pesado en requests normales.
-El job de lugares ya incluye un cliente inicial para leer `/api/v1/places/search` desde la API principal y hacer upsert a la coleccion `places_collection`.
-
-## 14. Endpoints disponibles
+## Endpoints
 
 ```http
-GET  /health
-GET  /ready
 POST /places/search
 POST /places/recommendations
 POST /places/chat
@@ -426,106 +175,68 @@ POST /posts/recommendations
 GET  /posts/clusters
 ```
 
-Ejemplo de search:
+## Sync Jobs
 
-```json
-{
-  "query": "lugares tranquilos para cenar",
-  "city": "Tuxtla Gutierrez",
-  "filters": {
-    "category": "restaurant",
-    "is_active": true
-  },
-  "limit": 5
-}
+Probar sin escribir:
+
+```powershell
+python -m app.jobs.sync_place_embeddings --dry-run --max-pages 1
+python -m app.jobs.sync_post_embeddings --dry-run --max-pages 1
 ```
 
-Ejemplo de chat:
+Sincronizar hacia RDS:
 
-```json
-{
-  "message": "quiero una cena tranquila con mi pareja",
-  "city": "Tuxtla Gutierrez",
-  "filters": {
-    "occasion": "pareja",
-    "is_active": true
-  },
-  "limit": 5
-}
+```powershell
+python -m app.jobs.sync_place_embeddings
+python -m app.jobs.sync_post_embeddings
 ```
 
-## 15. Consideraciones de seguridad
+Flujo de `sync_place_embeddings.py`:
 
-- No exponer API keys.
-- No subir `.env`.
-- La app movil nunca debe llamar directamente a Groq ni a este servicio NLP.
-- Minimizar datos enviados a Groq.
-- No enviar emails, telefonos, nombres completos ni ubicacion exacta si no es necesario.
-- Hay middleware base para limitar tamano de request.
-- Hay placeholder de rate limiting listo para evolucionar.
-- Las llamadas a Groq usan timeout y limite de concurrencia.
+1. Lee configuracion.
+2. Consulta la API principal con paginacion/cursor.
+3. Construye texto para embedding por lugar.
+4. Calcula `content_hash`.
+5. Consulta hashes existentes y omite registros sin cambios.
+6. Genera embeddings por batch.
+7. Llama `upsert_place_embedding`.
+8. Registra procesados, omitidos, upserts y errores.
 
-## 16. Consideraciones de escalabilidad
+Flujo de `sync_post_embeddings.py`:
 
-- FastAPI usa endpoints async.
-- Los modelos/providers se instancian una vez mediante dependencias cacheadas.
-- No se generan embeddings masivos durante requests.
-- ChromaDB esta pensado como servicio separado.
-- `/places/search` funciona sin LLM.
-- `/places/chat` usa LLM y esta protegido con timeout, concurrencia y fallback.
-- Jobs offline manejan embeddings masivos y clustering.
-- Hay cache TTL simple para busquedas frecuentes de lugares.
+1. Lee configuracion.
+2. Consulta la API principal con paginacion/cursor.
+3. Construye texto para embedding por post.
+4. Calcula `content_hash`.
+5. Consulta hashes existentes y omite registros sin cambios.
+6. Genera embeddings por batch.
+7. Llama `upsert_post_embedding`.
+8. Registra metricas basicas.
 
-## 17. Por que Llama solo embellece respuestas
+Si un lugar o post llega como `is_active=false`, el job actualiza ese estado derivado en RDS.
 
-Las recomendaciones deben venir del sistema NLP:
+## SQL RDS
 
-- embeddings,
-- similitud vectorial,
-- filtros por metadata,
-- ranking,
-- datos reales en ChromaDB.
+Contrato de referencia:
 
-Llama solo redacta una respuesta mas amable y natural con los lugares ya seleccionados. Esto evita que el modelo invente lugares, horarios, precios, promociones o datos que no existen en el contexto.
+```text
+sql/aws_pgvector_contract.sql
+```
 
-## 18. Reportes de respuestas desde la API principal
+Ese archivo debe ejecutarse una vez con un rol administrador/DBA fuera de Hugging Face.
 
-El boton de reportar respuesta vive en la app movil, pero el reporte debe enviarse a la API principal.
+La API NLP usa solo `nlp_reader`.
 
-Este servicio NLP solo devuelve metadatos para trazabilidad:
+Los jobs usan solo `nlp_writer`.
 
-- `response_id`
-- `nlp_trace_id`
-- modelo usado
-- proveedor LLM
-- lugares usados como contexto
-- timestamp
+## Llama Via Groq
 
-No se reporta automaticamente a Groq cuando un usuario reporta una respuesta. Los reportes deben quedar en el sistema del producto para revision interna y mejora de prompts, filtros y ranking.
+Groq/Llama solo se usa en `/places/chat` para redactar una respuesta conversacional. No decide que lugares recomendar, no hace busqueda y no inventa lugares.
 
-## 19. Proximos pasos recomendados
-
-- Conectar `ChromaPlaceVectorRepository` y `ChromaPostVectorRepository` en las dependencias.
-- Crear jobs reales que lean lugares/posts desde la fuente oficial.
-- Elegir provider real de embeddings y mantener la interfaz actual.
-- Persistir trazas NLP en storage interno.
-- Agregar autenticacion interna entre API principal y servicio NLP.
-- Implementar rate limiting real por API principal, tenant o client id.
-- Agregar observabilidad: request id, metricas, latencias y errores por provider.
-- Endurecer guardrails del LLM con validacion mas estricta sobre entidades permitidas.
-- Ampliar tests de integracion con una instancia ChromaDB de desarrollo.
+El arreglo estructurado `places` viene desde RDS/pgvector mediante embeddings, filtros y ranking. La app debe renderizar cards desde ese arreglo, no parseando texto libre del LLM.
 
 ## Tests
 
-```bash
+```powershell
 pytest
 ```
-
-Los tests iniciales cubren:
-
-- `/health`
-- provider mock de embeddings
-- busqueda de lugares con providers mock
-- chat de lugares con LLM mock
-- respuesta de chat con lugares estructurados
-- fallback cuando falla el LLM

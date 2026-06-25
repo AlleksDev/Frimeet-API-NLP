@@ -7,8 +7,8 @@ from typing import Any, AsyncIterator
 import asyncpg
 
 from app.shared.config.settings import Settings
-from app.shared.pgvector.sql import quote_identifier, vector_literal
 from app.shared.vector_store.models import VectorMatch, VectorUpsertRecord
+from app.shared.vector_store.sql import quote_identifier, vector_literal
 
 
 class AwsPgvectorClient:
@@ -182,8 +182,6 @@ def _row_value(row: Any, key: str, default: Any = None) -> Any:
 
 
 def _build_dsn(settings: Settings) -> str:
-    if settings.pgvector_dsn:
-        return settings.pgvector_dsn
     required = {
         "PGVECTOR_HOST": settings.pgvector_host,
         "PGVECTOR_DATABASE": settings.pgvector_database,

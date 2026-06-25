@@ -16,7 +16,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Independent NLP Service",
         version="0.1.0",
-        description="NLP backend for semantic search, recommendations, embeddings, ChromaDB and Llama/Groq response drafting.",
+        description="NLP backend for semantic search, recommendations, embeddings, AWS pgvector and Llama/Groq response drafting.",
     )
     app.add_middleware(
         RequestSizeLimitMiddleware,
@@ -34,12 +34,12 @@ def create_app() -> FastAPI:
             "status": "ready",
             "environment": settings.env,
             "dependencies": {
-                "chroma": {
-                    "mode": "http",
-                    "host": settings.chroma_host,
-                    "port": settings.chroma_port,
-                    "places_collection": settings.chroma_places_collection,
-                    "posts_collection": settings.chroma_posts_collection,
+                "vector_store": {
+                    "provider": settings.vector_store_provider,
+                    "host": settings.pgvector_host,
+                    "port": settings.pgvector_port,
+                    "database": settings.pgvector_database,
+                    "ssl_mode": settings.pgvector_ssl_mode,
                 },
                 "llm": {
                     "provider": "groq" if settings.groq_api_key else "mock",
