@@ -199,12 +199,33 @@ Variables principales:
 ENV
 API_HOST
 API_PORT
+MAIN_API_BASE_URL
+MAIN_API_PLACES_SEARCH_PATH
+MAIN_API_POSTS_SEARCH_PATH
+MAIN_API_INTERNAL_TOKEN
+MAIN_API_AUTH_TOKEN
+MAIN_API_TIMEOUT_SECONDS
+MAIN_API_PLACES_PAGE_LIMIT
+MAIN_API_POSTS_PAGE_LIMIT
+MAIN_API_PLACES_PAGINATION_MODE
+MAIN_API_POSTS_PAGINATION_MODE
 GROQ_API_KEY
 GROQ_MODEL
 CHROMA_HOST
 CHROMA_PORT
 CHROMA_PLACES_COLLECTION
 CHROMA_POSTS_COLLECTION
+VECTOR_STORE_PROVIDER
+VECTOR_STORE_MODE
+PGVECTOR_HOST
+PGVECTOR_PORT
+PGVECTOR_DATABASE
+PGVECTOR_USER
+PGVECTOR_PASSWORD
+PGVECTOR_SSL_MODE
+EMBEDDING_DIMENSION
+EMBEDDING_MODEL
+EMBEDDING_VERSION
 LOG_LEVEL
 REQUEST_TIMEOUT_SECONDS
 LLM_TIMEOUT_SECONDS
@@ -301,6 +322,83 @@ Reconstruir embeddings de lugares:
 python -m app.jobs.rebuild_place_embeddings
 ```
 
+Ese job lee lugares reales desde la API principal configurada en `.env`:
+
+```env
+MAIN_API_BASE_URL=http://52.86.8.11
+MAIN_API_PLACES_SEARCH_PATH=/api/v1/places/search
+MAIN_API_PLACES_PAGE_LIMIT=100
+MAIN_API_PLACES_PAGINATION_MODE=page
+```
+
+Para probar la lectura y generacion de embeddings sin escribir en ChromaDB:
+
+```bash
+python -m app.jobs.rebuild_place_embeddings --dry-run --max-pages 1
+```
+
+Para guardar en ChromaDB, primero levanta Chroma y luego ejecuta:
+
+```bash
+python -m app.jobs.rebuild_place_embeddings
+```
+
+Para que los endpoints consulten ChromaDB en vez de datos mock, cambia en `.env`:
+
+```env
+VECTOR_STORE_MODE=chroma
+```
+
+En desarrollo puedes volver al modo local sin Chroma:
+
+```env
+VECTOR_STORE_MODE=mock
+```
+
+Para AWS RDS/Aurora PostgreSQL con pgvector, usa:
+
+```env
+VECTOR_STORE_PROVIDER=aws_pgvector
+PGVECTOR_HOST=your-rds-endpoint.amazonaws.com
+PGVECTOR_PORT=5432
+PGVECTOR_DATABASE=frimeet
+PGVECTOR_USER=nlp_reader
+PGVECTOR_PASSWORD=...
+PGVECTOR_SSL_MODE=require
+EMBEDDING_DIMENSION=16
+EMBEDDING_MODEL=mock-embedding
+EMBEDDING_VERSION=v1
+```
+
+La API NLP debe usar `nlp_reader`. Los jobs deben usar otro entorno con `PGVECTOR_USER=nlp_writer`.
+
+El contrato SQL de referencia esta en:
+
+```text
+sql/aws_pgvector_contract.sql
+```
+
+Ese SQL se ejecuta una vez con un rol administrador fuera de Hugging Face. La API y los jobs no usan credenciales master/admin.
+
+Sincronizar embeddings de lugares hacia RDS:
+
+```bash
+python -m app.jobs.sync_place_embeddings
+```
+
+Sincronizar embeddings de publicaciones hacia RDS:
+
+```bash
+python -m app.jobs.sync_post_embeddings
+```
+
+Prueba de lectura/procesamiento sin upsert:
+
+```bash
+python -m app.jobs.sync_place_embeddings --dry-run --max-pages 1
+python -m app.jobs.sync_post_embeddings --dry-run --max-pages 1
+```
+
 Reconstruir embeddings de publicaciones:
 
 ```bash
@@ -314,6 +412,7 @@ python -m app.jobs.rebuild_post_clusters
 ```
 
 Los jobs actuales son placeholders ejecutables. La intencion es conectar ahi la base de datos fuente, generar embeddings por lotes y hacer upsert a ChromaDB sin cargar trabajo pesado en requests normales.
+El job de lugares ya incluye un cliente inicial para leer `/api/v1/places/search` desde la API principal y hacer upsert a la coleccion `places_collection`.
 
 ## 14. Endpoints disponibles
 
