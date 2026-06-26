@@ -1,0 +1,1 @@
+"""Places resource module."""
