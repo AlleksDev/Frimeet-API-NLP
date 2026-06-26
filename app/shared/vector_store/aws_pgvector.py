@@ -213,4 +213,8 @@ def _build_ssl_context(mode: str | None) -> ssl.SSLContext | None:
     if mode != "require":
         raise RuntimeError("PGVECTOR_SSL_MODE must be require")
     context = ssl.create_default_context()
+    # PostgreSQL sslmode=require encrypts traffic but does not verify the CA chain.
+    # This keeps compatibility with RDS certificates in slim containers without a bundled RDS CA.
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
     return context
