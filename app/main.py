@@ -24,6 +24,16 @@ def create_app() -> FastAPI:
     )
     app.add_exception_handler(AppError, app_error_handler)
 
+    @app.get("/", tags=["system"])
+    async def root() -> dict[str, object]:
+        return {
+            "service": "frimeet-api-nlp",
+            "status": "ok",
+            "docs": "/docs",
+            "health": "/health",
+            "ready": "/ready",
+        }
+
     @app.get("/health", tags=["system"])
     async def health() -> dict[str, str]:
         return {"status": "ok"}
