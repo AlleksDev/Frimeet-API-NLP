@@ -14,14 +14,15 @@ from app.shared.vector_store.sql import quote_identifier, vector_literal
 class AwsPgvectorClient:
     """PostgreSQL + pgvector access for RDS/Aurora using controlled SQL functions."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, role: str = "reader") -> None:
         self._settings = settings
-        self._dsn = _build_dsn(settings)
+        self._role = role
+        self._connection_kwargs = _build_connection_kwargs(settings, role)
         self._ssl = _build_ssl_context(settings.pgvector_ssl_mode)
 
     @asynccontextmanager
     async def connection(self) -> AsyncIterator[asyncpg.Connection]:
-        connection = await asyncpg.connect(dsn=self._dsn, ssl=self._ssl)
+        connection = await asyncpg.connect(**self._connection_kwargs, ssl=self._ssl)
         try:
             yield connection
         finally:
@@ -55,13 +56,13 @@ class AwsPgvectorClient:
 
     async def fetch_place_content_hashes(self, ids: Iterable[str]) -> dict[str, str]:
         return await self._fetch_content_hashes(
-            table_name=self._settings.pgvector_places_table,
+            function_name="get_place_content_hashes",
             ids=ids,
         )
 
     async def fetch_post_content_hashes(self, ids: Iterable[str]) -> dict[str, str]:
         return await self._fetch_content_hashes(
-            table_name=self._settings.pgvector_posts_table,
+            function_name="get_post_content_hashes",
             ids=ids,
         )
 
@@ -102,19 +103,14 @@ class AwsPgvectorClient:
 
     async def _fetch_content_hashes(
         self,
-        table_name: str,
+        function_name: str,
         ids: Iterable[str],
     ) -> dict[str, str]:
         id_list = list(ids)
         if not id_list:
             return {}
 
-        table = quote_identifier(table_name)
-        query = f"""
-            SELECT external_id, content_hash
-            FROM {table}
-            WHERE external_id = ANY($1::text[])
-        """
+        query = f"SELECT * FROM {quote_identifier(function_name)}($1::text[])"
         async with self.connection() as connection:
             rows = await connection.fetch(query, id_list)
         return {
@@ -181,19 +177,35 @@ def _row_value(row: Any, key: str, default: Any = None) -> Any:
         return default
 
 
-def _build_dsn(settings: Settings) -> str:
+def _build_connection_kwargs(settings: Settings, role: str) -> dict[str, Any]:
+    user, password = _credentials_for_role(settings, role)
     required = {
         "PGVECTOR_HOST": settings.pgvector_host,
         "PGVECTOR_DATABASE": settings.pgvector_database,
-        "PGVECTOR_USER": settings.pgvector_user,
-        "PGVECTOR_PASSWORD": settings.pgvector_password,
+        f"PGVECTOR_{role.upper()}_USER": user,
+        f"PGVECTOR_{role.upper()}_PASSWORD": password,
     }
     missing = [key for key, value in required.items() if not value]
     if missing:
         raise RuntimeError(f"Missing pgvector settings: {', '.join(missing)}")
+    return {
+        "host": settings.pgvector_host,
+        "port": settings.pgvector_port,
+        "database": settings.pgvector_database,
+        "user": user,
+        "password": password,
+    }
+
+
+def _credentials_for_role(settings: Settings, role: str) -> tuple[str | None, str | None]:
+    if role == "writer":
+        return (
+            settings.pgvector_writer_user or settings.pgvector_user,
+            settings.pgvector_writer_password or settings.pgvector_password,
+        )
     return (
-        f"postgresql://{settings.pgvector_user}:{settings.pgvector_password}"
-        f"@{settings.pgvector_host}:{settings.pgvector_port}/{settings.pgvector_database}"
+        settings.pgvector_reader_user or settings.pgvector_user,
+        settings.pgvector_reader_password or settings.pgvector_password,
     )
 
 

@@ -52,6 +52,7 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 STABLE
+SECURITY DEFINER
 AS $$
     SELECT
         p.external_id,
@@ -83,6 +84,7 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 STABLE
+SECURITY DEFINER
 AS $$
     SELECT
         p.external_id,
@@ -191,10 +193,38 @@ AS $$
         updated_at = now();
 $$;
 
+CREATE OR REPLACE FUNCTION get_place_content_hashes(p_external_ids TEXT[])
+RETURNS TABLE (
+    external_id TEXT,
+    content_hash TEXT
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+    SELECT p.external_id, p.content_hash
+    FROM place_embeddings p
+    WHERE p.external_id = ANY(p_external_ids);
+$$;
+
+CREATE OR REPLACE FUNCTION get_post_content_hashes(p_external_ids TEXT[])
+RETURNS TABLE (
+    external_id TEXT,
+    content_hash TEXT
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+    SELECT p.external_id, p.content_hash
+    FROM post_embeddings p
+    WHERE p.external_id = ANY(p_external_ids);
+$$;
+
 -- Example least-privilege grants. Adjust schema/database/user creation to your setup.
 -- GRANT EXECUTE ON FUNCTION match_places(VECTOR, INTEGER, JSONB) TO nlp_reader;
 -- GRANT EXECUTE ON FUNCTION match_posts(VECTOR, INTEGER, JSONB) TO nlp_reader;
--- GRANT SELECT (external_id, content_hash) ON place_embeddings TO nlp_writer;
--- GRANT SELECT (external_id, content_hash) ON post_embeddings TO nlp_writer;
+-- GRANT EXECUTE ON FUNCTION get_place_content_hashes(TEXT[]) TO nlp_writer;
+-- GRANT EXECUTE ON FUNCTION get_post_content_hashes(TEXT[]) TO nlp_writer;
 -- GRANT EXECUTE ON FUNCTION upsert_place_embedding(TEXT, TEXT, JSONB, VECTOR, TEXT, TEXT, TEXT, BOOLEAN) TO nlp_writer;
 -- GRANT EXECUTE ON FUNCTION upsert_post_embedding(TEXT, TEXT, JSONB, VECTOR, TEXT, TEXT, TEXT, BOOLEAN) TO nlp_writer;

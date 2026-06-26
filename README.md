@@ -15,75 +15,31 @@ La API principal sigue siendo la fuente de verdad de lugares, posts, usuarios, s
 
 ```text
 API principal
-  ├─ fuente de verdad de places/posts
-  └─ consume la API NLP por REST
+  |-- fuente de verdad de places/posts
+  `-- consume la API NLP por REST
 
 Hugging Face API NLP
-  ├─ usa nlp_reader
-  ├─ consulta RDS PostgreSQL + pgvector
-  ├─ genera embedding solo del query del usuario
-  └─ usa Groq/Llama solo para embellecer chat
+  |-- usa credenciales nlp_reader
+  |-- consulta RDS PostgreSQL + pgvector
+  |-- genera embedding solo del query del usuario
+  `-- usa Groq/Llama solo para embellecer chat
 
 Hugging Face Jobs
-  ├─ usan nlp_writer
-  ├─ consumen endpoints internos paginados/incrementales de la API principal
-  ├─ generan embeddings por batch
-  └─ hacen upsert via funciones SQL controladas
+  |-- usan credenciales nlp_writer
+  |-- consumen endpoints paginados/cursor de la API principal
+  |-- generan embeddings por batch
+  `-- hacen upsert via funciones SQL controladas
 
 RDS PostgreSQL + pgvector
-  ├─ place_embeddings
-  ├─ post_embeddings
-  ├─ match_places
-  ├─ match_posts
-  ├─ upsert_place_embedding
-  └─ upsert_post_embedding
+  |-- place_embeddings
+  |-- post_embeddings
+  |-- match_places
+  |-- match_posts
+  |-- get_place_content_hashes
+  |-- get_post_content_hashes
+  |-- upsert_place_embedding
+  `-- upsert_post_embedding
 ```
-
-## Estructura
-
-```text
-app/
-├── main.py
-├── modules/
-│   ├── places/
-│   └── posts/
-├── shared/
-│   ├── vector_store/
-│   ├── nlp/
-│   ├── config/
-│   ├── cache/
-│   ├── errors/
-│   ├── logging/
-│   └── security/
-└── jobs/
-
-sql/
-└── aws_pgvector_contract.sql
-```
-
-## Vector Store
-
-Los casos de uso no dependen directamente de PostgreSQL. Dependen de puertos por modulo:
-
-- `PlaceVectorRepository`
-- `PostVectorRepository`
-
-Implementaciones actuales:
-
-- `MockPlaceVectorRepository` y `MockPostVectorRepository` para desarrollo/tests.
-- `AwsPgvectorPlaceRepository` y `AwsPgvectorPostRepository` para RDS/Aurora PostgreSQL + pgvector.
-
-La API NLP solo lee mediante:
-
-- `match_places`
-- `match_posts`
-
-Los jobs escriben mediante:
-
-- `upsert_place_embedding`
-- `upsert_post_embedding`
-
-No se usan credenciales master/admin desde Hugging Face.
 
 ## Variables De Entorno
 
@@ -99,19 +55,21 @@ MAIN_API_INTERNAL_TOKEN=
 MAIN_API_TIMEOUT_SECONDS=15
 MAIN_API_PLACES_PAGE_LIMIT=100
 MAIN_API_POSTS_PAGE_LIMIT=100
-MAIN_API_PLACES_PAGINATION_MODE=page
-MAIN_API_POSTS_PAGINATION_MODE=page
+MAIN_API_PLACES_PAGINATION_MODE=cursor
+MAIN_API_POSTS_PAGINATION_MODE=cursor
 
 GROQ_API_KEY=
 GROQ_MODEL=llama-3.1-8b-instant
 
-VECTOR_STORE_PROVIDER=mock
+VECTOR_STORE_PROVIDER=aws_pgvector
 
-PGVECTOR_HOST=
+PGVECTOR_HOST=nlp-vector-db.c2jwncm87zsa.us-east-1.rds.amazonaws.com
 PGVECTOR_PORT=5432
-PGVECTOR_DATABASE=
-PGVECTOR_USER=
-PGVECTOR_PASSWORD=
+PGVECTOR_DATABASE=nlp_vectors
+PGVECTOR_READER_USER=nlp_reader
+PGVECTOR_READER_PASSWORD=CAMBIA_ESTA_PASSWORD_READER
+PGVECTOR_WRITER_USER=nlp_writer
+PGVECTOR_WRITER_PASSWORD=CAMBIA_ESTA_PASSWORD_WRITER
 PGVECTOR_SSL_MODE=require
 
 EMBEDDING_DIMENSION=16
@@ -122,27 +80,22 @@ LOG_LEVEL=INFO
 REQUEST_TIMEOUT_SECONDS=10
 LLM_TIMEOUT_SECONDS=12
 MAX_LLM_CONCURRENT_REQUESTS=4
+EMBEDDING_CACHE_TTL_SECONDS=300
+VECTOR_SEARCH_CACHE_TTL_SECONDS=120
 ```
 
-Para la API NLP en Hugging Face:
+La API crea el cliente RDS con rol `reader`. Los jobs crean el cliente con rol `writer`. Si configuras `PGVECTOR_READER_*` y `PGVECTOR_WRITER_*` en el mismo entorno, el codigo elige automaticamente las credenciales correctas para cada flujo.
 
-```env
-VECTOR_STORE_PROVIDER=aws_pgvector
-PGVECTOR_USER=nlp_reader
-```
+En Hugging Face, guarda passwords y tokens como Secrets.
 
-Para Hugging Face Jobs:
+## Cache Local Efimera
 
-```env
-VECTOR_STORE_PROVIDER=aws_pgvector
-PGVECTOR_USER=nlp_writer
-```
+La API usa cache local en memoria para:
 
-Todas las conexiones a RDS deben usar:
+- embeddings de queries repetidas,
+- resultados de busqueda/recomendacion frecuentes.
 
-```env
-PGVECTOR_SSL_MODE=require
-```
+Este cache vive solo mientras el contenedor de Hugging Face este despierto. Si el Space se duerme o reinicia, se pierde sin problema porque RDS sigue siendo la fuente persistente de embeddings derivados.
 
 ## Instalacion Local
 
@@ -159,13 +112,6 @@ Copy-Item .env.example .env
 uvicorn app.main:app --host 127.0.0.1 --port 8080 --reload
 ```
 
-Endpoints de sistema:
-
-```http
-GET /health
-GET /ready
-```
-
 Documentacion local:
 
 ```text
@@ -180,25 +126,11 @@ El proyecto incluye `Dockerfile` para Hugging Face Spaces. El contenedor expone 
 uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}
 ```
 
-En Hugging Face configura estas variables/secrets:
-
-```env
-ENV=production
-API_HOST=0.0.0.0
-API_PORT=7860
-VECTOR_STORE_PROVIDER=aws_pgvector
-PGVECTOR_HOST=...
-PGVECTOR_PORT=5432
-PGVECTOR_DATABASE=...
-PGVECTOR_USER=nlp_reader
-PGVECTOR_PASSWORD=...
-PGVECTOR_SSL_MODE=require
-GROQ_API_KEY=...
-```
-
 ## Endpoints
 
 ```http
+GET  /health
+GET  /ready
 POST /places/search
 POST /places/recommendations
 POST /places/chat
@@ -215,36 +147,21 @@ python -m app.jobs.sync_place_embeddings --dry-run --max-pages 1
 python -m app.jobs.sync_post_embeddings --dry-run --max-pages 1
 ```
 
-Sincronizar hacia RDS:
+Primera carga:
+
+```powershell
+python -m app.jobs.initial_load_place_embeddings
+python -m app.jobs.initial_load_post_embeddings
+```
+
+Sincronizaciones posteriores:
 
 ```powershell
 python -m app.jobs.sync_place_embeddings
 python -m app.jobs.sync_post_embeddings
 ```
 
-Flujo de `sync_place_embeddings.py`:
-
-1. Lee configuracion.
-2. Consulta la API principal con paginacion/cursor.
-3. Construye texto para embedding por lugar.
-4. Calcula `content_hash`.
-5. Consulta hashes existentes y omite registros sin cambios.
-6. Genera embeddings por batch.
-7. Llama `upsert_place_embedding`.
-8. Registra procesados, omitidos, upserts y errores.
-
-Flujo de `sync_post_embeddings.py`:
-
-1. Lee configuracion.
-2. Consulta la API principal con paginacion/cursor.
-3. Construye texto para embedding por post.
-4. Calcula `content_hash`.
-5. Consulta hashes existentes y omite registros sin cambios.
-6. Genera embeddings por batch.
-7. Llama `upsert_post_embedding`.
-8. Registra metricas basicas.
-
-Si un lugar o post llega como `is_active=false`, el job actualiza ese estado derivado en RDS.
+Los jobs calculan `content_hash`; si el hash no cambio, omiten regenerar el embedding.
 
 ## SQL RDS
 
@@ -254,11 +171,14 @@ Contrato de referencia:
 sql/aws_pgvector_contract.sql
 ```
 
-Ese archivo debe ejecutarse una vez con un rol administrador/DBA fuera de Hugging Face.
+Esquemas exactos:
 
-La API NLP usa solo `nlp_reader`.
+```text
+docs/pgvector_place_embeddings_schema.md
+docs/pgvector_post_embeddings_schema.md
+```
 
-Los jobs usan solo `nlp_writer`.
+Ese SQL debe ejecutarse una vez con un rol administrador/DBA fuera de Hugging Face. La API NLP usa solo `nlp_reader`; los jobs usan solo `nlp_writer`.
 
 ## Llama Via Groq
 

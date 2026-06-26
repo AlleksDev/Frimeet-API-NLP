@@ -33,8 +33,10 @@ class MainApiPostsClient:
         limit = page_limit or self._settings.main_api_posts_page_limit
         page = 1
         offset = 0
+        cursor: str | None = None
         headers = self._build_headers()
         seen_ids: set[str] = set()
+        pagination_mode = self._settings.main_api_posts_pagination_mode
 
         async with httpx.AsyncClient(
             base_url=self._base_url,
@@ -42,10 +44,11 @@ class MainApiPostsClient:
             headers=headers,
         ) as client:
             while True:
-                params = self._build_pagination_params(limit, page, offset)
+                params = self._build_pagination_params(limit, page, offset, cursor)
                 response = await client.get(self._path, params=params)
                 response.raise_for_status()
-                posts = self._extract_posts(response.json())
+                payload = response.json()
+                posts = self._extract_posts(payload)
                 if not posts:
                     break
 
@@ -57,11 +60,14 @@ class MainApiPostsClient:
                         yielded_this_page += 1
                         yield record
 
-                if (
-                    yielded_this_page == 0
-                    or len(posts) < limit
-                    or (max_pages is not None and page >= max_pages)
-                ):
+                if yielded_this_page == 0 or (max_pages is not None and page >= max_pages):
+                    break
+
+                if pagination_mode == "cursor":
+                    cursor = self._extract_next_cursor(payload)
+                    if not self._extract_has_more(payload) or not cursor:
+                        break
+                elif len(posts) < limit:
                     break
 
                 page += 1
@@ -78,9 +84,14 @@ class MainApiPostsClient:
         limit: int,
         page: int,
         offset: int,
-    ) -> dict[str, int]:
-        params = {"limit": limit}
-        if self._settings.main_api_posts_pagination_mode == "offset":
+        cursor: str | None,
+    ) -> dict[str, int | str]:
+        params: dict[str, int | str] = {"limit": limit}
+        mode = self._settings.main_api_posts_pagination_mode
+        if mode == "cursor":
+            if cursor:
+                params["cursor"] = cursor
+        elif mode == "offset":
             params["offset"] = offset
         else:
             params["page"] = page
@@ -101,6 +112,23 @@ class MainApiPostsClient:
                 if nested:
                     return nested
         return []
+
+    @staticmethod
+    def _extract_next_cursor(payload: Any) -> str | None:
+        if not isinstance(payload, dict):
+            return None
+        cursor = payload.get("next_cursor") or payload.get("nextCursor")
+        if cursor is None:
+            return None
+        cursor = str(cursor).strip()
+        return cursor or None
+
+    @staticmethod
+    def _extract_has_more(payload: Any) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        value = payload.get("has_more", payload.get("hasMore", False))
+        return bool(value)
 
 
 def post_to_source_record(post: dict[str, Any]) -> PostSourceRecord | None:

@@ -41,3 +41,14 @@ def test_extract_places_supports_common_response_shapes() -> None:
     places = MainApiPlacesClient._extract_places(payload)
 
     assert [place["id"] for place in places] == ["place_1", "place_2"]
+
+
+def test_place_source_extracts_cursor_metadata() -> None:
+    payload = {
+        "data": [],
+        "next_cursor": "cursor_abc",
+        "has_more": True,
+    }
+
+    assert MainApiPlacesClient._extract_next_cursor(payload) == "cursor_abc"
+    assert MainApiPlacesClient._extract_has_more(payload) is True

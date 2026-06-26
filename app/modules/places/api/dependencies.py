@@ -19,7 +19,7 @@ from app.shared.vector_store.aws_pgvector import AwsPgvectorClient
 def get_place_repository() -> MockPlaceVectorRepository | AwsPgvectorPlaceRepository:
     settings = get_settings()
     if settings.vector_store_provider == "aws_pgvector":
-        return AwsPgvectorPlaceRepository(vector_client=AwsPgvectorClient(settings))
+        return AwsPgvectorPlaceRepository(vector_client=AwsPgvectorClient(settings, role="reader"))
     return MockPlaceVectorRepository(embedding_provider=get_embedding_provider())
 
 
@@ -30,7 +30,8 @@ def get_place_ranker() -> SimplePlaceRanker:
 
 @lru_cache
 def get_place_search_cache() -> SimpleTTLCache:
-    return SimpleTTLCache(default_ttl_seconds=60)
+    settings = get_settings()
+    return SimpleTTLCache(default_ttl_seconds=settings.vector_search_cache_ttl_seconds)
 
 
 @lru_cache

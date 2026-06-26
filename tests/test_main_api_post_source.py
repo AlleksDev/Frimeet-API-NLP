@@ -38,3 +38,14 @@ def test_extract_posts_supports_common_response_shapes() -> None:
     posts = MainApiPostsClient._extract_posts(payload)
 
     assert [post["id"] for post in posts] == ["post_1", "post_2"]
+
+
+def test_post_source_extracts_cursor_metadata() -> None:
+    payload = {
+        "data": [],
+        "next_cursor": "cursor_posts",
+        "has_more": True,
+    }
+
+    assert MainApiPostsClient._extract_next_cursor(payload) == "cursor_posts"
+    assert MainApiPostsClient._extract_has_more(payload) is True

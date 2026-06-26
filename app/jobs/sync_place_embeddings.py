@@ -33,7 +33,7 @@ async def main() -> None:
         raise RuntimeError("sync_place_embeddings requires VECTOR_STORE_PROVIDER=aws_pgvector")
 
     source = MainApiPlacesClient(settings)
-    vector_client = AwsPgvectorClient(settings)
+    vector_client = AwsPgvectorClient(settings, role="writer")
     embedding_provider = MockEmbeddingProvider(dimension=settings.embedding_dimension)
     counters = SyncCounters()
     batch: list[PlaceSourceRecord] = []

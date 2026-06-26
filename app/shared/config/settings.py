@@ -36,11 +36,11 @@ class Settings(BaseSettings):
     main_api_places_page_limit: int = Field(default=100, alias="MAIN_API_PLACES_PAGE_LIMIT")
     main_api_posts_page_limit: int = Field(default=100, alias="MAIN_API_POSTS_PAGE_LIMIT")
     main_api_places_pagination_mode: str = Field(
-        default="page",
+        default="cursor",
         alias="MAIN_API_PLACES_PAGINATION_MODE",
     )
     main_api_posts_pagination_mode: str = Field(
-        default="page",
+        default="cursor",
         alias="MAIN_API_POSTS_PAGINATION_MODE",
     )
 
@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     pgvector_database: str | None = Field(default=None, alias="PGVECTOR_DATABASE")
     pgvector_user: str | None = Field(default=None, alias="PGVECTOR_USER")
     pgvector_password: str | None = Field(default=None, alias="PGVECTOR_PASSWORD")
+    pgvector_reader_user: str | None = Field(default=None, alias="PGVECTOR_READER_USER")
+    pgvector_reader_password: str | None = Field(
+        default=None,
+        alias="PGVECTOR_READER_PASSWORD",
+    )
+    pgvector_writer_user: str | None = Field(default=None, alias="PGVECTOR_WRITER_USER")
+    pgvector_writer_password: str | None = Field(
+        default=None,
+        alias="PGVECTOR_WRITER_PASSWORD",
+    )
     pgvector_ssl_mode: str = Field(default="require", alias="PGVECTOR_SSL_MODE")
     pgvector_places_table: str = "place_embeddings"
     pgvector_posts_table: str = "post_embeddings"
@@ -69,6 +79,11 @@ class Settings(BaseSettings):
         alias="MAX_LLM_CONCURRENT_REQUESTS",
     )
     max_request_body_bytes: int = Field(default=65_536, alias="MAX_REQUEST_BODY_BYTES")
+    embedding_cache_ttl_seconds: int = Field(default=300, alias="EMBEDDING_CACHE_TTL_SECONDS")
+    vector_search_cache_ttl_seconds: int = Field(
+        default=120,
+        alias="VECTOR_SEARCH_CACHE_TTL_SECONDS",
+    )
 
 
 @lru_cache
