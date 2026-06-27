@@ -190,6 +190,8 @@ La respuesta de `POST /places/search` incluye `metrics` con el motor (`tfidf`), 
 
 `POST /places/search/metrics` evalua el motor sobre qrels proporcionados para los lugares reales. Calcula `Precision@k`, `Recall@k`, `MRR`, `MAP` y `nDCG@k`, tanto por consulta como de forma agregada. La relevancia es graduada: `1` marginal, `2` relevante y `3` muy relevante.
 
+La respuesta incluye `metric_definitions` con etiquetas y descripciones claras, y `recommended_metric` con `nDCG@k` como metrica principal sugerida para la app movil. `nDCG@k` es apropiada para recomendaciones de lugares porque considera el orden y permite relevancia graduada.
+
 ```json
 {
   "k": 5,

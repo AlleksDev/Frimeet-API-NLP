@@ -59,6 +59,14 @@ def test_places_search_metrics_endpoint() -> None:
     payload = response.json()
     assert payload["engine"] == "pgvector_candidates_plus_tfidf_cosine"
     assert payload["query_count"] == 3
+    assert payload["metric_definitions"]["precision_at_k"]["label"] == "Precision@3"
+    assert payload["metric_definitions"]["recall_at_k"]["label"] == "Recall@3"
+    assert payload["metric_definitions"]["mrr"]["label"] == "MRR"
+    assert payload["metric_definitions"]["map"]["label"] == "MAP"
+    assert payload["metric_definitions"]["ndcg_at_k"]["label"] == "nDCG@3"
+    assert payload["recommended_metric"]["key"] == "ndcg_at_k"
+    assert payload["recommended_metric"]["label"] == "nDCG@3"
+    assert payload["recommended_metric"]["value"] == 1.0
     assert payload["aggregate"]["recall_at_k"] == 1.0
     assert payload["aggregate"]["mrr"] == 1.0
     assert payload["aggregate"]["map"] == 1.0

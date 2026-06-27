@@ -17,8 +17,10 @@ from app.modules.places.api.schemas import (
     PlaceSearchRequest,
     PlaceSearchResponse,
     engine_metrics_to_schema,
+    metric_definitions_to_schema,
     metric_values_to_schema,
     place_to_schema,
+    recommended_metric_to_schema,
 )
 from app.modules.places.application.use_cases.chat_places import ChatPlacesUseCase
 from app.modules.places.application.use_cases.evaluate_place_search import (
@@ -56,6 +58,8 @@ async def evaluate_place_search(
         engine=result.engine,
         k=result.k,
         query_count=result.query_count,
+        metric_definitions=metric_definitions_to_schema(result.k),
+        recommended_metric=recommended_metric_to_schema(result.aggregate, result.k),
         aggregate=metric_values_to_schema(result.aggregate),
         queries=[
             PlaceSearchQueryMetricsSchema(

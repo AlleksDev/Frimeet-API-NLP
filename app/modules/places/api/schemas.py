@@ -145,10 +145,24 @@ class PlaceSearchQueryMetricsSchema(BaseModel):
     metrics: PlaceSearchMetricValuesSchema
 
 
+class PlaceSearchMetricDefinitionSchema(BaseModel):
+    label: str
+    description: str
+
+
+class PlaceSearchRecommendedMetricSchema(BaseModel):
+    key: str
+    label: str
+    value: float
+    rationale: str
+
+
 class PlaceSearchMetricsResponse(BaseModel):
     engine: str
     k: int
     query_count: int
+    metric_definitions: dict[str, PlaceSearchMetricDefinitionSchema]
+    recommended_metric: PlaceSearchRecommendedMetricSchema
     aggregate: PlaceSearchMetricValuesSchema
     queries: list[PlaceSearchQueryMetricsSchema]
 
@@ -189,6 +203,48 @@ def metric_values_to_schema(
         mrr=round(metrics.mrr, 4),
         map=round(metrics.map, 4),
         ndcg_at_k=round(metrics.ndcg_at_k, 4),
+    )
+
+
+def metric_definitions_to_schema(
+    k: int,
+) -> dict[str, PlaceSearchMetricDefinitionSchema]:
+    return {
+        "precision_at_k": PlaceSearchMetricDefinitionSchema(
+            label=f"Precision@{k}",
+            description="Proporcion del top-k que realmente es relevante.",
+        ),
+        "recall_at_k": PlaceSearchMetricDefinitionSchema(
+            label=f"Recall@{k}",
+            description="Proporcion de todos los relevantes recuperada en el top-k.",
+        ),
+        "mrr": PlaceSearchMetricDefinitionSchema(
+            label="MRR",
+            description="Premia que el primer resultado relevante aparezca pronto.",
+        ),
+        "map": PlaceSearchMetricDefinitionSchema(
+            label="MAP",
+            description="Promedia la precision en las posiciones relevantes.",
+        ),
+        "ndcg_at_k": PlaceSearchMetricDefinitionSchema(
+            label=f"nDCG@{k}",
+            description="Evalua orden y relevancia graduada dentro del top-k.",
+        ),
+    }
+
+
+def recommended_metric_to_schema(
+    metrics: SearchMetricValues,
+    k: int,
+) -> PlaceSearchRecommendedMetricSchema:
+    return PlaceSearchRecommendedMetricSchema(
+        key="ndcg_at_k",
+        label=f"nDCG@{k}",
+        value=round(metrics.ndcg_at_k, 4),
+        rationale=(
+            "Es la mejor metrica principal para una lista de lugares porque considera "
+            "la posicion y los grados de relevancia."
+        ),
     )
 
 
