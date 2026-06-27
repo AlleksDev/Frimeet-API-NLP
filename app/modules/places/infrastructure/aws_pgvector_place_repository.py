@@ -27,7 +27,7 @@ class AwsPgvectorPlaceRepository(PlaceVectorRepository):
 
 
 def _match_to_candidate(match: VectorMatch) -> PlaceCandidate:
-    metadata = match.metadata
+    metadata = dict(match.metadata)
     return PlaceCandidate(
         id=match.id,
         name=str(metadata.get("name") or match.id),
@@ -37,4 +37,5 @@ def _match_to_candidate(match: VectorMatch) -> PlaceCandidate:
         state=metadata.get("state"),
         price_range=metadata.get("price_range"),
         metadata=metadata,
+        document=match.document,
     )

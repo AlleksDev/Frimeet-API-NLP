@@ -49,7 +49,12 @@ class SearchPlacesUseCase:
             filters=filters,
             limit=max(limit * 3, limit),
         )
-        ranked_places = self._ranker.rank(candidates, filters, limit)
+        ranked_places = self._ranker.rank(
+            query=normalized_query,
+            places=candidates,
+            filters=filters,
+            limit=limit,
+        )
         result = SearchPlacesResult(
             query=query,
             normalized_query=normalized_query,

@@ -77,6 +77,7 @@ class PlaceSearchResponse(BaseModel):
 
 class PlaceRecommendationResponse(BaseModel):
     query: str
+    message: str
     places: list[PlaceResultSchema]
     metadata: dict[str, Any] = Field(default_factory=dict)
 

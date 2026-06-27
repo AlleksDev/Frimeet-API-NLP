@@ -44,6 +44,27 @@ def test_places_chat_endpoint_returns_trace_and_structured_places() -> None:
     assert payload["metadata"]["places_used_as_context"]
 
 
+def test_places_recommendations_returns_llm_message_and_tfidf_metadata() -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/places/recommendations",
+        json={
+            "query": "quiero ver el atardecer y tomar fotos",
+            "city": "Tuxtla Gutierrez",
+            "filters": {"is_active": True},
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["message"]
+    assert payload["places"]
+    assert payload["metadata"]["ranking"] == "tfidf_cosine"
+    assert payload["metadata"]["used_llm"] is True
+
+
 def test_posts_recommendations_endpoint() -> None:
     client = TestClient(create_app())
 

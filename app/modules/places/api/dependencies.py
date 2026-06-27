@@ -7,7 +7,7 @@ from app.modules.places.infrastructure.aws_pgvector_place_repository import (
     AwsPgvectorPlaceRepository,
 )
 from app.modules.places.infrastructure.mock_place_repository import MockPlaceVectorRepository
-from app.modules.places.infrastructure.simple_place_ranker import SimplePlaceRanker
+from app.modules.places.infrastructure.tfidf_place_ranker import TfidfPlaceRanker
 from app.shared.cache.memory import SimpleTTLCache
 from app.shared.config.settings import get_settings
 from app.shared.dependencies import get_embedding_provider, get_llm_provider
@@ -24,8 +24,8 @@ def get_place_repository() -> MockPlaceVectorRepository | AwsPgvectorPlaceReposi
 
 
 @lru_cache
-def get_place_ranker() -> SimplePlaceRanker:
-    return SimplePlaceRanker()
+def get_place_ranker() -> TfidfPlaceRanker:
+    return TfidfPlaceRanker()
 
 
 @lru_cache
@@ -46,7 +46,11 @@ def get_search_places_use_case() -> SearchPlacesUseCase:
 
 @lru_cache
 def get_recommend_places_use_case() -> RecommendPlacesUseCase:
-    return RecommendPlacesUseCase(search_use_case=get_search_places_use_case())
+    return RecommendPlacesUseCase(
+        search_use_case=get_search_places_use_case(),
+        llm_provider=get_llm_provider(),
+        output_guard=PlaceChatOutputGuard(),
+    )
 
 
 @lru_cache

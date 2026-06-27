@@ -7,7 +7,7 @@ pinned: false
 
 # Frimeet API NLP
 
-Servicio NLP independiente para busqueda semantica, recomendaciones, ranking, embeddings y redaccion conversacional con Llama via Groq.
+Servicio NLP independiente para recuperacion de candidatos con pgvector, ranking TF-IDF, recomendaciones, embeddings y redaccion conversacional con Llama via Groq.
 
 La API principal sigue siendo la fuente de verdad de lugares, posts, usuarios, sesiones, permisos y reportes. Este servicio NLP solo trabaja con datos derivados para busqueda semantica.
 
@@ -22,7 +22,8 @@ Hugging Face API NLP
   |-- usa credenciales nlp_reader
   |-- consulta RDS PostgreSQL + pgvector
   |-- genera embedding solo del query del usuario
-  `-- usa Groq/Llama solo para embellecer chat
+  |-- ordena candidatos con TF-IDF y similitud coseno
+  `-- usa Groq/Llama para embellecer recomendaciones y chat
 
 Hugging Face Jobs
   |-- usan credenciales nlp_writer
@@ -180,9 +181,11 @@ docs/pgvector_post_embeddings_schema.md
 
 Ese SQL debe ejecutarse una vez con un rol administrador/DBA fuera de Hugging Face. La API NLP usa solo `nlp_reader`; los jobs usan solo `nlp_writer`.
 
-## Llama Via Groq
+## Ranking TF-IDF Y Llama Via Groq
 
-Groq/Llama solo se usa en `/places/chat` para redactar una respuesta conversacional. No decide que lugares recomendar, no hace busqueda y no inventa lugares.
+`/places/search` y `/places/recommendations` recuperan candidatos filtrados desde pgvector y aplican el flujo TF-IDF de `Lab2_Motor_de_busqueda.ipynb`: TF, IDF, vectorizacion de consulta y similitud coseno. Las etiquetas se ponderan `x6` y la categoria `x2` antes de construir los vectores.
+
+Groq/Llama se usa en `/places/recommendations` y `/places/chat` para redactar una respuesta conversacional. No decide que lugares recomendar, no hace busqueda y no inventa lugares.
 
 El arreglo estructurado `places` viene desde RDS/pgvector mediante embeddings, filtros y ranking. La app debe renderizar cards desde ese arreglo, no parseando texto libre del LLM.
 

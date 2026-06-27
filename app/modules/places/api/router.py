@@ -54,6 +54,7 @@ async def recommend_places(
     )
     return PlaceRecommendationResponse(
         query=result.query,
+        message=result.message,
         places=[place_to_schema(place) for place in result.places],
         metadata=result.metadata,
     )
