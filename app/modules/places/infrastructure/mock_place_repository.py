@@ -56,6 +56,102 @@ SAMPLE_PLACES = [
         "tags": "cena tranquila restaurante pareja terraza",
         "short_description": "Restaurante para una cena relajada.",
     },
+    {
+        "id": "place_5",
+        "name": "Biblioteca Jaime Sabines",
+        "category": "library",
+        "city": "Tuxtla Gutierrez",
+        "state": "Chiapas",
+        "price_range": "$",
+        "is_active": True,
+        "occasion": "estudio,solo,tranquilo,cultura",
+        "tags": "biblioteca libros lectura estudio silencio cultura",
+        "short_description": "Espacio silencioso para leer, estudiar y consultar libros.",
+    },
+    {
+        "id": "place_6",
+        "name": "Parque Cana Hueca",
+        "category": "park",
+        "city": "Tuxtla Gutierrez",
+        "state": "Chiapas",
+        "price_range": "$",
+        "is_active": True,
+        "occasion": "familia,amigos,deporte,mascotas",
+        "tags": "parque correr ejercicio mascotas aire libre deporte",
+        "short_description": "Parque amplio para correr, caminar y hacer ejercicio.",
+    },
+    {
+        "id": "place_7",
+        "name": "Museo del Cafe",
+        "category": "museum",
+        "city": "San Cristobal de las Casas",
+        "state": "Chiapas",
+        "price_range": "$",
+        "is_active": True,
+        "occasion": "familia,cultura,lluvia",
+        "tags": "museo historia cafe cultura exposicion interior",
+        "short_description": "Recorrido cultural sobre la historia y produccion del cafe.",
+    },
+    {
+        "id": "place_8",
+        "name": "Jardin Botanico Faustino Miranda",
+        "category": "outdoors",
+        "city": "Tuxtla Gutierrez",
+        "state": "Chiapas",
+        "price_range": "$",
+        "is_active": True,
+        "occasion": "familia,pareja,tranquilo,naturaleza",
+        "tags": "jardin plantas naturaleza paseo tranquilo educativo",
+        "short_description": "Jardin para conocer plantas regionales y caminar con calma.",
+    },
+    {
+        "id": "place_9",
+        "name": "Plaza Crystal",
+        "category": "shopping",
+        "city": "Tuxtla Gutierrez",
+        "state": "Chiapas",
+        "price_range": "$$",
+        "is_active": True,
+        "occasion": "amigos,familia,lluvia,compras",
+        "tags": "plaza compras cine comida amigos interior",
+        "short_description": "Centro comercial con tiendas, comida y opciones bajo techo.",
+    },
+    {
+        "id": "place_10",
+        "name": "Centro Cultural El Carmen",
+        "category": "cultural",
+        "city": "San Cristobal de las Casas",
+        "state": "Chiapas",
+        "price_range": "$",
+        "is_active": True,
+        "occasion": "cultura,pareja,familia,lluvia",
+        "tags": "arte cultura teatro exposiciones historia interior",
+        "short_description": "Centro cultural con exposiciones, teatro y actividades artisticas.",
+    },
+    {
+        "id": "place_11",
+        "name": "Mercado de los Ancianos",
+        "category": "market",
+        "city": "Tuxtla Gutierrez",
+        "state": "Chiapas",
+        "price_range": "$",
+        "is_active": True,
+        "occasion": "familia,amigos,comida",
+        "tags": "mercado comida local economica tradicional antojitos",
+        "short_description": "Mercado popular para probar comida local a precio accesible.",
+    },
+    {
+        "id": "place_12",
+        "name": "El Arcotete",
+        "category": "outdoors",
+        "city": "San Cristobal de las Casas",
+        "state": "Chiapas",
+        "price_range": "$",
+        "is_active": True,
+        "occasion": "pareja,amigos,aventura,naturaleza",
+        "tags": "bosque senderismo naturaleza aventura caminar rio",
+        "short_description": "Paraje natural para caminar, explorar y pasar tiempo al aire libre.",
+    },
 ]
 
 
@@ -122,6 +218,10 @@ class MockPlaceVectorRepository(PlaceVectorRepository):
         metadata_filters = filters.as_metadata_filter()
         for key, expected in metadata_filters.items():
             actual = place.get(key)
+            if key == "place_ids":
+                if str(place.get("id")) not in {str(item) for item in expected}:
+                    return False
+                continue
             if key == "occasion":
                 if _normalize(str(expected)) not in _normalize(str(actual)):
                     return False

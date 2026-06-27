@@ -36,7 +36,7 @@ router = APIRouter(
 @router.get("/search/metrics", response_model=PlaceSearchMetricsResponse)
 @router.post("/search/metrics", response_model=PlaceSearchMetricsResponse)
 async def evaluate_place_search(
-    k: int = Query(default=3, ge=1, le=20),
+    k: int = Query(default=5, ge=1, le=20),
     use_case: EvaluatePlaceSearchUseCase = Depends(get_evaluate_place_search_use_case),
 ) -> PlaceSearchMetricsResponse:
     result = await use_case.execute(k=k)
@@ -52,6 +52,9 @@ async def search_places(
         query=payload.query,
         filters=payload.to_domain_filters(),
         limit=payload.limit,
+        latitude=payload.lat,
+        longitude=payload.lng,
+        radius_meters=payload.radius,
     )
     return PlaceSearchResponse(
         query=result.query,
@@ -69,6 +72,9 @@ async def recommend_places(
         query=payload.query,
         filters=payload.to_domain_filters(),
         limit=payload.limit,
+        latitude=payload.lat,
+        longitude=payload.lng,
+        radius_meters=payload.radius,
     )
     return PlaceRecommendationResponse(
         query=result.query,

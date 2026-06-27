@@ -87,6 +87,33 @@ async def test_search_places_reports_zero_metrics_without_results() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_places_filters_candidates_with_nearby_ids() -> None:
+    embedding_provider = MockEmbeddingProvider()
+    nearby_provider = FakeNearbyPlaceProvider({"place_2", "place_6"})
+    use_case = SearchPlacesUseCase(
+        embedding_provider=embedding_provider,
+        place_repository=MockPlaceVectorRepository(embedding_provider),
+        ranker=TfidfPlaceRanker(),
+        nearby_place_provider=nearby_provider,
+    )
+
+    result = await use_case.execute(
+        query="quiero tomar fotos al atardecer",
+        filters=PlaceFilters(is_active=True),
+        limit=5,
+        latitude=16.7531,
+        longitude=-93.1156,
+        radius_meters=10_000,
+    )
+
+    assert {place.id for place in result.places} <= {"place_2", "place_6"}
+    assert nearby_provider.calls == 1
+    assert result.metrics.location_filter_applied is True
+    assert result.metrics.nearby_place_count == 2
+    assert result.metrics.radius_meters == 10_000
+
+
+@pytest.mark.asyncio
 async def test_chat_places_returns_structured_places_with_llm_mock() -> None:
     embedding_provider = MockEmbeddingProvider()
     search_use_case = SearchPlacesUseCase(
@@ -146,7 +173,7 @@ async def test_recommend_places_calls_llm_and_returns_message() -> None:
     assert result.metrics.engine == "tfidf"
     assert result.metrics.returned_count == len(result.places)
     assert result.evaluation_metrics.benchmark == BENCHMARK_NAME
-    assert result.evaluation_metrics.query_count == 5
+    assert result.evaluation_metrics.query_count == 10
     assert 0.0 <= result.evaluation_metrics.aggregate.ndcg_at_k <= 1.0
     assert result.metadata["used_llm"] is True
     assert result.metadata["ranking"] == "tfidf_cosine"
@@ -210,3 +237,18 @@ class SpyLLMProvider(LLMProvider):
             provider=self.provider_name,
             model=self.model_name,
         )
+
+
+class FakeNearbyPlaceProvider:
+    def __init__(self, place_ids: set[str]) -> None:
+        self._place_ids = place_ids
+        self.calls = 0
+
+    async def get_nearby_place_ids(
+        self,
+        latitude: float,
+        longitude: float,
+        radius_meters: int,
+    ) -> set[str]:
+        self.calls += 1
+        return self._place_ids

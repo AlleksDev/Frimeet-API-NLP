@@ -36,9 +36,9 @@ def test_places_search_metrics_endpoint() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["engine"] == "tfidf_cosine"
-    assert payload["benchmark"] == "built_in_places_v1"
+    assert payload["benchmark"] == "built_in_places_v2"
     assert payload["qrels_source"] == "predefined_graded_qrels"
-    assert payload["query_count"] == 5
+    assert payload["query_count"] == 10
     assert payload["metric_definitions"]["precision_at_k"]["label"] == "Precision@3"
     assert payload["metric_definitions"]["recall_at_k"]["label"] == "Recall@3"
     assert payload["metric_definitions"]["mrr"]["label"] == "MRR"
@@ -61,7 +61,7 @@ def test_places_search_metrics_post_requires_no_body() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["k"] == 2
-    assert payload["query_count"] == 5
+    assert payload["query_count"] == 10
 
 
 def test_places_chat_endpoint_returns_trace_and_structured_places() -> None:
@@ -106,8 +106,9 @@ def test_places_recommendations_returns_llm_message_and_tfidf_metadata() -> None
     assert payload["metrics"]["engine"] == "tfidf"
     assert payload["metrics"]["score_metric"] == "cosine_similarity"
     assert payload["metrics"]["returned_count"] == len(payload["places"])
-    assert payload["evaluation_metrics"]["benchmark"] == "built_in_places_v1"
-    assert payload["evaluation_metrics"]["query_count"] == 5
+    assert payload["evaluation_metrics"]["benchmark"] == "built_in_places_v2"
+    assert payload["evaluation_metrics"]["query_count"] == 10
+    assert payload["evaluation_metrics"]["k"] == 5
     assert payload["evaluation_metrics"]["recommended_metric"]["key"] == "ndcg_at_k"
     assert all(
         metric in payload["evaluation_metrics"]["aggregate"]
@@ -115,6 +116,21 @@ def test_places_recommendations_returns_llm_message_and_tfidf_metadata() -> None
     )
     assert payload["metadata"]["ranking"] == "tfidf_cosine"
     assert payload["metadata"]["used_llm"] is True
+
+
+def test_places_search_rejects_incomplete_coordinates() -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/places/search",
+        json={
+            "query": "parque cercano",
+            "lat": 16.7531,
+            "limit": 5,
+        },
+    )
+
+    assert response.status_code == 422
 
 
 def test_posts_recommendations_endpoint() -> None:

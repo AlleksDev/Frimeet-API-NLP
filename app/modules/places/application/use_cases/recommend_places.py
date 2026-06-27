@@ -30,7 +30,7 @@ class RecommendPlacesUseCase:
         evaluation_use_case: EvaluatePlaceSearchUseCase,
         llm_provider: LLMProvider,
         output_guard: PlaceChatOutputGuard,
-        evaluation_k: int = 3,
+        evaluation_k: int = 5,
     ) -> None:
         self._search_use_case = search_use_case
         self._evaluation_use_case = evaluation_use_case
@@ -43,11 +43,17 @@ class RecommendPlacesUseCase:
         query: str,
         filters: PlaceFilters,
         limit: int = 10,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        radius_meters: int = 5000,
     ) -> RecommendPlacesResult:
         search_result = await self._search_use_case.execute(
             query=query,
             filters=filters,
             limit=limit,
+            latitude=latitude,
+            longitude=longitude,
+            radius_meters=radius_meters,
         )
         evaluation_metrics = await self._evaluation_use_case.execute(
             k=self._evaluation_k,
