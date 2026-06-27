@@ -78,6 +78,7 @@ class MockPlaceVectorRepository(PlaceVectorRepository):
             self._records.append(
                 {
                     "place": place,
+                    "document": searchable_text,
                     "embedding": embedding_provider.embed_text(
                         prepare_for_embedding(searchable_text)
                     ),
@@ -111,6 +112,7 @@ class MockPlaceVectorRepository(PlaceVectorRepository):
                         "tags": place["tags"],
                         "short_description": place["short_description"],
                     },
+                    document=record["document"],
                 )
             )
         return sorted(candidates, key=lambda item: item.score, reverse=True)[:limit]

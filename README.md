@@ -7,7 +7,7 @@ pinned: false
 
 # Frimeet API NLP
 
-Servicio NLP independiente para busqueda semantica, recomendaciones, ranking, embeddings y redaccion conversacional con Llama via Groq.
+Servicio NLP independiente para recuperacion de candidatos con pgvector, ranking TF-IDF, recomendaciones, embeddings y redaccion conversacional con Llama via Groq.
 
 La API principal sigue siendo la fuente de verdad de lugares, posts, usuarios, sesiones, permisos y reportes. Este servicio NLP solo trabaja con datos derivados para busqueda semantica.
 
@@ -22,7 +22,8 @@ Hugging Face API NLP
   |-- usa credenciales nlp_reader
   |-- consulta RDS PostgreSQL + pgvector
   |-- genera embedding solo del query del usuario
-  `-- usa Groq/Llama solo para embellecer chat
+  |-- ordena candidatos con TF-IDF y similitud coseno
+  `-- usa Groq/Llama para embellecer recomendaciones y chat
 
 Hugging Face Jobs
   |-- usan credenciales nlp_writer
@@ -132,6 +133,8 @@ uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}
 GET  /health
 GET  /ready
 POST /places/search
+GET  /places/search/metrics?k=3
+POST /places/search/metrics?k=3
 POST /places/recommendations
 POST /places/chat
 POST /posts/recommendations
@@ -180,9 +183,23 @@ docs/pgvector_post_embeddings_schema.md
 
 Ese SQL debe ejecutarse una vez con un rol administrador/DBA fuera de Hugging Face. La API NLP usa solo `nlp_reader`; los jobs usan solo `nlp_writer`.
 
-## Llama Via Groq
+## Ranking TF-IDF Y Llama Via Groq
 
-Groq/Llama solo se usa en `/places/chat` para redactar una respuesta conversacional. No decide que lugares recomendar, no hace busqueda y no inventa lugares.
+`/places/search` y `/places/recommendations` recuperan candidatos filtrados desde pgvector y aplican el flujo TF-IDF de `Lab2_Motor_de_busqueda.ipynb`: TF, IDF, vectorizacion de consulta y similitud coseno. Las etiquetas se ponderan `x6` y la categoria `x2` antes de construir los vectores.
+
+Las respuestas de `POST /places/search` y `POST /places/recommendations` incluyen `metrics` con el motor (`tfidf`), recuperacion de candidatos (`embeddings`), metrica de score (`cosine_similarity`), pesos por campo, cantidad de candidatos y resultados, scores no cero y estadisticas `min`, `max` y `mean`.
+
+`POST /places/recommendations` tambien incluye `evaluation_metrics` en la misma respuesta. Este bloque contiene el benchmark predefinido, `Precision@k`, `Recall@k`, `MRR`, `MAP`, `nDCG@k` y la metrica recomendada para la app movil. El resultado del benchmark se cachea en memoria por valor de `k` para no recalcular sus cinco consultas en cada recomendacion.
+
+`GET` o `POST /places/search/metrics?k=3` ejecuta un benchmark reproducible sin body. Los cinco casos y sus qrels graduados estan definidos en `app/modules/places/infrastructure/place_search_benchmark.py`: cafe tranquilo, mirador para fotos, comida regional, cena en pareja y plan con amigos. Calcula `Precision@k`, `Recall@k`, `MRR`, `MAP` y `nDCG@k`, tanto por consulta como de forma agregada. La relevancia es graduada: `1` marginal, `2` relevante y `3` muy relevante.
+
+La respuesta incluye `metric_definitions` con etiquetas y descripciones claras, y `recommended_metric` con `nDCG@k` como metrica principal sugerida para la app movil. `nDCG@k` es apropiada para recomendaciones de lugares porque considera el orden y permite relevancia graduada.
+
+```http
+GET /places/search/metrics?k=3
+```
+
+Groq/Llama se usa en `/places/recommendations` y `/places/chat` para redactar una respuesta conversacional. No decide que lugares recomendar, no hace busqueda y no inventa lugares.
 
 El arreglo estructurado `places` viene desde RDS/pgvector mediante embeddings, filtros y ranking. La app debe renderizar cards desde ese arreglo, no parseando texto libre del LLM.
 

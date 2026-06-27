@@ -2,7 +2,14 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.places.application.use_cases.evaluate_place_search import (
+    EvaluatePlaceSearchResult,
+)
 from app.modules.places.domain.models import PlaceCandidate, PlaceFilters
+from app.modules.places.domain.search_metrics import (
+    SearchEngineMetrics,
+    SearchMetricValues,
+)
 
 
 class PlaceFiltersSchema(BaseModel):
@@ -70,14 +77,69 @@ class PlaceResultSchema(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class PlaceSearchEngineMetricsSchema(BaseModel):
+    engine: str
+    candidate_retrieval: str
+    score_metric: str
+    field_weights: dict[str, int]
+    candidate_count: int
+    returned_count: int
+    nonzero_score_count: int
+    min_score: float
+    max_score: float
+    mean_score: float
+
+
 class PlaceSearchResponse(BaseModel):
     query: str
     places: list[PlaceResultSchema]
+    metrics: PlaceSearchEngineMetricsSchema
+
+
+class PlaceSearchMetricValuesSchema(BaseModel):
+    precision_at_k: float
+    recall_at_k: float
+    mrr: float
+    map: float
+    ndcg_at_k: float
+
+
+class PlaceSearchQueryMetricsSchema(BaseModel):
+    query: str
+    ranking: list[str]
+    metrics: PlaceSearchMetricValuesSchema
+
+
+class PlaceSearchMetricDefinitionSchema(BaseModel):
+    label: str
+    description: str
+
+
+class PlaceSearchRecommendedMetricSchema(BaseModel):
+    key: str
+    label: str
+    value: float
+    rationale: str
+
+
+class PlaceSearchMetricsResponse(BaseModel):
+    engine: str
+    benchmark: str
+    qrels_source: str
+    k: int
+    query_count: int
+    metric_definitions: dict[str, PlaceSearchMetricDefinitionSchema]
+    recommended_metric: PlaceSearchRecommendedMetricSchema
+    aggregate: PlaceSearchMetricValuesSchema
+    queries: list[PlaceSearchQueryMetricsSchema]
 
 
 class PlaceRecommendationResponse(BaseModel):
     query: str
+    message: str
     places: list[PlaceResultSchema]
+    metrics: PlaceSearchEngineMetricsSchema
+    evaluation_metrics: PlaceSearchMetricsResponse
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -98,4 +160,98 @@ def place_to_schema(place: PlaceCandidate) -> PlaceResultSchema:
         city=place.city,
         state=place.state,
         metadata=place.metadata,
+    )
+
+
+def metric_values_to_schema(
+    metrics: SearchMetricValues,
+) -> PlaceSearchMetricValuesSchema:
+    return PlaceSearchMetricValuesSchema(
+        precision_at_k=round(metrics.precision_at_k, 4),
+        recall_at_k=round(metrics.recall_at_k, 4),
+        mrr=round(metrics.mrr, 4),
+        map=round(metrics.map, 4),
+        ndcg_at_k=round(metrics.ndcg_at_k, 4),
+    )
+
+
+def metric_definitions_to_schema(
+    k: int,
+) -> dict[str, PlaceSearchMetricDefinitionSchema]:
+    return {
+        "precision_at_k": PlaceSearchMetricDefinitionSchema(
+            label=f"Precision@{k}",
+            description="Proporcion del top-k que realmente es relevante.",
+        ),
+        "recall_at_k": PlaceSearchMetricDefinitionSchema(
+            label=f"Recall@{k}",
+            description="Proporcion de todos los relevantes recuperada en el top-k.",
+        ),
+        "mrr": PlaceSearchMetricDefinitionSchema(
+            label="MRR",
+            description="Premia que el primer resultado relevante aparezca pronto.",
+        ),
+        "map": PlaceSearchMetricDefinitionSchema(
+            label="MAP",
+            description="Promedia la precision en las posiciones relevantes.",
+        ),
+        "ndcg_at_k": PlaceSearchMetricDefinitionSchema(
+            label=f"nDCG@{k}",
+            description="Evalua orden y relevancia graduada dentro del top-k.",
+        ),
+    }
+
+
+def recommended_metric_to_schema(
+    metrics: SearchMetricValues,
+    k: int,
+) -> PlaceSearchRecommendedMetricSchema:
+    return PlaceSearchRecommendedMetricSchema(
+        key="ndcg_at_k",
+        label=f"nDCG@{k}",
+        value=round(metrics.ndcg_at_k, 4),
+        rationale=(
+            "Es la mejor metrica principal para una lista de lugares porque considera "
+            "la posicion y los grados de relevancia."
+        ),
+    )
+
+
+def search_metrics_result_to_schema(
+    result: EvaluatePlaceSearchResult,
+) -> PlaceSearchMetricsResponse:
+    return PlaceSearchMetricsResponse(
+        engine=result.engine,
+        benchmark=result.benchmark,
+        qrels_source=result.qrels_source,
+        k=result.k,
+        query_count=result.query_count,
+        metric_definitions=metric_definitions_to_schema(result.k),
+        recommended_metric=recommended_metric_to_schema(result.aggregate, result.k),
+        aggregate=metric_values_to_schema(result.aggregate),
+        queries=[
+            PlaceSearchQueryMetricsSchema(
+                query=query_result.query,
+                ranking=query_result.ranking,
+                metrics=metric_values_to_schema(query_result.metrics),
+            )
+            for query_result in result.queries
+        ],
+    )
+
+
+def engine_metrics_to_schema(
+    metrics: SearchEngineMetrics,
+) -> PlaceSearchEngineMetricsSchema:
+    return PlaceSearchEngineMetricsSchema(
+        engine=metrics.engine,
+        candidate_retrieval=metrics.candidate_retrieval,
+        score_metric=metrics.score_metric,
+        field_weights=metrics.field_weights,
+        candidate_count=metrics.candidate_count,
+        returned_count=metrics.returned_count,
+        nonzero_score_count=metrics.nonzero_score_count,
+        min_score=round(metrics.min_score, 4),
+        max_score=round(metrics.max_score, 4),
+        mean_score=round(metrics.mean_score, 4),
     )
