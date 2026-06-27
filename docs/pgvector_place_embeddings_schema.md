@@ -105,6 +105,8 @@ La API NLP usa:
 match_places(query_embedding VECTOR(16), match_count INTEGER, filters JSONB)
 ```
 
+`filters.place_ids` acepta un arreglo de IDs generado por la consulta geografica a la API principal. `match_places` limita los resultados a esos `external_id`; no almacena coordenadas en esta tabla.
+
 Los jobs usan:
 
 ```sql

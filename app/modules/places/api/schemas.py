@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.places.application.use_cases.evaluate_place_search import (
     EvaluatePlaceSearchResult,
@@ -31,6 +31,15 @@ class PlaceSearchRequest(BaseModel):
     state: str | None = Field(default=None, max_length=80)
     filters: PlaceFiltersSchema = Field(default_factory=PlaceFiltersSchema)
     limit: int = Field(default=10, ge=1, le=20)
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)
+    radius: int = Field(default=5000, ge=1, le=50_000)
+
+    @model_validator(mode="after")
+    def validate_coordinates(self) -> "PlaceSearchRequest":
+        if (self.lat is None) != (self.lng is None):
+            raise ValueError("lat and lng must be provided together")
+        return self
 
     def to_domain_filters(self) -> PlaceFilters:
         return PlaceFilters(
@@ -88,6 +97,9 @@ class PlaceSearchEngineMetricsSchema(BaseModel):
     min_score: float
     max_score: float
     mean_score: float
+    location_filter_applied: bool
+    nearby_place_count: int | None
+    radius_meters: int | None
 
 
 class PlaceSearchResponse(BaseModel):
@@ -254,4 +266,7 @@ def engine_metrics_to_schema(
         min_score=round(metrics.min_score, 4),
         max_score=round(metrics.max_score, 4),
         mean_score=round(metrics.mean_score, 4),
+        location_filter_applied=metrics.location_filter_applied,
+        nearby_place_count=metrics.nearby_place_count,
+        radius_meters=metrics.radius_meters,
     )

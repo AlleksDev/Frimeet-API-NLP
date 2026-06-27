@@ -10,6 +10,7 @@ class PlaceFilters:
     price_range: str | None = None
     is_active: bool | None = True
     occasion: str | None = None
+    place_ids: tuple[str, ...] | None = None
 
     def as_metadata_filter(self) -> dict[str, Any]:
         return {
@@ -21,6 +22,7 @@ class PlaceFilters:
                 "price_range": self.price_range,
                 "is_active": self.is_active,
                 "occasion": self.occasion,
+                "place_ids": self.place_ids,
             }.items()
             if value is not None
         }
