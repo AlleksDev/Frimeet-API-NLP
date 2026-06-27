@@ -36,6 +36,7 @@ class PlaceCandidate:
     state: str | None = None
     price_range: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    document: str | None = None
 
     def to_llm_context(self) -> dict[str, Any]:
         context = {
