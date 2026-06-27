@@ -7,8 +7,15 @@ from typing import Any, AsyncIterator
 import asyncpg
 
 from app.shared.config.settings import Settings
+from app.shared.errors.exceptions import AppError
 from app.shared.vector_store.models import VectorMatch, VectorUpsertRecord
 from app.shared.vector_store.sql import quote_identifier, vector_literal
+
+
+READ_CONTRACT_SIGNATURES = {
+    "match_places": "match_places(vector, integer, jsonb)",
+    "match_posts": "match_posts(vector, integer, jsonb)",
+}
 
 
 class AwsPgvectorClient:
@@ -54,6 +61,58 @@ class AwsPgvectorClient:
             limit=limit,
         )
 
+    async def check_read_contract(self) -> dict[str, Any]:
+        """Check that read-only pgvector functions are visible and executable."""
+        try:
+            async with self.connection() as connection:
+                vector_row = await connection.fetchrow(
+                    "SELECT to_regtype('vector') IS NOT NULL AS available"
+                )
+                vector_available = bool(vector_row["available"]) if vector_row else False
+                functions: dict[str, dict[str, Any]] = {
+                    function_name: {
+                        "signature": signature,
+                        "exists": False,
+                        "executable": False,
+                    }
+                    for function_name, signature in READ_CONTRACT_SIGNATURES.items()
+                }
+                if vector_available:
+                    for function_name, signature in READ_CONTRACT_SIGNATURES.items():
+                        row = await connection.fetchrow(
+                            """
+                            SELECT
+                                to_regprocedure($1) IS NOT NULL AS exists,
+                                COALESCE(
+                                    has_function_privilege(to_regprocedure($1), 'EXECUTE'),
+                                    false
+                                ) AS executable
+                            """,
+                            signature,
+                        )
+                        functions[function_name].update(
+                            {
+                                "exists": bool(row["exists"]) if row else False,
+                                "executable": bool(row["executable"]) if row else False,
+                            }
+                        )
+        except Exception as exc:
+            return {
+                "ready": False,
+                "error": type(exc).__name__,
+                "message": str(exc),
+            }
+
+        ready = vector_available and all(
+            details["exists"] and details["executable"]
+            for details in functions.values()
+        )
+        return {
+            "ready": ready,
+            "vector_extension": vector_available,
+            "functions": functions,
+        }
+
     async def fetch_place_content_hashes(self, ids: Iterable[str]) -> dict[str, str]:
         return await self._fetch_content_hashes(
             function_name="get_place_content_hashes",
@@ -92,13 +151,22 @@ class AwsPgvectorClient:
         limit: int,
     ) -> list[VectorMatch]:
         query = f"SELECT * FROM {quote_identifier(function_name)}($1::vector, $2::integer, $3::jsonb)"
-        async with self.connection() as connection:
-            rows = await connection.fetch(
-                query,
-                vector_literal(embedding),
-                limit,
-                json.dumps(filters, ensure_ascii=False),
-            )
+        try:
+            async with self.connection() as connection:
+                rows = await connection.fetch(
+                    query,
+                    vector_literal(embedding),
+                    limit,
+                    json.dumps(filters, ensure_ascii=False),
+                )
+        except asyncpg.exceptions.UndefinedFunctionError as exc:
+            raise AppError(
+                "Pgvector SQL contract is missing or not visible to this role. "
+                "Run sql/aws_pgvector_contract.sql in the configured database and "
+                "grant EXECUTE to the reader role.",
+                code="pgvector_contract_missing",
+                status_code=503,
+            ) from exc
         return [_row_to_vector_match(row) for row in rows]
 
     async def _fetch_content_hashes(

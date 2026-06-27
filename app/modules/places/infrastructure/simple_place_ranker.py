@@ -7,10 +7,12 @@ from app.modules.places.domain.models import PlaceCandidate, PlaceFilters
 class SimplePlaceRanker(PlaceRanker):
     def rank(
         self,
+        query: str,
         places: Sequence[PlaceCandidate],
         filters: PlaceFilters,
         limit: int,
     ) -> list[PlaceCandidate]:
+        del query
         ranked = sorted(
             places,
             key=lambda place: (

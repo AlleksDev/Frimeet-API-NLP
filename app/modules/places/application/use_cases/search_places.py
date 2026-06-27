@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 import json
+from typing import Sequence
 
 from app.modules.places.application.ports.place_repository import PlaceVectorRepository
 from app.modules.places.application.ports.ranker import PlaceRanker
 from app.modules.places.domain.models import PlaceCandidate, PlaceFilters
+from app.modules.places.domain.search_metrics import SearchEngineMetrics
 from app.shared.cache.memory import SimpleTTLCache
 from app.shared.nlp.embeddings.base import EmbeddingProvider
 from app.shared.nlp.preprocessing.text import prepare_for_embedding
@@ -14,6 +16,7 @@ class SearchPlacesResult:
     query: str
     normalized_query: str
     places: list[PlaceCandidate]
+    metrics: SearchEngineMetrics
 
 
 class SearchPlacesUseCase:
@@ -49,17 +52,46 @@ class SearchPlacesUseCase:
             filters=filters,
             limit=max(limit * 3, limit),
         )
-        ranked_places = self._ranker.rank(candidates, filters, limit)
+        ranked_places = self._ranker.rank(
+            query=normalized_query,
+            places=candidates,
+            filters=filters,
+            limit=limit,
+        )
         result = SearchPlacesResult(
             query=query,
             normalized_query=normalized_query,
             places=ranked_places,
+            metrics=self._build_metrics(candidates, ranked_places),
         )
 
         if self._cache:
             self._cache.set(cache_key, result)
 
         return result
+
+    @staticmethod
+    def _build_metrics(
+        candidates: Sequence[PlaceCandidate],
+        ranked_places: list[PlaceCandidate],
+    ) -> SearchEngineMetrics:
+        scores = [place.score for place in ranked_places]
+        return SearchEngineMetrics(
+            engine="tfidf",
+            candidate_retrieval="embeddings",
+            score_metric="cosine_similarity",
+            field_weights={
+                "tags": 6,
+                "category": 2,
+                "other_text": 1,
+            },
+            candidate_count=len(candidates),
+            returned_count=len(ranked_places),
+            nonzero_score_count=sum(score > 0 for score in scores),
+            min_score=min(scores, default=0.0),
+            max_score=max(scores, default=0.0),
+            mean_score=sum(scores) / len(scores) if scores else 0.0,
+        )
 
     @staticmethod
     def _cache_key(query: str, filters: PlaceFilters, limit: int) -> str:
