@@ -75,6 +75,14 @@ class Settings(BaseSettings):
     embedding_model: str = Field(default="mock-embedding", alias="EMBEDDING_MODEL")
     embedding_version: str = Field(default="v1", alias="EMBEDDING_VERSION")
 
+    bm25_k1: float = Field(default=1.5, gt=0, alias="BM25_K1")
+    bm25_b: float = Field(default=0.75, ge=0, le=1, alias="BM25_B")
+    bm25_relevance_threshold: float = Field(
+        default=3.0,
+        gt=0,
+        alias="BM25_RELEVANCE_THRESHOLD",
+    )
+
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     request_timeout_seconds: int = Field(default=10, alias="REQUEST_TIMEOUT_SECONDS")
     llm_timeout_seconds: int = Field(default=12, alias="LLM_TIMEOUT_SECONDS")

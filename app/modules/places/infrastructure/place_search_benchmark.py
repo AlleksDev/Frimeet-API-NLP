@@ -4,7 +4,7 @@ from app.modules.places.application.use_cases.evaluate_place_search import (
 from app.modules.places.domain.models import PlaceFilters
 
 
-BENCHMARK_NAME = "built_in_places_v2"
+BENCHMARK_NAME = "built_in_places_v3_bm25"
 QRELS_SOURCE = "predefined_graded_qrels"
 
 

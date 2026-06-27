@@ -7,7 +7,7 @@ pinned: false
 
 # Frimeet API NLP
 
-Servicio NLP independiente para recuperacion de candidatos con pgvector, ranking TF-IDF, recomendaciones, embeddings y redaccion conversacional con Llama via Groq.
+Servicio NLP independiente para recuperacion de candidatos con pgvector, ranking BM25, recomendaciones, embeddings y redaccion conversacional con Llama via Groq.
 
 La API principal sigue siendo la fuente de verdad de lugares, posts, usuarios, sesiones, permisos y reportes. Este servicio NLP solo trabaja con datos derivados para busqueda semantica.
 
@@ -22,7 +22,7 @@ Hugging Face API NLP
   |-- usa credenciales nlp_reader
   |-- consulta RDS PostgreSQL + pgvector
   |-- genera embedding solo del query del usuario
-  |-- ordena candidatos con TF-IDF y similitud coseno
+  |-- ordena candidatos con BM25
   `-- usa Groq/Llama para embellecer recomendaciones y chat
 
 Hugging Face Jobs
@@ -77,6 +77,10 @@ PGVECTOR_SSL_MODE=require
 EMBEDDING_DIMENSION=16
 EMBEDDING_MODEL=mock-embedding
 EMBEDDING_VERSION=v1
+
+BM25_K1=1.5
+BM25_B=0.75
+BM25_RELEVANCE_THRESHOLD=3.0
 
 LOG_LEVEL=INFO
 REQUEST_TIMEOUT_SECONDS=10
@@ -184,11 +188,11 @@ docs/pgvector_post_embeddings_schema.md
 
 Ese SQL debe ejecutarse una vez con un rol administrador/DBA fuera de Hugging Face. La API NLP usa solo `nlp_reader`; los jobs usan solo `nlp_writer`.
 
-## Ranking TF-IDF Y Llama Via Groq
+## Ranking BM25 Y Llama Via Groq
 
-`/places/search` y `/places/recommendations` recuperan candidatos filtrados desde pgvector y aplican el flujo TF-IDF de `Lab2_Motor_de_busqueda.ipynb`: TF, IDF, vectorizacion de consulta y similitud coseno. Las etiquetas se ponderan `x6` y la categoria `x2` antes de construir los vectores.
+`/places/search` y `/places/recommendations` recuperan candidatos reales filtrados desde pgvector y los reordenan con Okapi BM25, siguiendo `Lab3_BM25_y_Evaluacion.ipynb`. Los valores iniciales son `k1=1.5` y `b=0.75`. Las etiquetas se ponderan `x6` y la categoria `x2` antes de calcular BM25.
 
-Las respuestas de `POST /places/search` y `POST /places/recommendations` incluyen `metrics` con el motor (`tfidf`), recuperacion de candidatos (`embeddings`), metrica de score (`cosine_similarity`), pesos por campo, cantidad de candidatos y resultados, scores no cero y estadisticas `min`, `max` y `mean`.
+Las respuestas incluyen metricas de la consulta actual: origen de candidatos (`pgvector` en produccion), parametros BM25, cobertura de terminos, cantidad de candidatos reales, resultados no cero y estadisticas `min`, `max` y `mean`. `match_quality` puede ser `no_match`, `low_confidence` o `confident` segun `BM25_RELEVANCE_THRESHOLD`.
 
 Ambos endpoints aceptan filtro geografico mediante `lat`, `lng` y `radius` en metros. Cuando se proporcionan coordenadas, el servicio NLP consulta `GET /api/v1/places/nearby` en la API principal y limita pgvector a los IDs devueltos. Las coordenadas siguen perteneciendo a la API principal; no es necesario guardarlas en pgvector, truncar tablas ni regenerar embeddings.
 
@@ -202,11 +206,11 @@ Ambos endpoints aceptan filtro geografico mediante `lat`, `lng` y `radius` en me
 }
 ```
 
-El bloque `metrics` indica `location_filter_applied`, `nearby_place_count` y `radius_meters` para hacer visible la aplicacion del radio.
+El bloque `metrics` tambien indica `location_filter_applied`, `nearby_place_count` y `radius_meters` para hacer visible la aplicacion del radio.
 
-`POST /places/recommendations` tambien incluye `evaluation_metrics` en la misma respuesta. Este bloque contiene el benchmark predefinido, `Precision@k`, `Recall@k`, `MRR`, `MAP`, `nDCG@k` y la metrica recomendada para la app movil. El resultado del benchmark se cachea en memoria por valor de `k` para no recalcular sus diez consultas en cada recomendacion.
+`POST /places/recommendations` no mezcla el benchmark fijo con la consulta del usuario. Si el score maximo es `0`, envia a Llama el modo `no_match` y devuelve `places: []`. Si `0 < max_score < BM25_RELEVANCE_THRESHOLD`, envia `low_confidence`; de lo contrario usa `confident`. Llama solo embellece el tono correspondiente y recibe exclusivamente los lugares ya seleccionados.
 
-`GET` o `POST /places/search/metrics?k=5` ejecuta `built_in_places_v2` sin body. El benchmark contiene doce lugares, diez consultas conversacionales y qrels graduados definidos en `app/modules/places/infrastructure/place_search_benchmark.py`. Incluye planes en pareja, lluvia, lectura, trabajo, cultura, ejercicio, naturaleza y comida local. Calcula `Precision@k`, `Recall@k`, `MRR`, `MAP` y `nDCG@k`, tanto por consulta como de forma agregada. La relevancia es graduada: `1` marginal, `2` relevante y `3` muy relevante.
+`GET` o `POST /places/search/metrics?k=5` conserva un benchmark offline separado llamado `built_in_places_v3_bm25`. Contiene doce lugares controlados, diez consultas y qrels graduados para calcular honestamente `Precision@k`, `Recall@k`, `MRR`, `MAP` y `nDCG@k`. Estas metricas requieren juicios de relevancia y por eso no se presentan como si midieran una consulta arbitraria de produccion.
 
 La respuesta incluye `metric_definitions` con etiquetas y descripciones claras, y `recommended_metric` con `nDCG@k` como metrica principal sugerida para la app movil. `nDCG@k` es apropiada para recomendaciones de lugares porque considera el orden y permite relevancia graduada.
 

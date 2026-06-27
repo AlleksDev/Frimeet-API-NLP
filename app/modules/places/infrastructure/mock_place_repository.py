@@ -158,6 +158,8 @@ SAMPLE_PLACES = [
 class MockPlaceVectorRepository(PlaceVectorRepository):
     """In-memory repository used for local development and tests."""
 
+    source_name = "mock_embeddings"
+
     def __init__(self, embedding_provider: EmbeddingProvider) -> None:
         self._records = []
         for place in SAMPLE_PLACES:
@@ -168,6 +170,7 @@ class MockPlaceVectorRepository(PlaceVectorRepository):
                     place["city"],
                     place["state"],
                     place["tags"],
+                    place["occasion"],
                     place["short_description"],
                 ]
             )

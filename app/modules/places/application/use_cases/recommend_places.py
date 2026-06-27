@@ -2,10 +2,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from app.modules.places.application.use_cases.evaluate_place_search import (
-    EvaluatePlaceSearchResult,
-    EvaluatePlaceSearchUseCase,
-)
 from app.modules.places.application.use_cases.search_places import SearchPlacesUseCase
 from app.modules.places.domain.models import PlaceCandidate, PlaceFilters
 from app.modules.places.domain.search_metrics import SearchEngineMetrics
@@ -19,7 +15,6 @@ class RecommendPlacesResult:
     message: str
     places: list[PlaceCandidate]
     metrics: SearchEngineMetrics
-    evaluation_metrics: EvaluatePlaceSearchResult
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -27,16 +22,12 @@ class RecommendPlacesUseCase:
     def __init__(
         self,
         search_use_case: SearchPlacesUseCase,
-        evaluation_use_case: EvaluatePlaceSearchUseCase,
         llm_provider: LLMProvider,
         output_guard: PlaceChatOutputGuard,
-        evaluation_k: int = 5,
     ) -> None:
         self._search_use_case = search_use_case
-        self._evaluation_use_case = evaluation_use_case
         self._llm_provider = llm_provider
         self._output_guard = output_guard
-        self._evaluation_k = evaluation_k
 
     async def execute(
         self,
@@ -55,10 +46,15 @@ class RecommendPlacesUseCase:
             longitude=longitude,
             radius_meters=radius_meters,
         )
-        evaluation_metrics = await self._evaluation_use_case.execute(
-            k=self._evaluation_k,
+        response_mode = search_result.metrics.match_quality
+        places = (
+            []
+            if response_mode == "no_match"
+            else [place for place in search_result.places if place.score > 0]
         )
-        places = search_result.places
+        metrics = search_result.metrics.with_returned_scores(
+            [place.score for place in places]
+        )
         llm_provider = self._llm_provider.provider_name
         llm_model = self._llm_provider.model_name
         used_llm = False
@@ -69,18 +65,23 @@ class RecommendPlacesUseCase:
                 user_intent=search_result.normalized_query,
                 region=filters.city or filters.state,
                 places=[place.to_llm_context() for place in places],
+                response_mode=response_mode,
             )
             llm_provider = llm_result.provider
             llm_model = llm_result.model
             guarded = self._output_guard.validate(
                 message=llm_result.message,
                 allowed_place_names=[place.name for place in places],
+                response_mode=response_mode,
             )
             message = guarded.message
             used_llm = not guarded.used_fallback
             guard_reason = guarded.reason
         except Exception as exc:
-            guarded = self._output_guard.fallback(reason=exc.__class__.__name__)
+            guarded = self._output_guard.fallback(
+                reason=exc.__class__.__name__,
+                response_mode=response_mode,
+            )
             message = guarded.message
             guard_reason = guarded.reason
 
@@ -88,11 +89,12 @@ class RecommendPlacesUseCase:
             query=search_result.query,
             message=message,
             places=places,
-            metrics=search_result.metrics,
-            evaluation_metrics=evaluation_metrics,
+            metrics=metrics,
             metadata={
-                "strategy": "pgvector_candidates_plus_tfidf_ranking",
-                "ranking": "tfidf_cosine",
+                "strategy": "pgvector_candidates_plus_bm25_ranking",
+                "ranking": "bm25",
+                "response_mode": response_mode,
+                "relevance_threshold": search_result.metrics.relevance_threshold,
                 "llm_provider": llm_provider,
                 "llm_model": llm_model,
                 "used_llm": used_llm,

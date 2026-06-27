@@ -9,6 +9,7 @@ from app.modules.places.application.use_cases.search_places import SearchPlacesU
 from app.modules.places.infrastructure.aws_pgvector_place_repository import (
     AwsPgvectorPlaceRepository,
 )
+from app.modules.places.infrastructure.bm25_place_ranker import Bm25PlaceRanker
 from app.modules.places.infrastructure.main_api_nearby_place_provider import (
     MainApiNearbyPlaceProvider,
 )
@@ -18,7 +19,6 @@ from app.modules.places.infrastructure.place_search_benchmark import (
     QRELS_SOURCE,
     get_default_place_search_benchmark,
 )
-from app.modules.places.infrastructure.tfidf_place_ranker import TfidfPlaceRanker
 from app.shared.cache.memory import SimpleTTLCache
 from app.shared.config.settings import get_settings
 from app.shared.dependencies import get_embedding_provider, get_llm_provider
@@ -36,8 +36,9 @@ def get_place_repository() -> MockPlaceVectorRepository | AwsPgvectorPlaceReposi
 
 
 @lru_cache
-def get_place_ranker() -> TfidfPlaceRanker:
-    return TfidfPlaceRanker()
+def get_place_ranker() -> Bm25PlaceRanker:
+    settings = get_settings()
+    return Bm25PlaceRanker(k1=settings.bm25_k1, b=settings.bm25_b)
 
 
 @lru_cache
@@ -59,6 +60,7 @@ def get_search_places_use_case() -> SearchPlacesUseCase:
         ranker=get_place_ranker(),
         cache=get_place_search_cache(),
         nearby_place_provider=get_nearby_place_provider(),
+        relevance_threshold=get_settings().bm25_relevance_threshold,
     )
 
 
@@ -66,7 +68,6 @@ def get_search_places_use_case() -> SearchPlacesUseCase:
 def get_recommend_places_use_case() -> RecommendPlacesUseCase:
     return RecommendPlacesUseCase(
         search_use_case=get_search_places_use_case(),
-        evaluation_use_case=get_evaluate_place_search_use_case(),
         llm_provider=get_llm_provider(),
         output_guard=PlaceChatOutputGuard(),
     )
@@ -79,7 +80,8 @@ def get_evaluate_place_search_use_case() -> EvaluatePlaceSearchUseCase:
     benchmark_search = SearchPlacesUseCase(
         embedding_provider=embedding_provider,
         place_repository=MockPlaceVectorRepository(embedding_provider),
-        ranker=TfidfPlaceRanker(),
+        ranker=Bm25PlaceRanker(k1=settings.bm25_k1, b=settings.bm25_b),
+        relevance_threshold=settings.bm25_relevance_threshold,
     )
     return EvaluatePlaceSearchUseCase(
         search_use_case=benchmark_search,

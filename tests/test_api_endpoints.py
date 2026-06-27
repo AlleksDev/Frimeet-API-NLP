@@ -20,9 +20,10 @@ def test_places_search_endpoint() -> None:
     payload = response.json()
     assert payload["query"] == "lugares tranquilos para cenar"
     assert payload["places"]
-    assert payload["metrics"]["engine"] == "tfidf"
-    assert payload["metrics"]["candidate_retrieval"] == "embeddings"
-    assert payload["metrics"]["score_metric"] == "cosine_similarity"
+    assert payload["metrics"]["engine"] == "bm25"
+    assert payload["metrics"]["candidate_retrieval"] == "mock_embeddings"
+    assert payload["metrics"]["score_metric"] == "bm25"
+    assert payload["metrics"]["ranking_parameters"] == {"k1": 1.5, "b": 0.75}
     assert payload["metrics"]["field_weights"]["tags"] == 6
     assert payload["metrics"]["returned_count"] == len(payload["places"])
     assert payload["metrics"]["max_score"] >= payload["metrics"]["mean_score"]
@@ -35,8 +36,8 @@ def test_places_search_metrics_endpoint() -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["engine"] == "tfidf_cosine"
-    assert payload["benchmark"] == "built_in_places_v2"
+    assert payload["engine"] == "bm25"
+    assert payload["benchmark"] == "built_in_places_v3_bm25"
     assert payload["qrels_source"] == "predefined_graded_qrels"
     assert payload["query_count"] == 10
     assert payload["metric_definitions"]["precision_at_k"]["label"] == "Precision@3"
@@ -86,7 +87,7 @@ def test_places_chat_endpoint_returns_trace_and_structured_places() -> None:
     assert payload["metadata"]["places_used_as_context"]
 
 
-def test_places_recommendations_returns_llm_message_and_tfidf_metadata() -> None:
+def test_places_recommendations_returns_llm_message_and_bm25_metadata() -> None:
     client = TestClient(create_app())
 
     response = client.post(
@@ -103,19 +104,40 @@ def test_places_recommendations_returns_llm_message_and_tfidf_metadata() -> None
     payload = response.json()
     assert payload["message"]
     assert payload["places"]
-    assert payload["metrics"]["engine"] == "tfidf"
-    assert payload["metrics"]["score_metric"] == "cosine_similarity"
+    assert payload["metrics"]["engine"] == "bm25"
+    assert payload["metrics"]["score_metric"] == "bm25"
     assert payload["metrics"]["returned_count"] == len(payload["places"])
-    assert payload["evaluation_metrics"]["benchmark"] == "built_in_places_v2"
-    assert payload["evaluation_metrics"]["query_count"] == 10
-    assert payload["evaluation_metrics"]["k"] == 5
-    assert payload["evaluation_metrics"]["recommended_metric"]["key"] == "ndcg_at_k"
-    assert all(
-        metric in payload["evaluation_metrics"]["aggregate"]
-        for metric in ["precision_at_k", "recall_at_k", "mrr", "map", "ndcg_at_k"]
-    )
-    assert payload["metadata"]["ranking"] == "tfidf_cosine"
+    assert payload["metrics"]["candidate_retrieval"] == "mock_embeddings"
+    assert payload["metrics"]["query_token_count"] > 0
+    assert payload["metrics"]["matched_query_token_count"] > 0
+    assert payload["metrics"]["scope"] == "current_query"
+    assert payload["metrics"]["ground_truth_available"] is False
+    assert "evaluation_metrics" not in payload
+    assert payload["metadata"]["ranking"] == "bm25"
+    assert payload["metadata"]["response_mode"] == "confident"
     assert payload["metadata"]["used_llm"] is True
+
+
+def test_places_recommendations_returns_no_places_without_bm25_matches() -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/places/recommendations",
+        json={
+            "query": "xqzv blorf 998zz",
+            "filters": {"is_active": True},
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["places"] == []
+    assert payload["metrics"]["max_score"] == 0.0
+    assert payload["metrics"]["returned_count"] == 0
+    assert payload["metrics"]["match_quality"] == "no_match"
+    assert payload["metadata"]["response_mode"] == "no_match"
+    assert payload["message"]
 
 
 def test_places_search_rejects_incomplete_coordinates() -> None:

@@ -7,6 +7,7 @@ from app.modules.places.application.ports.nearby_place_provider import NearbyPla
 from app.modules.places.application.ports.ranker import PlaceRanker
 from app.modules.places.domain.models import PlaceCandidate, PlaceFilters
 from app.modules.places.domain.search_metrics import SearchEngineMetrics
+from app.modules.places.domain.search_text import place_tokens, tokenize
 from app.shared.cache.memory import SimpleTTLCache
 from app.shared.nlp.embeddings.base import EmbeddingProvider
 from app.shared.nlp.preprocessing.text import prepare_for_embedding
@@ -28,12 +29,14 @@ class SearchPlacesUseCase:
         ranker: PlaceRanker,
         cache: SimpleTTLCache | None = None,
         nearby_place_provider: NearbyPlaceProvider | None = None,
+        relevance_threshold: float = 3.0,
     ) -> None:
         self._embedding_provider = embedding_provider
         self._place_repository = place_repository
         self._ranker = ranker
         self._cache = cache
         self._nearby_place_provider = nearby_place_provider
+        self._relevance_threshold = relevance_threshold
 
     async def execute(
         self,
@@ -96,6 +99,7 @@ class SearchPlacesUseCase:
             normalized_query=normalized_query,
             places=ranked_places,
             metrics=self._build_metrics(
+                normalized_query,
                 candidates,
                 ranked_places,
                 location_filter_applied=location_filter_applied,
@@ -109,8 +113,9 @@ class SearchPlacesUseCase:
 
         return result
 
-    @staticmethod
     def _build_metrics(
+        self,
+        query: str,
         candidates: Sequence[PlaceCandidate],
         ranked_places: list[PlaceCandidate],
         location_filter_applied: bool = False,
@@ -118,20 +123,36 @@ class SearchPlacesUseCase:
         radius_meters: int | None = None,
     ) -> SearchEngineMetrics:
         scores = [place.score for place in ranked_places]
+        max_score = max(scores, default=0.0)
+        query_terms = set(tokenize(query))
+        candidate_terms = {
+            term
+            for candidate in candidates
+            for term in place_tokens(candidate)
+        }
+        matched_query_terms = query_terms & candidate_terms
         return SearchEngineMetrics(
-            engine="tfidf",
-            candidate_retrieval="embeddings",
-            score_metric="cosine_similarity",
-            field_weights={
-                "tags": 6,
-                "category": 2,
-                "other_text": 1,
-            },
+            engine=self._ranker.engine_name,
+            candidate_retrieval=self._place_repository.source_name,
+            score_metric=self._ranker.score_metric,
+            field_weights=self._ranker.field_weights,
+            ranking_parameters=self._ranker.ranking_parameters,
+            relevance_threshold=self._relevance_threshold,
+            match_quality=_match_quality(max_score, self._relevance_threshold),
+            query_token_count=len(query_terms),
+            matched_query_token_count=len(matched_query_terms),
+            query_coverage=(
+                len(matched_query_terms) / len(query_terms)
+                if query_terms
+                else 0.0
+            ),
+            scope="current_query",
+            ground_truth_available=False,
             candidate_count=len(candidates),
             returned_count=len(ranked_places),
             nonzero_score_count=sum(score > 0 for score in scores),
             min_score=min(scores, default=0.0),
-            max_score=max(scores, default=0.0),
+            max_score=max_score,
             mean_score=sum(scores) / len(scores) if scores else 0.0,
             location_filter_applied=location_filter_applied,
             nearby_place_count=nearby_place_count,
@@ -156,3 +177,11 @@ class SearchPlacesUseCase:
             "radius_meters": radius_meters,
         }
         return json.dumps(payload, sort_keys=True, ensure_ascii=True)
+
+
+def _match_quality(max_score: float, relevance_threshold: float) -> str:
+    if max_score <= 0:
+        return "no_match"
+    if max_score < relevance_threshold:
+        return "low_confidence"
+    return "confident"
