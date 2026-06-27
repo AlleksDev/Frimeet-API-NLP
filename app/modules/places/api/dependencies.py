@@ -1,6 +1,9 @@
 from functools import lru_cache
 
 from app.modules.places.application.use_cases.chat_places import ChatPlacesUseCase
+from app.modules.places.application.use_cases.evaluate_place_search import (
+    EvaluatePlaceSearchUseCase,
+)
 from app.modules.places.application.use_cases.recommend_places import RecommendPlacesUseCase
 from app.modules.places.application.use_cases.search_places import SearchPlacesUseCase
 from app.modules.places.infrastructure.aws_pgvector_place_repository import (
@@ -51,6 +54,11 @@ def get_recommend_places_use_case() -> RecommendPlacesUseCase:
         llm_provider=get_llm_provider(),
         output_guard=PlaceChatOutputGuard(),
     )
+
+
+@lru_cache
+def get_evaluate_place_search_use_case() -> EvaluatePlaceSearchUseCase:
+    return EvaluatePlaceSearchUseCase(search_use_case=get_search_places_use_case())
 
 
 @lru_cache

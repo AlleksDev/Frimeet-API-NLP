@@ -133,6 +133,7 @@ uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}
 GET  /health
 GET  /ready
 POST /places/search
+POST /places/search/metrics
 POST /places/recommendations
 POST /places/chat
 POST /posts/recommendations
@@ -184,6 +185,27 @@ Ese SQL debe ejecutarse una vez con un rol administrador/DBA fuera de Hugging Fa
 ## Ranking TF-IDF Y Llama Via Groq
 
 `/places/search` y `/places/recommendations` recuperan candidatos filtrados desde pgvector y aplican el flujo TF-IDF de `Lab2_Motor_de_busqueda.ipynb`: TF, IDF, vectorizacion de consulta y similitud coseno. Las etiquetas se ponderan `x6` y la categoria `x2` antes de construir los vectores.
+
+La respuesta de `POST /places/search` incluye `metrics` con el motor (`tfidf`), recuperacion de candidatos (`embeddings`), metrica de score (`cosine_similarity`), pesos por campo, cantidad de candidatos y resultados, scores no cero y estadisticas `min`, `max` y `mean`.
+
+`POST /places/search/metrics` evalua el motor sobre qrels proporcionados para los lugares reales. Calcula `Precision@k`, `Recall@k`, `MRR`, `MAP` y `nDCG@k`, tanto por consulta como de forma agregada. La relevancia es graduada: `1` marginal, `2` relevante y `3` muy relevante.
+
+```json
+{
+  "k": 5,
+  "cases": [
+    {
+      "query": "cafe tranquilo para platicar",
+      "relevance": {
+        "ID_REAL_LUGAR_1": 3,
+        "ID_REAL_LUGAR_2": 1
+      },
+      "city": "Tuxtla Gutierrez",
+      "filters": {"is_active": true}
+    }
+  ]
+}
+```
 
 Groq/Llama se usa en `/places/recommendations` y `/places/chat` para redactar una respuesta conversacional. No decide que lugares recomendar, no hace busqueda y no inventa lugares.
 

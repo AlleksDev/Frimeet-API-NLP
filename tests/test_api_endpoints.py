@@ -20,6 +20,67 @@ def test_places_search_endpoint() -> None:
     payload = response.json()
     assert payload["query"] == "lugares tranquilos para cenar"
     assert payload["places"]
+    assert payload["metrics"]["engine"] == "tfidf"
+    assert payload["metrics"]["candidate_retrieval"] == "embeddings"
+    assert payload["metrics"]["score_metric"] == "cosine_similarity"
+    assert payload["metrics"]["field_weights"]["tags"] == 6
+    assert payload["metrics"]["returned_count"] == len(payload["places"])
+    assert payload["metrics"]["max_score"] >= payload["metrics"]["mean_score"]
+
+
+def test_places_search_metrics_endpoint() -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/places/search/metrics",
+        json={
+            "k": 3,
+            "cases": [
+                {
+                    "query": "atardecer fotos paseo",
+                    "relevance": {"place_2": 3},
+                    "filters": {"is_active": True},
+                },
+                {
+                    "query": "cafe tranquilo con postres",
+                    "relevance": {"place_1": 3},
+                    "filters": {"is_active": True},
+                },
+                {
+                    "query": "comida regional restaurante",
+                    "relevance": {"place_3": 3},
+                    "filters": {"is_active": True},
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["engine"] == "pgvector_candidates_plus_tfidf_cosine"
+    assert payload["query_count"] == 3
+    assert payload["aggregate"]["recall_at_k"] == 1.0
+    assert payload["aggregate"]["mrr"] == 1.0
+    assert payload["aggregate"]["map"] == 1.0
+    assert payload["aggregate"]["ndcg_at_k"] == 1.0
+
+
+def test_places_search_metrics_rejects_invalid_relevance_grade() -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/places/search/metrics",
+        json={
+            "cases": [
+                {
+                    "query": "cafe",
+                    "relevance": {"place_1": 4},
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 422
 
 
 def test_places_chat_endpoint_returns_trace_and_structured_places() -> None:

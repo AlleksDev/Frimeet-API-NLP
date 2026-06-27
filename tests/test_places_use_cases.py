@@ -31,6 +31,9 @@ async def test_search_places_use_case_with_mock_providers() -> None:
 
     assert result.places
     assert all(place.city == "Tuxtla Gutierrez" for place in result.places)
+    assert result.metrics.engine == "tfidf"
+    assert result.metrics.score_metric == "cosine_similarity"
+    assert result.metrics.returned_count == len(result.places)
 
 
 @pytest.mark.asyncio
@@ -50,6 +53,29 @@ async def test_search_places_ranks_with_tfidf_cosine_similarity() -> None:
 
     assert result.places[0].id == "place_2"
     assert result.places[0].score > 0
+
+
+@pytest.mark.asyncio
+async def test_search_places_reports_zero_metrics_without_results() -> None:
+    embedding_provider = MockEmbeddingProvider()
+    use_case = SearchPlacesUseCase(
+        embedding_provider=embedding_provider,
+        place_repository=MockPlaceVectorRepository(embedding_provider),
+        ranker=TfidfPlaceRanker(),
+    )
+
+    result = await use_case.execute(
+        query="cafe",
+        filters=PlaceFilters(city="Ciudad inexistente", is_active=True),
+        limit=3,
+    )
+
+    assert result.places == []
+    assert result.metrics.candidate_count == 0
+    assert result.metrics.returned_count == 0
+    assert result.metrics.min_score == 0.0
+    assert result.metrics.max_score == 0.0
+    assert result.metrics.mean_score == 0.0
 
 
 @pytest.mark.asyncio

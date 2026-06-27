@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 
 from app.modules.places.api.dependencies import (
     get_chat_places_use_case,
+    get_evaluate_place_search_use_case,
     get_recommend_places_use_case,
     get_search_places_use_case,
 )
@@ -10,11 +11,20 @@ from app.modules.places.api.schemas import (
     PlaceChatResponse,
     PlaceRecommendationRequest,
     PlaceRecommendationResponse,
+    PlaceSearchMetricsRequest,
+    PlaceSearchMetricsResponse,
+    PlaceSearchQueryMetricsSchema,
     PlaceSearchRequest,
     PlaceSearchResponse,
+    engine_metrics_to_schema,
+    metric_values_to_schema,
     place_to_schema,
 )
 from app.modules.places.application.use_cases.chat_places import ChatPlacesUseCase
+from app.modules.places.application.use_cases.evaluate_place_search import (
+    EvaluatePlaceSearchUseCase,
+    PlaceSearchEvaluationCase,
+)
 from app.modules.places.application.use_cases.recommend_places import RecommendPlacesUseCase
 from app.modules.places.application.use_cases.search_places import SearchPlacesUseCase
 from app.shared.security.rate_limit import rate_limit_placeholder
@@ -24,6 +34,38 @@ router = APIRouter(
     tags=["places"],
     dependencies=[Depends(rate_limit_placeholder)],
 )
+
+
+@router.post("/search/metrics", response_model=PlaceSearchMetricsResponse)
+async def evaluate_place_search(
+    payload: PlaceSearchMetricsRequest,
+    use_case: EvaluatePlaceSearchUseCase = Depends(get_evaluate_place_search_use_case),
+) -> PlaceSearchMetricsResponse:
+    result = await use_case.execute(
+        cases=[
+            PlaceSearchEvaluationCase(
+                query=case.query,
+                relevance=case.relevance,
+                filters=case.to_domain_filters(),
+            )
+            for case in payload.cases
+        ],
+        k=payload.k,
+    )
+    return PlaceSearchMetricsResponse(
+        engine=result.engine,
+        k=result.k,
+        query_count=result.query_count,
+        aggregate=metric_values_to_schema(result.aggregate),
+        queries=[
+            PlaceSearchQueryMetricsSchema(
+                query=query_result.query,
+                ranking=query_result.ranking,
+                metrics=metric_values_to_schema(query_result.metrics),
+            )
+            for query_result in result.queries
+        ],
+    )
 
 
 @router.post("/search", response_model=PlaceSearchResponse)
@@ -39,6 +81,7 @@ async def search_places(
     return PlaceSearchResponse(
         query=result.query,
         places=[place_to_schema(place) for place in result.places],
+        metrics=engine_metrics_to_schema(result.metrics),
     )
 
 
