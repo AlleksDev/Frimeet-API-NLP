@@ -103,6 +103,7 @@ async def recommend_places(
         query=result.query,
         message=result.message,
         places=[place_to_schema(place) for place in result.places],
+        metrics=engine_metrics_to_schema(result.metrics),
         metadata=result.metadata,
     )
 

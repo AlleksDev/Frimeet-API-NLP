@@ -4,6 +4,7 @@ from typing import Any
 
 from app.modules.places.application.use_cases.search_places import SearchPlacesUseCase
 from app.modules.places.domain.models import PlaceCandidate, PlaceFilters
+from app.modules.places.domain.search_metrics import SearchEngineMetrics
 from app.shared.nlp.llm.base import LLMProvider
 from app.shared.nlp.llm.output_guard import PlaceChatOutputGuard
 
@@ -13,6 +14,7 @@ class RecommendPlacesResult:
     query: str
     message: str
     places: list[PlaceCandidate]
+    metrics: SearchEngineMetrics
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -68,6 +70,7 @@ class RecommendPlacesUseCase:
             query=search_result.query,
             message=message,
             places=places,
+            metrics=search_result.metrics,
             metadata={
                 "strategy": "pgvector_candidates_plus_tfidf_ranking",
                 "ranking": "tfidf_cosine",

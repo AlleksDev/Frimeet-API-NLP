@@ -129,6 +129,8 @@ async def test_recommend_places_calls_llm_and_returns_message() -> None:
     assert llm_provider.calls == 1
     assert result.message
     assert result.places
+    assert result.metrics.engine == "tfidf"
+    assert result.metrics.returned_count == len(result.places)
     assert result.metadata["used_llm"] is True
     assert result.metadata["ranking"] == "tfidf_cosine"
 

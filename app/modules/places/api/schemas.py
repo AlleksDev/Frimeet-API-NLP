@@ -171,6 +171,7 @@ class PlaceRecommendationResponse(BaseModel):
     query: str
     message: str
     places: list[PlaceResultSchema]
+    metrics: PlaceSearchEngineMetricsSchema
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

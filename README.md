@@ -186,7 +186,7 @@ Ese SQL debe ejecutarse una vez con un rol administrador/DBA fuera de Hugging Fa
 
 `/places/search` y `/places/recommendations` recuperan candidatos filtrados desde pgvector y aplican el flujo TF-IDF de `Lab2_Motor_de_busqueda.ipynb`: TF, IDF, vectorizacion de consulta y similitud coseno. Las etiquetas se ponderan `x6` y la categoria `x2` antes de construir los vectores.
 
-La respuesta de `POST /places/search` incluye `metrics` con el motor (`tfidf`), recuperacion de candidatos (`embeddings`), metrica de score (`cosine_similarity`), pesos por campo, cantidad de candidatos y resultados, scores no cero y estadisticas `min`, `max` y `mean`.
+Las respuestas de `POST /places/search` y `POST /places/recommendations` incluyen `metrics` con el motor (`tfidf`), recuperacion de candidatos (`embeddings`), metrica de score (`cosine_similarity`), pesos por campo, cantidad de candidatos y resultados, scores no cero y estadisticas `min`, `max` y `mean`.
 
 `POST /places/search/metrics` evalua el motor sobre qrels proporcionados para los lugares reales. Calcula `Precision@k`, `Recall@k`, `MRR`, `MAP` y `nDCG@k`, tanto por consulta como de forma agregada. La relevancia es graduada: `1` marginal, `2` relevante y `3` muy relevante.
 

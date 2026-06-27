@@ -130,6 +130,9 @@ def test_places_recommendations_returns_llm_message_and_tfidf_metadata() -> None
     payload = response.json()
     assert payload["message"]
     assert payload["places"]
+    assert payload["metrics"]["engine"] == "tfidf"
+    assert payload["metrics"]["score_metric"] == "cosine_similarity"
+    assert payload["metrics"]["returned_count"] == len(payload["places"])
     assert payload["metadata"]["ranking"] == "tfidf_cosine"
     assert payload["metadata"]["used_llm"] is True
 
