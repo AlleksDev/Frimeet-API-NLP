@@ -24,6 +24,9 @@ class SearchEngineMetrics:
     min_score: float
     max_score: float
     mean_score: float
+    location_filter_applied: bool
+    nearby_place_count: int | None
+    radius_meters: int | None
 
 
 def evaluate_ranking(
