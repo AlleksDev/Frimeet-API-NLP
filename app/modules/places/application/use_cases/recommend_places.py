@@ -2,6 +2,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from app.modules.places.application.use_cases.evaluate_place_search import (
+    EvaluatePlaceSearchResult,
+    EvaluatePlaceSearchUseCase,
+)
 from app.modules.places.application.use_cases.search_places import SearchPlacesUseCase
 from app.modules.places.domain.models import PlaceCandidate, PlaceFilters
 from app.modules.places.domain.search_metrics import SearchEngineMetrics
@@ -15,6 +19,7 @@ class RecommendPlacesResult:
     message: str
     places: list[PlaceCandidate]
     metrics: SearchEngineMetrics
+    evaluation_metrics: EvaluatePlaceSearchResult
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -22,12 +27,16 @@ class RecommendPlacesUseCase:
     def __init__(
         self,
         search_use_case: SearchPlacesUseCase,
+        evaluation_use_case: EvaluatePlaceSearchUseCase,
         llm_provider: LLMProvider,
         output_guard: PlaceChatOutputGuard,
+        evaluation_k: int = 3,
     ) -> None:
         self._search_use_case = search_use_case
+        self._evaluation_use_case = evaluation_use_case
         self._llm_provider = llm_provider
         self._output_guard = output_guard
+        self._evaluation_k = evaluation_k
 
     async def execute(
         self,
@@ -39,6 +48,9 @@ class RecommendPlacesUseCase:
             query=query,
             filters=filters,
             limit=limit,
+        )
+        evaluation_metrics = await self._evaluation_use_case.execute(
+            k=self._evaluation_k,
         )
         places = search_result.places
         llm_provider = self._llm_provider.provider_name
@@ -71,6 +83,7 @@ class RecommendPlacesUseCase:
             message=message,
             places=places,
             metrics=search_result.metrics,
+            evaluation_metrics=evaluation_metrics,
             metadata={
                 "strategy": "pgvector_candidates_plus_tfidf_ranking",
                 "ranking": "tfidf_cosine",

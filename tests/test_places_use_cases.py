@@ -3,10 +3,18 @@ from typing import Any, Sequence
 import pytest
 
 from app.modules.places.application.use_cases.chat_places import ChatPlacesUseCase
+from app.modules.places.application.use_cases.evaluate_place_search import (
+    EvaluatePlaceSearchUseCase,
+)
 from app.modules.places.application.use_cases.recommend_places import RecommendPlacesUseCase
 from app.modules.places.application.use_cases.search_places import SearchPlacesUseCase
 from app.modules.places.domain.models import PlaceFilters
 from app.modules.places.infrastructure.mock_place_repository import MockPlaceVectorRepository
+from app.modules.places.infrastructure.place_search_benchmark import (
+    BENCHMARK_NAME,
+    QRELS_SOURCE,
+    get_default_place_search_benchmark,
+)
 from app.modules.places.infrastructure.tfidf_place_ranker import TfidfPlaceRanker
 from app.shared.nlp.embeddings.mock import MockEmbeddingProvider
 from app.shared.nlp.llm.base import LLMProvider, LLMResult
@@ -116,6 +124,12 @@ async def test_recommend_places_calls_llm_and_returns_message() -> None:
     llm_provider = SpyLLMProvider()
     use_case = RecommendPlacesUseCase(
         search_use_case=search_use_case,
+        evaluation_use_case=EvaluatePlaceSearchUseCase(
+            search_use_case=search_use_case,
+            cases=get_default_place_search_benchmark(),
+            benchmark=BENCHMARK_NAME,
+            qrels_source=QRELS_SOURCE,
+        ),
         llm_provider=llm_provider,
         output_guard=PlaceChatOutputGuard(),
     )
@@ -131,6 +145,9 @@ async def test_recommend_places_calls_llm_and_returns_message() -> None:
     assert result.places
     assert result.metrics.engine == "tfidf"
     assert result.metrics.returned_count == len(result.places)
+    assert result.evaluation_metrics.benchmark == BENCHMARK_NAME
+    assert result.evaluation_metrics.query_count == 5
+    assert 0.0 <= result.evaluation_metrics.aggregate.ndcg_at_k <= 1.0
     assert result.metadata["used_llm"] is True
     assert result.metadata["ranking"] == "tfidf_cosine"
 

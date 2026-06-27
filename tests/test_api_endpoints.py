@@ -31,34 +31,14 @@ def test_places_search_endpoint() -> None:
 def test_places_search_metrics_endpoint() -> None:
     client = TestClient(create_app())
 
-    response = client.post(
-        "/places/search/metrics",
-        json={
-            "k": 3,
-            "cases": [
-                {
-                    "query": "atardecer fotos paseo",
-                    "relevance": {"place_2": 3},
-                    "filters": {"is_active": True},
-                },
-                {
-                    "query": "cafe tranquilo con postres",
-                    "relevance": {"place_1": 3},
-                    "filters": {"is_active": True},
-                },
-                {
-                    "query": "comida regional restaurante",
-                    "relevance": {"place_3": 3},
-                    "filters": {"is_active": True},
-                },
-            ],
-        },
-    )
+    response = client.get("/places/search/metrics?k=3")
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["engine"] == "pgvector_candidates_plus_tfidf_cosine"
-    assert payload["query_count"] == 3
+    assert payload["engine"] == "tfidf_cosine"
+    assert payload["benchmark"] == "built_in_places_v1"
+    assert payload["qrels_source"] == "predefined_graded_qrels"
+    assert payload["query_count"] == 5
     assert payload["metric_definitions"]["precision_at_k"]["label"] == "Precision@3"
     assert payload["metric_definitions"]["recall_at_k"]["label"] == "Recall@3"
     assert payload["metric_definitions"]["mrr"]["label"] == "MRR"
@@ -66,29 +46,22 @@ def test_places_search_metrics_endpoint() -> None:
     assert payload["metric_definitions"]["ndcg_at_k"]["label"] == "nDCG@3"
     assert payload["recommended_metric"]["key"] == "ndcg_at_k"
     assert payload["recommended_metric"]["label"] == "nDCG@3"
-    assert payload["recommended_metric"]["value"] == 1.0
-    assert payload["aggregate"]["recall_at_k"] == 1.0
-    assert payload["aggregate"]["mrr"] == 1.0
-    assert payload["aggregate"]["map"] == 1.0
-    assert payload["aggregate"]["ndcg_at_k"] == 1.0
-
-
-def test_places_search_metrics_rejects_invalid_relevance_grade() -> None:
-    client = TestClient(create_app())
-
-    response = client.post(
-        "/places/search/metrics",
-        json={
-            "cases": [
-                {
-                    "query": "cafe",
-                    "relevance": {"place_1": 4},
-                }
-            ]
-        },
+    assert payload["recommended_metric"]["value"] == payload["aggregate"]["ndcg_at_k"]
+    assert all(
+        0.0 <= payload["aggregate"][metric] <= 1.0
+        for metric in ["precision_at_k", "recall_at_k", "mrr", "map", "ndcg_at_k"]
     )
 
-    assert response.status_code == 422
+
+def test_places_search_metrics_post_requires_no_body() -> None:
+    client = TestClient(create_app())
+
+    response = client.post("/places/search/metrics?k=2")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["k"] == 2
+    assert payload["query_count"] == 5
 
 
 def test_places_chat_endpoint_returns_trace_and_structured_places() -> None:
@@ -133,6 +106,13 @@ def test_places_recommendations_returns_llm_message_and_tfidf_metadata() -> None
     assert payload["metrics"]["engine"] == "tfidf"
     assert payload["metrics"]["score_metric"] == "cosine_similarity"
     assert payload["metrics"]["returned_count"] == len(payload["places"])
+    assert payload["evaluation_metrics"]["benchmark"] == "built_in_places_v1"
+    assert payload["evaluation_metrics"]["query_count"] == 5
+    assert payload["evaluation_metrics"]["recommended_metric"]["key"] == "ndcg_at_k"
+    assert all(
+        metric in payload["evaluation_metrics"]["aggregate"]
+        for metric in ["precision_at_k", "recall_at_k", "mrr", "map", "ndcg_at_k"]
+    )
     assert payload["metadata"]["ranking"] == "tfidf_cosine"
     assert payload["metadata"]["used_llm"] is True
 

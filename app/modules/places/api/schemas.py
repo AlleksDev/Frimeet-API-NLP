@@ -1,7 +1,10 @@
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.places.application.use_cases.evaluate_place_search import (
+    EvaluatePlaceSearchResult,
+)
 from app.modules.places.domain.models import PlaceCandidate, PlaceFilters
 from app.modules.places.domain.search_metrics import (
     SearchEngineMetrics,
@@ -93,44 +96,6 @@ class PlaceSearchResponse(BaseModel):
     metrics: PlaceSearchEngineMetricsSchema
 
 
-class PlaceSearchEvaluationCaseSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    query: str = Field(..., min_length=1, max_length=500)
-    relevance: dict[str, int] = Field(..., min_length=1)
-    city: str | None = Field(default=None, max_length=80)
-    state: str | None = Field(default=None, max_length=80)
-    filters: PlaceFiltersSchema = Field(default_factory=PlaceFiltersSchema)
-
-    @field_validator("relevance")
-    @classmethod
-    def validate_relevance(cls, value: dict[str, int]) -> dict[str, int]:
-        if any(grade < 1 or grade > 3 for grade in value.values()):
-            raise ValueError("relevance grades must be between 1 and 3")
-        return value
-
-    def to_domain_filters(self) -> PlaceFilters:
-        return PlaceFilters(
-            city=self.city or self.filters.city,
-            state=self.state or self.filters.state,
-            category=self.filters.category,
-            price_range=self.filters.price_range,
-            is_active=self.filters.is_active,
-            occasion=self.filters.occasion,
-        )
-
-
-class PlaceSearchMetricsRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    cases: list[PlaceSearchEvaluationCaseSchema] = Field(
-        ...,
-        min_length=1,
-        max_length=50,
-    )
-    k: int = Field(default=5, ge=1, le=20)
-
-
 class PlaceSearchMetricValuesSchema(BaseModel):
     precision_at_k: float
     recall_at_k: float
@@ -159,6 +124,8 @@ class PlaceSearchRecommendedMetricSchema(BaseModel):
 
 class PlaceSearchMetricsResponse(BaseModel):
     engine: str
+    benchmark: str
+    qrels_source: str
     k: int
     query_count: int
     metric_definitions: dict[str, PlaceSearchMetricDefinitionSchema]
@@ -172,6 +139,7 @@ class PlaceRecommendationResponse(BaseModel):
     message: str
     places: list[PlaceResultSchema]
     metrics: PlaceSearchEngineMetricsSchema
+    evaluation_metrics: PlaceSearchMetricsResponse
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -246,6 +214,29 @@ def recommended_metric_to_schema(
             "Es la mejor metrica principal para una lista de lugares porque considera "
             "la posicion y los grados de relevancia."
         ),
+    )
+
+
+def search_metrics_result_to_schema(
+    result: EvaluatePlaceSearchResult,
+) -> PlaceSearchMetricsResponse:
+    return PlaceSearchMetricsResponse(
+        engine=result.engine,
+        benchmark=result.benchmark,
+        qrels_source=result.qrels_source,
+        k=result.k,
+        query_count=result.query_count,
+        metric_definitions=metric_definitions_to_schema(result.k),
+        recommended_metric=recommended_metric_to_schema(result.aggregate, result.k),
+        aggregate=metric_values_to_schema(result.aggregate),
+        queries=[
+            PlaceSearchQueryMetricsSchema(
+                query=query_result.query,
+                ranking=query_result.ranking,
+                metrics=metric_values_to_schema(query_result.metrics),
+            )
+            for query_result in result.queries
+        ],
     )
 
 

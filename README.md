@@ -133,7 +133,8 @@ uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}
 GET  /health
 GET  /ready
 POST /places/search
-POST /places/search/metrics
+GET  /places/search/metrics?k=3
+POST /places/search/metrics?k=3
 POST /places/recommendations
 POST /places/chat
 POST /posts/recommendations
@@ -188,25 +189,14 @@ Ese SQL debe ejecutarse una vez con un rol administrador/DBA fuera de Hugging Fa
 
 Las respuestas de `POST /places/search` y `POST /places/recommendations` incluyen `metrics` con el motor (`tfidf`), recuperacion de candidatos (`embeddings`), metrica de score (`cosine_similarity`), pesos por campo, cantidad de candidatos y resultados, scores no cero y estadisticas `min`, `max` y `mean`.
 
-`POST /places/search/metrics` evalua el motor sobre qrels proporcionados para los lugares reales. Calcula `Precision@k`, `Recall@k`, `MRR`, `MAP` y `nDCG@k`, tanto por consulta como de forma agregada. La relevancia es graduada: `1` marginal, `2` relevante y `3` muy relevante.
+`POST /places/recommendations` tambien incluye `evaluation_metrics` en la misma respuesta. Este bloque contiene el benchmark predefinido, `Precision@k`, `Recall@k`, `MRR`, `MAP`, `nDCG@k` y la metrica recomendada para la app movil. El resultado del benchmark se cachea en memoria por valor de `k` para no recalcular sus cinco consultas en cada recomendacion.
+
+`GET` o `POST /places/search/metrics?k=3` ejecuta un benchmark reproducible sin body. Los cinco casos y sus qrels graduados estan definidos en `app/modules/places/infrastructure/place_search_benchmark.py`: cafe tranquilo, mirador para fotos, comida regional, cena en pareja y plan con amigos. Calcula `Precision@k`, `Recall@k`, `MRR`, `MAP` y `nDCG@k`, tanto por consulta como de forma agregada. La relevancia es graduada: `1` marginal, `2` relevante y `3` muy relevante.
 
 La respuesta incluye `metric_definitions` con etiquetas y descripciones claras, y `recommended_metric` con `nDCG@k` como metrica principal sugerida para la app movil. `nDCG@k` es apropiada para recomendaciones de lugares porque considera el orden y permite relevancia graduada.
 
-```json
-{
-  "k": 5,
-  "cases": [
-    {
-      "query": "cafe tranquilo para platicar",
-      "relevance": {
-        "ID_REAL_LUGAR_1": 3,
-        "ID_REAL_LUGAR_2": 1
-      },
-      "city": "Tuxtla Gutierrez",
-      "filters": {"is_active": true}
-    }
-  ]
-}
+```http
+GET /places/search/metrics?k=3
 ```
 
 Groq/Llama se usa en `/places/recommendations` y `/places/chat` para redactar una respuesta conversacional. No decide que lugares recomendar, no hace busqueda y no inventa lugares.

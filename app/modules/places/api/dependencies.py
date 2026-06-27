@@ -10,10 +10,16 @@ from app.modules.places.infrastructure.aws_pgvector_place_repository import (
     AwsPgvectorPlaceRepository,
 )
 from app.modules.places.infrastructure.mock_place_repository import MockPlaceVectorRepository
+from app.modules.places.infrastructure.place_search_benchmark import (
+    BENCHMARK_NAME,
+    QRELS_SOURCE,
+    get_default_place_search_benchmark,
+)
 from app.modules.places.infrastructure.tfidf_place_ranker import TfidfPlaceRanker
 from app.shared.cache.memory import SimpleTTLCache
 from app.shared.config.settings import get_settings
 from app.shared.dependencies import get_embedding_provider, get_llm_provider
+from app.shared.nlp.embeddings.mock import MockEmbeddingProvider
 from app.shared.nlp.llm.output_guard import PlaceChatOutputGuard
 from app.shared.vector_store.aws_pgvector import AwsPgvectorClient
 
@@ -51,6 +57,7 @@ def get_search_places_use_case() -> SearchPlacesUseCase:
 def get_recommend_places_use_case() -> RecommendPlacesUseCase:
     return RecommendPlacesUseCase(
         search_use_case=get_search_places_use_case(),
+        evaluation_use_case=get_evaluate_place_search_use_case(),
         llm_provider=get_llm_provider(),
         output_guard=PlaceChatOutputGuard(),
     )
@@ -58,7 +65,19 @@ def get_recommend_places_use_case() -> RecommendPlacesUseCase:
 
 @lru_cache
 def get_evaluate_place_search_use_case() -> EvaluatePlaceSearchUseCase:
-    return EvaluatePlaceSearchUseCase(search_use_case=get_search_places_use_case())
+    settings = get_settings()
+    embedding_provider = MockEmbeddingProvider(dimension=settings.embedding_dimension)
+    benchmark_search = SearchPlacesUseCase(
+        embedding_provider=embedding_provider,
+        place_repository=MockPlaceVectorRepository(embedding_provider),
+        ranker=TfidfPlaceRanker(),
+    )
+    return EvaluatePlaceSearchUseCase(
+        search_use_case=benchmark_search,
+        cases=get_default_place_search_benchmark(),
+        benchmark=BENCHMARK_NAME,
+        qrels_source=QRELS_SOURCE,
+    )
 
 
 @lru_cache
