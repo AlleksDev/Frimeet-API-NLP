@@ -9,6 +9,9 @@ from app.modules.places.application.use_cases.search_places import SearchPlacesU
 from app.modules.places.infrastructure.aws_pgvector_place_repository import (
     AwsPgvectorPlaceRepository,
 )
+from app.modules.places.infrastructure.main_api_nearby_place_provider import (
+    MainApiNearbyPlaceProvider,
+)
 from app.modules.places.infrastructure.mock_place_repository import MockPlaceVectorRepository
 from app.modules.places.infrastructure.place_search_benchmark import (
     BENCHMARK_NAME,
@@ -44,12 +47,18 @@ def get_place_search_cache() -> SimpleTTLCache:
 
 
 @lru_cache
+def get_nearby_place_provider() -> MainApiNearbyPlaceProvider:
+    return MainApiNearbyPlaceProvider(settings=get_settings())
+
+
+@lru_cache
 def get_search_places_use_case() -> SearchPlacesUseCase:
     return SearchPlacesUseCase(
         embedding_provider=get_embedding_provider(),
         place_repository=get_place_repository(),
         ranker=get_place_ranker(),
         cache=get_place_search_cache(),
+        nearby_place_provider=get_nearby_place_provider(),
     )
 
 

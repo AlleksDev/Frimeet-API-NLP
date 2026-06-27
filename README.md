@@ -51,6 +51,7 @@ API_PORT=8080
 
 MAIN_API_BASE_URL=http://52.86.8.11
 MAIN_API_PLACES_SEARCH_PATH=/api/v1/places/search
+MAIN_API_PLACES_NEARBY_PATH=/api/v1/places/nearby
 MAIN_API_POSTS_SEARCH_PATH=/api/v1/posts/search
 MAIN_API_INTERNAL_TOKEN=
 MAIN_API_TIMEOUT_SECONDS=15
@@ -133,8 +134,8 @@ uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}
 GET  /health
 GET  /ready
 POST /places/search
-GET  /places/search/metrics?k=3
-POST /places/search/metrics?k=3
+GET  /places/search/metrics?k=5
+POST /places/search/metrics?k=5
 POST /places/recommendations
 POST /places/chat
 POST /posts/recommendations
@@ -189,15 +190,31 @@ Ese SQL debe ejecutarse una vez con un rol administrador/DBA fuera de Hugging Fa
 
 Las respuestas de `POST /places/search` y `POST /places/recommendations` incluyen `metrics` con el motor (`tfidf`), recuperacion de candidatos (`embeddings`), metrica de score (`cosine_similarity`), pesos por campo, cantidad de candidatos y resultados, scores no cero y estadisticas `min`, `max` y `mean`.
 
-`POST /places/recommendations` tambien incluye `evaluation_metrics` en la misma respuesta. Este bloque contiene el benchmark predefinido, `Precision@k`, `Recall@k`, `MRR`, `MAP`, `nDCG@k` y la metrica recomendada para la app movil. El resultado del benchmark se cachea en memoria por valor de `k` para no recalcular sus cinco consultas en cada recomendacion.
+Ambos endpoints aceptan filtro geografico mediante `lat`, `lng` y `radius` en metros. Cuando se proporcionan coordenadas, el servicio NLP consulta `GET /api/v1/places/nearby` en la API principal y limita pgvector a los IDs devueltos. Las coordenadas siguen perteneciendo a la API principal; no es necesario guardarlas en pgvector, truncar tablas ni regenerar embeddings.
 
-`GET` o `POST /places/search/metrics?k=3` ejecuta un benchmark reproducible sin body. Los cinco casos y sus qrels graduados estan definidos en `app/modules/places/infrastructure/place_search_benchmark.py`: cafe tranquilo, mirador para fotos, comida regional, cena en pareja y plan con amigos. Calcula `Precision@k`, `Recall@k`, `MRR`, `MAP` y `nDCG@k`, tanto por consulta como de forma agregada. La relevancia es graduada: `1` marginal, `2` relevante y `3` muy relevante.
+```json
+{
+  "query": "un lugar tranquilo para cenar cerca de mi",
+  "lat": 16.7531,
+  "lng": -93.1156,
+  "radius": 10000,
+  "limit": 5
+}
+```
+
+El bloque `metrics` indica `location_filter_applied`, `nearby_place_count` y `radius_meters` para hacer visible la aplicacion del radio.
+
+`POST /places/recommendations` tambien incluye `evaluation_metrics` en la misma respuesta. Este bloque contiene el benchmark predefinido, `Precision@k`, `Recall@k`, `MRR`, `MAP`, `nDCG@k` y la metrica recomendada para la app movil. El resultado del benchmark se cachea en memoria por valor de `k` para no recalcular sus diez consultas en cada recomendacion.
+
+`GET` o `POST /places/search/metrics?k=5` ejecuta `built_in_places_v2` sin body. El benchmark contiene doce lugares, diez consultas conversacionales y qrels graduados definidos en `app/modules/places/infrastructure/place_search_benchmark.py`. Incluye planes en pareja, lluvia, lectura, trabajo, cultura, ejercicio, naturaleza y comida local. Calcula `Precision@k`, `Recall@k`, `MRR`, `MAP` y `nDCG@k`, tanto por consulta como de forma agregada. La relevancia es graduada: `1` marginal, `2` relevante y `3` muy relevante.
 
 La respuesta incluye `metric_definitions` con etiquetas y descripciones claras, y `recommended_metric` con `nDCG@k` como metrica principal sugerida para la app movil. `nDCG@k` es apropiada para recomendaciones de lugares porque considera el orden y permite relevancia graduada.
 
 ```http
-GET /places/search/metrics?k=3
+GET /places/search/metrics?k=5
 ```
+
+Para habilitar el filtro por IDs cercanos en una base existente, vuelve a ejecutar solamente el bloque `CREATE OR REPLACE FUNCTION match_places` de `sql/aws_pgvector_contract.sql`. La firma no cambia y no se requiere truncar `place_embeddings`.
 
 Groq/Llama se usa en `/places/recommendations` y `/places/chat` para redactar una respuesta conversacional. No decide que lugares recomendar, no hace busqueda y no inventa lugares.
 

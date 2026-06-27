@@ -23,6 +23,10 @@ class Settings(BaseSettings):
         default="/api/v1/places/search",
         alias="MAIN_API_PLACES_SEARCH_PATH",
     )
+    main_api_places_nearby_path: str = Field(
+        default="/api/v1/places/nearby",
+        alias="MAIN_API_PLACES_NEARBY_PATH",
+    )
     main_api_posts_search_path: str = Field(
         default="/api/v1/posts/search",
         alias="MAIN_API_POSTS_SEARCH_PATH",
