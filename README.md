@@ -259,6 +259,24 @@ Si el score maximo no supera `SEMANTIC_NO_MATCH_THRESHOLD`, envia a Llama el mod
 `SEMANTIC_RELEVANCE_THRESHOLD` usa `low_confidence`; por encima usa `confident`.
 Llama solo embellece el tono y recibe exclusivamente los lugares seleccionados.
 
+### Documento Semantico Ponderado De Lugares
+
+Los IDs numericos de tags devueltos por la API principal se resuelven mediante el
+catalogo versionado en `app/modules/places/infrastructure/place_tag_catalog.json`.
+El documento que se envia a FastText contiene exclusivamente señales semanticas y
+aplica estos pesos mediante repeticion antes del promedio de embeddings:
+
+```text
+tags x6, category x4, description x3, name x1
+```
+
+Las categorias generales se expanden con terminos de intencion en espanol. Direccion,
+ciudad, estado, `source`, precio e IDs desconocidos permanecen fuera del embedding;
+siguen disponibles como metadatos o filtros cuando corresponde. La version interna
+`weighted-tags-v2` forma parte del hash del documento, por lo que ejecutar nuevamente
+`initial_load_place_embeddings` actualiza todas las filas por `UPSERT` sin truncar la
+tabla ni cambiar `VECTOR(300)`.
+
 `GET` o `POST /places/search/metrics?k=5` conserva un benchmark offline separado llamado `built_in_places_v3_bm25`. Contiene doce lugares controlados, diez consultas y qrels graduados para calcular honestamente `Precision@k`, `Recall@k`, `MRR`, `MAP` y `nDCG@k`. Estas metricas requieren juicios de relevancia y por eso no se presentan como si midieran una consulta arbitraria de produccion.
 
 La respuesta incluye `metric_definitions` con etiquetas y descripciones claras, y `recommended_metric` con `nDCG@k` como metrica principal sugerida para la app movil. `nDCG@k` es apropiada para recomendaciones de lugares porque considera el orden y permite relevancia graduada.

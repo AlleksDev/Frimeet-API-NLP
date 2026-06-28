@@ -6,6 +6,11 @@ import httpx
 from app.shared.config.settings import Settings
 from app.shared.content_hash import stable_content_hash
 from app.shared.nlp.preprocessing.text import clean_text
+from app.modules.places.infrastructure.place_semantic_document import (
+    PLACE_SEMANTIC_DOCUMENT_VERSION,
+    build_place_semantic_document,
+    resolve_place_tags,
+)
 
 
 @dataclass(frozen=True)
@@ -160,26 +165,16 @@ def place_to_source_record(place: dict[str, Any]) -> PlaceSourceRecord | None:
     description = str(_first_present(place, "description", "summary", "about", default=""))
     address = str(_first_present(place, "address", "formatted_address", default=""))
 
-    tags = _as_text_list(_first_present(place, "tags", "keywords", default=[]))
+    resolved_tags = resolve_place_tags(
+        _first_present(place, "tags", "keywords", default=[])
+    )
     occasion = _as_text_list(_first_present(place, "occasion", "occasions", default=[]))
 
-    document = clean_text(
-        " ".join(
-            str(value)
-            for value in [
-                name,
-                category,
-                city,
-                state,
-                source,
-                price_range,
-                " ".join(tags),
-                " ".join(occasion),
-                description,
-                address,
-            ]
-            if value
-        )
+    document = build_place_semantic_document(
+        name=name,
+        category=category,
+        description=description,
+        resolved_tags=resolved_tags,
     )
 
     metadata = {
@@ -191,17 +186,24 @@ def place_to_source_record(place: dict[str, Any]) -> PlaceSourceRecord | None:
         "price_range": _to_metadata_value(price_range),
         "is_active": bool(is_active),
         "occasion": ",".join(occasion),
-        "tags": ",".join(tags),
+        "tags": ",".join(resolved_tags.names),
+        "tag_ids": list(resolved_tags.ids),
+        "tag_categories": list(resolved_tags.categories),
+        "unknown_tag_ids": list(resolved_tags.unknown_ids),
+        "semantic_document_version": PLACE_SEMANTIC_DOCUMENT_VERSION,
         "short_description": description[:300],
     }
     filtered_metadata = {
-        key: value for key, value in metadata.items() if value not in (None, "")
+        key: value
+        for key, value in metadata.items()
+        if value not in (None, "", [], ())
     }
     content_hash = stable_content_hash(
         {
             "document": document,
             "metadata": filtered_metadata,
             "is_active": bool(is_active),
+            "semantic_document_version": PLACE_SEMANTIC_DOCUMENT_VERSION,
         }
     )
 

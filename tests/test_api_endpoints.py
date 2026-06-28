@@ -24,7 +24,12 @@ def test_places_search_endpoint() -> None:
     assert payload["metrics"]["candidate_retrieval"] == "mock_embeddings"
     assert payload["metrics"]["score_metric"] == "cosine_similarity"
     assert payload["metrics"]["ranking_parameters"] == {"dimension": 16.0}
-    assert payload["metrics"]["field_weights"]["document"] == 1
+    assert payload["metrics"]["field_weights"] == {
+        "tags": 6,
+        "category": 4,
+        "description": 3,
+        "name": 1,
+    }
     assert payload["metrics"]["returned_count"] == len(payload["places"])
     assert payload["metrics"]["max_score"] >= payload["metrics"]["mean_score"]
 

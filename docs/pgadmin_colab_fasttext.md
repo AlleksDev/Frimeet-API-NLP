@@ -105,3 +105,26 @@ Despues de ambas cargas abre nuevamente Query Tool y ejecuta el contenido de
 
 Finalmente elimina la regla temporal del Security Group, actualiza las variables del
 Space y despliega la nueva imagen.
+
+## Recargar Cuando Cambie La Ponderacion
+
+Cambiar tags, categorias o pesos no requiere otra migracion SQL porque la dimension
+continua siendo 300. Publica el codigo y ejecuta nuevamente solamente:
+
+```python
+!git -C /content/Frimeet-API-NLP pull origin hf-deploy
+!python /content/Frimeet-API-NLP/scripts/colab_initial_load_places.py --skip-install --skip-download
+```
+
+El hash `weighted-tags-v2` obliga al job a recalcular todos los lugares y hacer
+`UPSERT`. No ejecutes `TRUNCATE`, no alteres la columna y no vuelvas a ejecutar
+`pgadmin_migrate_fasttext_300.sql`. Al finalizar puedes actualizar estadisticas desde
+Query Tool:
+
+```sql
+VACUUM (ANALYZE) public.place_embeddings;
+```
+
+Finalmente ejecuta `sql/verify_weighted_place_embeddings.sql`. Los valores
+`total_places` y `weighted_v2_places` deben coincidir y las dimensiones minima y
+maxima deben seguir siendo 300.

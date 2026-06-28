@@ -25,6 +25,12 @@ CREATE TABLE IF NOT EXISTS place_embeddings (
 `VECTOR(300)` corresponde al modelo preentrenado
 `facebook/fasttext-es-vectors` usado por `FastTextEmbeddingProvider`.
 
+Antes de generar el vector, los IDs de tags se resuelven con el catalogo incluido en
+el servicio y se construye un documento ponderado: `tags x6`, `category x4`,
+`description x3`, `name x1`. Direccion, ubicacion, `source` e IDs desconocidos no
+participan en el embedding. `metadata.tag_ids` conserva trazabilidad de los IDs
+originales y `metadata.tags` contiene sus nombres semanticos.
+
 ## Columnas
 
 | Columna | Tipo | Descripcion |
