@@ -30,6 +30,7 @@ class SearchPlacesUseCase:
         cache: SimpleTTLCache | None = None,
         nearby_place_provider: NearbyPlaceProvider | None = None,
         relevance_threshold: float = 3.0,
+        no_match_threshold: float = 0.0,
     ) -> None:
         self._embedding_provider = embedding_provider
         self._place_repository = place_repository
@@ -37,6 +38,7 @@ class SearchPlacesUseCase:
         self._cache = cache
         self._nearby_place_provider = nearby_place_provider
         self._relevance_threshold = relevance_threshold
+        self._no_match_threshold = no_match_threshold
 
     async def execute(
         self,
@@ -138,7 +140,11 @@ class SearchPlacesUseCase:
             field_weights=self._ranker.field_weights,
             ranking_parameters=self._ranker.ranking_parameters,
             relevance_threshold=self._relevance_threshold,
-            match_quality=_match_quality(max_score, self._relevance_threshold),
+            match_quality=_match_quality(
+                max_score,
+                self._relevance_threshold,
+                self._no_match_threshold,
+            ),
             query_token_count=len(query_terms),
             matched_query_token_count=len(matched_query_terms),
             query_coverage=(
@@ -179,8 +185,12 @@ class SearchPlacesUseCase:
         return json.dumps(payload, sort_keys=True, ensure_ascii=True)
 
 
-def _match_quality(max_score: float, relevance_threshold: float) -> str:
-    if max_score <= 0:
+def _match_quality(
+    max_score: float,
+    relevance_threshold: float,
+    no_match_threshold: float = 0.0,
+) -> str:
+    if max_score <= no_match_threshold:
         return "no_match"
     if max_score < relevance_threshold:
         return "low_confidence"

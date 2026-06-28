@@ -7,7 +7,7 @@ pinned: false
 
 # Frimeet API NLP
 
-Servicio NLP independiente para recuperacion de candidatos con pgvector, ranking BM25, recomendaciones, embeddings y redaccion conversacional con Llama via Groq.
+Servicio NLP independiente para busqueda semantica con FastText + pgvector, recomendaciones y redaccion conversacional con Llama via Groq.
 
 La API principal sigue siendo la fuente de verdad de lugares, posts, usuarios, sesiones, permisos y reportes. Este servicio NLP solo trabaja con datos derivados para busqueda semantica.
 
@@ -21,8 +21,8 @@ API principal
 Hugging Face API NLP
   |-- usa credenciales nlp_reader
   |-- consulta RDS PostgreSQL + pgvector
-  |-- genera embedding solo del query del usuario
-  |-- ordena candidatos con BM25
+  |-- genera el embedding FastText del query del usuario
+  |-- ordena por similitud coseno en pgvector
   `-- usa Groq/Llama para embellecer recomendaciones y chat
 
 Hugging Face Jobs
@@ -74,13 +74,20 @@ PGVECTOR_WRITER_USER=nlp_writer
 PGVECTOR_WRITER_PASSWORD=CAMBIA_ESTA_PASSWORD_WRITER
 PGVECTOR_SSL_MODE=require
 
-EMBEDDING_DIMENSION=16
-EMBEDDING_MODEL=mock-embedding
-EMBEDDING_VERSION=v1
+EMBEDDING_PROVIDER=fasttext
+EMBEDDING_DIMENSION=300
+EMBEDDING_MODEL=facebook/fasttext-es-vectors
+EMBEDDING_VERSION=common-crawl-300-v1
+FASTTEXT_MODEL_PATH=.models/fasttext-es/model.bin
+FASTTEXT_MODEL_REPO_ID=facebook/fasttext-es-vectors
+FASTTEXT_MODEL_FILENAME=model.bin
+FASTTEXT_AUTO_DOWNLOAD=true
 
 BM25_K1=1.5
 BM25_B=0.75
 BM25_RELEVANCE_THRESHOLD=3.0
+SEMANTIC_NO_MATCH_THRESHOLD=0.30
+SEMANTIC_RELEVANCE_THRESHOLD=0.50
 
 LOG_LEVEL=INFO
 REQUEST_TIMEOUT_SECONDS=10
@@ -132,6 +139,11 @@ El proyecto incluye `Dockerfile` para Hugging Face Spaces. El contenedor expone 
 uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}
 ```
 
+Durante el build, Docker descarga `model.bin` desde el repositorio oficial
+`facebook/fasttext-es-vectors` y lo guarda en `/opt/models/fasttext-es/model.bin`.
+La capa queda cacheada, por lo que un cambio normal de codigo no vuelve a descargar
+el modelo de varios GB.
+
 ## Endpoints
 
 ```http
@@ -169,7 +181,8 @@ python -m app.jobs.sync_place_embeddings
 python -m app.jobs.sync_post_embeddings
 ```
 
-Los jobs calculan `content_hash`; si el hash no cambio, omiten regenerar el embedding.
+Los jobs calculan un `content_hash` versionado con el contenido, modelo, version y
+dimension. Un cambio de modelo fuerza la regeneracion aunque el texto no haya cambiado.
 
 ## SQL RDS
 
@@ -188,11 +201,43 @@ docs/pgvector_post_embeddings_schema.md
 
 Ese SQL debe ejecutarse una vez con un rol administrador/DBA fuera de Hugging Face. La API NLP usa solo `nlp_reader`; los jobs usan solo `nlp_writer`.
 
-## Ranking BM25 Y Llama Via Groq
+### Migracion De VECTOR(16) A FastText VECTOR(300)
 
-`/places/search` y `/places/recommendations` recuperan candidatos reales filtrados desde pgvector y los reordenan con Okapi BM25, siguiendo `Lab3_BM25_y_Evaluacion.ipynb`. Los valores iniciales son `k1=1.5` y `b=0.75`. Las etiquetas se ponderan `x6` y la categoria `x2` antes de calcular BM25.
+La guia operativa completa esta en `docs/fasttext_deployment.md`.
 
-Las respuestas incluyen metricas de la consulta actual: origen de candidatos (`pgvector` en produccion), parametros BM25, cobertura de terminos, cantidad de candidatos reales, resultados no cero y estadisticas `min`, `max` y `mean`. `match_quality` puede ser `no_match`, `low_confidence` o `confident` segun `BM25_RELEVANCE_THRESHOLD`.
+Los vectores son datos derivados. Para esta migracion no se intenta convertir los
+16 valores mock en 300 valores semanticos: se vacian ambas tablas y se reconstruyen
+desde la API principal.
+
+Con la API NLP y los jobs pausados, ejecuta como `nlp_owner` o administrador:
+
+```powershell
+psql "host=<host> port=5432 dbname=nlp_vectors user=<admin> sslmode=require" -f sql/migrate_fasttext_300.sql
+psql "host=<host> port=5432 dbname=nlp_vectors user=<admin> sslmode=require" -f sql/aws_pgvector_contract.sql
+```
+
+Despues configura las variables FastText, despliega la nueva imagen y repuebla:
+
+```powershell
+python -m app.jobs.initial_load_place_embeddings
+python -m app.jobs.initial_load_post_embeddings
+psql "host=<host> port=5432 dbname=nlp_vectors user=<admin> sslmode=require" -f sql/verify_fasttext_embeddings.sql
+```
+
+La verificacion debe reportar dimension `300`, modelo
+`facebook/fasttext-es-vectors` y normas cercanas a `1`.
+
+## Ranking Semantico FastText Y Llama Via Groq
+
+`/places/search` y `/places/recommendations` aplican el flujo de
+`Lab5_Embeddings_Busqueda_Semantica.ipynb`: tokenizan el texto, obtienen los vectores
+FastText de cada termino, calculan su promedio, normalizan el documento y consultan
+pgvector mediante similitud coseno. FastText usa subpalabras, por lo que puede relacionar
+variantes morfologicas y palabras fuera de vocabulario.
+
+Las requests y responses HTTP no cambian. Las metricas existentes ahora describen el
+motor `fasttext_mean_embeddings`, similitud coseno y dimension 300. `match_quality`
+usa `SEMANTIC_NO_MATCH_THRESHOLD` y `SEMANTIC_RELEVANCE_THRESHOLD`.
 
 Ambos endpoints aceptan filtro geografico mediante `lat`, `lng` y `radius` en metros. Cuando se proporcionan coordenadas, el servicio NLP consulta `GET /api/v1/places/nearby` en la API principal y limita pgvector a los IDs devueltos. Las coordenadas siguen perteneciendo a la API principal; no es necesario guardarlas en pgvector, truncar tablas ni regenerar embeddings.
 
@@ -208,7 +253,11 @@ Ambos endpoints aceptan filtro geografico mediante `lat`, `lng` y `radius` en me
 
 El bloque `metrics` tambien indica `location_filter_applied`, `nearby_place_count` y `radius_meters` para hacer visible la aplicacion del radio.
 
-`POST /places/recommendations` no mezcla el benchmark fijo con la consulta del usuario. Si el score maximo es `0`, envia a Llama el modo `no_match` y devuelve `places: []`. Si `0 < max_score < BM25_RELEVANCE_THRESHOLD`, envia `low_confidence`; de lo contrario usa `confident`. Llama solo embellece el tono correspondiente y recibe exclusivamente los lugares ya seleccionados.
+`POST /places/recommendations` no mezcla el benchmark fijo con la consulta del usuario.
+Si el score maximo no supera `SEMANTIC_NO_MATCH_THRESHOLD`, envia a Llama el modo
+`no_match` y devuelve `places: []`. Entre ese valor y
+`SEMANTIC_RELEVANCE_THRESHOLD` usa `low_confidence`; por encima usa `confident`.
+Llama solo embellece el tono y recibe exclusivamente los lugares seleccionados.
 
 `GET` o `POST /places/search/metrics?k=5` conserva un benchmark offline separado llamado `built_in_places_v3_bm25`. Contiene doce lugares controlados, diez consultas y qrels graduados para calcular honestamente `Precision@k`, `Recall@k`, `MRR`, `MAP` y `nDCG@k`. Estas metricas requieren juicios de relevancia y por eso no se presentan como si midieran una consulta arbitraria de produccion.
 
@@ -218,7 +267,9 @@ La respuesta incluye `metric_definitions` con etiquetas y descripciones claras, 
 GET /places/search/metrics?k=5
 ```
 
-Para habilitar el filtro por IDs cercanos en una base existente, vuelve a ejecutar solamente el bloque `CREATE OR REPLACE FUNCTION match_places` de `sql/aws_pgvector_contract.sql`. La firma no cambia y no se requiere truncar `place_embeddings`.
+Para actualizar funciones o permisos sin cambiar nuevamente la dimension, vuelve a
+ejecutar `sql/aws_pgvector_contract.sql`. No repitas la migracion destructiva una vez
+que las columnas ya sean `VECTOR(300)`.
 
 Groq/Llama se usa en `/places/recommendations` y `/places/chat` para redactar una respuesta conversacional. No decide que lugares recomendar, no hace busqueda y no inventa lugares.
 

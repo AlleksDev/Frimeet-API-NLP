@@ -20,11 +20,11 @@ def test_places_search_endpoint() -> None:
     payload = response.json()
     assert payload["query"] == "lugares tranquilos para cenar"
     assert payload["places"]
-    assert payload["metrics"]["engine"] == "bm25"
+    assert payload["metrics"]["engine"] == "fasttext_mean_embeddings"
     assert payload["metrics"]["candidate_retrieval"] == "mock_embeddings"
-    assert payload["metrics"]["score_metric"] == "bm25"
-    assert payload["metrics"]["ranking_parameters"] == {"k1": 1.5, "b": 0.75}
-    assert payload["metrics"]["field_weights"]["tags"] == 6
+    assert payload["metrics"]["score_metric"] == "cosine_similarity"
+    assert payload["metrics"]["ranking_parameters"] == {"dimension": 16.0}
+    assert payload["metrics"]["field_weights"]["document"] == 1
     assert payload["metrics"]["returned_count"] == len(payload["places"])
     assert payload["metrics"]["max_score"] >= payload["metrics"]["mean_score"]
 
@@ -87,7 +87,7 @@ def test_places_chat_endpoint_returns_trace_and_structured_places() -> None:
     assert payload["metadata"]["places_used_as_context"]
 
 
-def test_places_recommendations_returns_llm_message_and_bm25_metadata() -> None:
+def test_places_recommendations_returns_llm_message_and_semantic_metadata() -> None:
     client = TestClient(create_app())
 
     response = client.post(
@@ -104,8 +104,8 @@ def test_places_recommendations_returns_llm_message_and_bm25_metadata() -> None:
     payload = response.json()
     assert payload["message"]
     assert payload["places"]
-    assert payload["metrics"]["engine"] == "bm25"
-    assert payload["metrics"]["score_metric"] == "bm25"
+    assert payload["metrics"]["engine"] == "fasttext_mean_embeddings"
+    assert payload["metrics"]["score_metric"] == "cosine_similarity"
     assert payload["metrics"]["returned_count"] == len(payload["places"])
     assert payload["metrics"]["candidate_retrieval"] == "mock_embeddings"
     assert payload["metrics"]["query_token_count"] > 0
@@ -113,18 +113,19 @@ def test_places_recommendations_returns_llm_message_and_bm25_metadata() -> None:
     assert payload["metrics"]["scope"] == "current_query"
     assert payload["metrics"]["ground_truth_available"] is False
     assert "evaluation_metrics" not in payload
-    assert payload["metadata"]["ranking"] == "bm25"
+    assert payload["metadata"]["ranking"] == "fasttext_mean_embeddings"
     assert payload["metadata"]["response_mode"] == "confident"
     assert payload["metadata"]["used_llm"] is True
 
 
-def test_places_recommendations_returns_no_places_without_bm25_matches() -> None:
+def test_places_recommendations_returns_no_places_without_candidates() -> None:
     client = TestClient(create_app())
 
     response = client.post(
         "/places/recommendations",
         json={
             "query": "xqzv blorf 998zz",
+            "city": "Ciudad inexistente",
             "filters": {"is_active": True},
             "limit": 3,
         },

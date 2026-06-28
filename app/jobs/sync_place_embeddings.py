@@ -6,10 +6,11 @@ from app.modules.places.infrastructure.main_api_place_source import (
     MainApiPlacesClient,
     PlaceSourceRecord,
 )
-from app.shared.config.settings import get_settings
+from app.shared.config.settings import Settings, get_settings
 from app.shared.logging.config import configure_logging, get_logger
-from app.shared.nlp.embeddings.mock import MockEmbeddingProvider
-from app.shared.nlp.preprocessing.text import prepare_for_embedding
+from app.shared.nlp.embeddings.base import EmbeddingProvider
+from app.shared.nlp.embeddings.factory import create_embedding_provider
+from app.shared.nlp.embeddings.versioning import versioned_embedding_hash
 from app.shared.vector_store.aws_pgvector import AwsPgvectorClient
 from app.shared.vector_store.models import VectorUpsertRecord
 
@@ -34,7 +35,7 @@ async def main() -> None:
 
     source = MainApiPlacesClient(settings)
     vector_client = AwsPgvectorClient(settings, role="writer")
-    embedding_provider = MockEmbeddingProvider(dimension=settings.embedding_dimension)
+    embedding_provider = create_embedding_provider(settings)
     counters = SyncCounters()
     batch: list[PlaceSourceRecord] = []
 
@@ -47,10 +48,24 @@ async def main() -> None:
     ):
         batch.append(place)
         if len(batch) >= args.batch_size:
-            await _flush_batch(batch, vector_client, embedding_provider, counters, args.dry_run)
+            await _flush_batch(
+                batch,
+                vector_client,
+                embedding_provider,
+                settings,
+                counters,
+                args.dry_run,
+            )
             batch = []
 
-    await _flush_batch(batch, vector_client, embedding_provider, counters, args.dry_run)
+    await _flush_batch(
+        batch,
+        vector_client,
+        embedding_provider,
+        settings,
+        counters,
+        args.dry_run,
+    )
     logger.info(
         "Finished place sync processed=%s skipped=%s upserted=%s errors=%s",
         counters.processed,
@@ -63,7 +78,8 @@ async def main() -> None:
 async def _flush_batch(
     batch: list[PlaceSourceRecord],
     vector_client: AwsPgvectorClient,
-    embedding_provider: MockEmbeddingProvider,
+    embedding_provider: EmbeddingProvider,
+    settings: Settings,
     counters: SyncCounters,
     dry_run: bool,
 ) -> None:
@@ -75,17 +91,26 @@ async def _flush_batch(
         existing_hashes = await vector_client.fetch_place_content_hashes(
             [record.id for record in batch]
         )
+        expected_hashes = {
+            record.id: versioned_embedding_hash(
+                source_content_hash=record.content_hash,
+                model=settings.embedding_model,
+                version=settings.embedding_version,
+                dimension=settings.embedding_dimension,
+            )
+            for record in batch
+        }
         changed = [
             record
             for record in batch
-            if existing_hashes.get(record.id) != record.content_hash
+            if existing_hashes.get(record.id) != expected_hashes[record.id]
         ]
         counters.skipped += len(batch) - len(changed)
         if not changed:
             return
 
         embeddings = embedding_provider.embed_batch(
-            [prepare_for_embedding(record.document) for record in changed]
+            [record.document for record in changed]
         )
         upserts = [
             VectorUpsertRecord(
@@ -93,7 +118,7 @@ async def _flush_batch(
                 document=record.document,
                 metadata=record.metadata,
                 embedding=embedding,
-                content_hash=record.content_hash,
+                content_hash=expected_hashes[record.id],
                 is_active=record.is_active,
             )
             for record, embedding in zip(changed, embeddings)

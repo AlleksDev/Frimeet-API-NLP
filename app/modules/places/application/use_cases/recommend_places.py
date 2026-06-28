@@ -91,8 +91,11 @@ class RecommendPlacesUseCase:
             places=places,
             metrics=metrics,
             metadata={
-                "strategy": "pgvector_candidates_plus_bm25_ranking",
-                "ranking": "bm25",
+                "strategy": (
+                    f"{search_result.metrics.candidate_retrieval}_candidates_plus_"
+                    f"{search_result.metrics.engine}"
+                ),
+                "ranking": search_result.metrics.engine,
                 "response_mode": response_mode,
                 "relevance_threshold": search_result.metrics.relevance_threshold,
                 "llm_provider": llm_provider,

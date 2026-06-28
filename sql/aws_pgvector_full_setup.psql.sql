@@ -3,7 +3,7 @@
 -- psql "host=<host> port=5432 dbname=postgres user=<admin> sslmode=require" -f sql/aws_pgvector_full_setup.psql.sql
 --
 -- Replace the passwords before running.
--- VECTOR(16) must match EMBEDDING_DIMENSION=16 in the API environment.
+-- VECTOR(300) must match EMBEDDING_DIMENSION=300 in the API environment.
 
 \set ON_ERROR_STOP on
 
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS public.place_embeddings (
     external_id TEXT PRIMARY KEY,
     document TEXT NOT NULL,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    embedding VECTOR(16) NOT NULL,
+    embedding VECTOR(300) NOT NULL,
     content_hash TEXT NOT NULL,
     embedding_model TEXT NOT NULL,
     embedding_version TEXT NOT NULL,
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS public.post_embeddings (
     external_id TEXT PRIMARY KEY,
     document TEXT NOT NULL,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    embedding VECTOR(16) NOT NULL,
+    embedding VECTOR(300) NOT NULL,
     content_hash TEXT NOT NULL,
     embedding_model TEXT NOT NULL,
     embedding_version TEXT NOT NULL,
@@ -74,7 +74,7 @@ CREATE INDEX IF NOT EXISTS post_embeddings_metadata_gin_idx
 ON public.post_embeddings USING gin (metadata);
 
 CREATE OR REPLACE FUNCTION public.match_places(
-    query_embedding VECTOR(16),
+    query_embedding VECTOR(300),
     match_count INTEGER,
     filters JSONB DEFAULT '{}'::jsonb
 )
@@ -111,7 +111,7 @@ AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION public.match_posts(
-    query_embedding VECTOR(16),
+    query_embedding VECTOR(300),
     match_count INTEGER,
     filters JSONB DEFAULT '{}'::jsonb
 )
@@ -143,7 +143,7 @@ CREATE OR REPLACE FUNCTION public.upsert_place_embedding(
     p_external_id TEXT,
     p_document TEXT,
     p_metadata JSONB,
-    p_embedding VECTOR(16),
+    p_embedding VECTOR(300),
     p_content_hash TEXT,
     p_embedding_model TEXT,
     p_embedding_version TEXT,
@@ -191,7 +191,7 @@ CREATE OR REPLACE FUNCTION public.upsert_post_embedding(
     p_external_id TEXT,
     p_document TEXT,
     p_metadata JSONB,
-    p_embedding VECTOR(16),
+    p_embedding VECTOR(300),
     p_content_hash TEXT,
     p_embedding_model TEXT,
     p_embedding_version TEXT,

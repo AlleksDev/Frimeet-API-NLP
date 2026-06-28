@@ -19,6 +19,7 @@ from app.modules.places.infrastructure.place_search_benchmark import (
     QRELS_SOURCE,
     get_default_place_search_benchmark,
 )
+from app.modules.places.infrastructure.semantic_place_ranker import SemanticPlaceRanker
 from app.shared.cache.memory import SimpleTTLCache
 from app.shared.config.settings import get_settings
 from app.shared.dependencies import get_embedding_provider, get_llm_provider
@@ -36,9 +37,9 @@ def get_place_repository() -> MockPlaceVectorRepository | AwsPgvectorPlaceReposi
 
 
 @lru_cache
-def get_place_ranker() -> Bm25PlaceRanker:
+def get_place_ranker() -> SemanticPlaceRanker:
     settings = get_settings()
-    return Bm25PlaceRanker(k1=settings.bm25_k1, b=settings.bm25_b)
+    return SemanticPlaceRanker(dimension=settings.embedding_dimension)
 
 
 @lru_cache
@@ -60,7 +61,8 @@ def get_search_places_use_case() -> SearchPlacesUseCase:
         ranker=get_place_ranker(),
         cache=get_place_search_cache(),
         nearby_place_provider=get_nearby_place_provider(),
-        relevance_threshold=get_settings().bm25_relevance_threshold,
+        relevance_threshold=get_settings().semantic_relevance_threshold,
+        no_match_threshold=get_settings().semantic_no_match_threshold,
     )
 
 
