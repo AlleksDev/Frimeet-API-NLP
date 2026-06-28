@@ -68,6 +68,10 @@ psql "host=<host> port=5432 dbname=nlp_vectors user=<admin> sslmode=require" `
 La migracion trunca `place_embeddings` y `post_embeddings` porque son indices
 derivados incompatibles. No toca la base transaccional de la API principal.
 
+Para hacerlo desde pgAdmin y ejecutar la carga pesada desde Google Colab consulta
+`docs/pgadmin_colab_fasttext.md`. Incluye un SQL unico para Query Tool y dos scripts
+independientes de carga.
+
 ## 4. Repoblar PGVector
 
 Con las credenciales writer en `.env`:

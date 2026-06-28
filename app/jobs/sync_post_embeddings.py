@@ -73,6 +73,10 @@ async def main() -> None:
         counters.upserted,
         counters.errors,
     )
+    if counters.errors:
+        raise RuntimeError(
+            f"Post embedding sync finished with {counters.errors} failed records"
+        )
 
 
 async def _flush_batch(
