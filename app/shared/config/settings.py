@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8080, alias="API_PORT")
 
     main_api_base_url: str = Field(
-        default="http://52.86.8.11",
+        default="http://3.212.166.108",
         alias="MAIN_API_BASE_URL",
     )
     main_api_places_search_path: str = Field(

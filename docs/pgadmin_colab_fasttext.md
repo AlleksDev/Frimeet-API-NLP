@@ -39,6 +39,11 @@ principal. Tambien puedes sobrescribirlos con Secrets llamados
 `PGVECTOR_HOST`, `PGVECTOR_DATABASE`, `PGVECTOR_WRITER_USER` y
 `MAIN_API_BASE_URL`.
 
+La URL base actual es `http://3.212.166.108`. No agregues `/api/v1` al valor de
+`MAIN_API_BASE_URL`, porque los paths de lugares y publicaciones ya incluyen ese
+segmento. Si existe un Secret `MAIN_API_BASE_URL` en Colab, actualizalo o eliminalo
+para evitar que reemplace este valor.
+
 ## 4. Permitir Temporalmente La IP De Colab
 
 RDS debe ser accesible desde el runtime. Obten la IP publica actual en una celda:
@@ -69,9 +74,11 @@ Primero lugares:
 !python scripts/colab_initial_load_places.py
 ```
 
-Se recomienda ejecutar los archivos con `!python` como arriba. Tambien pueden pegarse
-en una celda: ahora detectan la carpeta del repositorio aunque Jupyter no defina
-`__file__`, siempre que antes se haya ejecutado `%cd Frimeet-API-NLP`.
+Se recomienda ejecutar los archivos con `!python` como arriba. Tambien puedes copiar
+el contenido completo de cada script en una celda vacia y ejecutarlo directamente:
+si no existe el repositorio, el propio script clonara `hf-deploy`. En ese modo ignora
+los argumentos internos de Jupyter. Si no configuraste `PGVECTOR_WRITER_PASSWORD` en
+Secrets, mostrara una entrada oculta para solicitarlo.
 
 Despues publicaciones, reutilizando dependencias y el modelo ya descargado:
 
