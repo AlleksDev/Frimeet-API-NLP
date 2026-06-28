@@ -69,6 +69,10 @@ Primero lugares:
 !python scripts/colab_initial_load_places.py
 ```
 
+Se recomienda ejecutar los archivos con `!python` como arriba. Tambien pueden pegarse
+en una celda: ahora detectan la carpeta del repositorio aunque Jupyter no defina
+`__file__`, siempre que antes se haya ejecutado `%cd Frimeet-API-NLP`.
+
 Despues publicaciones, reutilizando dependencias y el modelo ya descargado:
 
 ```python

@@ -17,7 +17,33 @@ import subprocess
 import sys
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+def _find_repo_root() -> Path:
+    candidates: list[Path] = []
+    if "__file__" in globals():
+        candidates.append(Path(__file__).resolve().parents[1])
+
+    current_directory = Path.cwd().resolve()
+    candidates.extend(
+        [
+            current_directory,
+            current_directory / "Frimeet-API-NLP",
+        ]
+    )
+    candidates.extend(current_directory.parents)
+
+    for candidate in candidates:
+        if (candidate / "requirements.txt").is_file() and (
+            candidate / "app"
+        ).is_dir():
+            return candidate
+
+    raise RuntimeError(
+        "No se encontro la raiz de Frimeet-API-NLP. Ejecuta primero "
+        "%cd /content/Frimeet-API-NLP o corre el archivo desde el repositorio."
+    )
+
+
+REPO_ROOT = _find_repo_root()
 DEFAULT_MODEL_PATH = "/content/fasttext-es/model.bin"
 
 
