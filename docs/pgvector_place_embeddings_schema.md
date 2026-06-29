@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS place_embeddings (
     external_id TEXT PRIMARY KEY,
     document TEXT NOT NULL,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    embedding VECTOR(16) NOT NULL,
+    embedding VECTOR(300) NOT NULL,
     content_hash TEXT NOT NULL,
     embedding_model TEXT NOT NULL,
     embedding_version TEXT NOT NULL,
@@ -22,19 +22,14 @@ CREATE TABLE IF NOT EXISTS place_embeddings (
 );
 ```
 
-`VECTOR(16)` corresponde al `MockEmbeddingProvider` actual.
+`VECTOR(300)` corresponde al modelo preentrenado
+`facebook/fasttext-es-vectors` usado por `FastTextEmbeddingProvider`.
 
-Cuando se cambie a embeddings reales, hay que cambiar:
-
-```env
-EMBEDDING_DIMENSION=<dimension_real>
-```
-
-y tambien:
-
-```sql
-embedding VECTOR(<dimension_real>)
-```
+Antes de generar el vector, los IDs de tags se resuelven con el catalogo incluido en
+el servicio y se construye un documento ponderado: `tags x6`, `category x4`,
+`description x3`, `name x1`. Direccion, ubicacion, `source` e IDs desconocidos no
+participan en el embedding. `metadata.tag_ids` conserva trazabilidad de los IDs
+originales y `metadata.tags` contiene sus nombres semanticos.
 
 ## Columnas
 
@@ -43,8 +38,8 @@ embedding VECTOR(<dimension_real>)
 | `external_id` | `TEXT` | ID del lugar en la API principal. |
 | `document` | `TEXT` | Texto construido para generar el embedding. |
 | `metadata` | `JSONB` | Datos estructurados utiles para filtros y respuesta. |
-| `embedding` | `VECTOR(16)` | Embedding del `document`. |
-| `content_hash` | `TEXT` | SHA-256 estable de document + metadata + is_active. |
+| `embedding` | `VECTOR(300)` | Promedio normalizado de embeddings FastText del `document`. |
+| `content_hash` | `TEXT` | SHA-256 del contenido y la configuracion/version del embedding. |
 | `embedding_model` | `TEXT` | Nombre del modelo usado para generar embeddings. |
 | `embedding_version` | `TEXT` | Version logica del embedding. |
 | `is_active` | `BOOLEAN` | Estado derivado desde la API principal. |
@@ -85,13 +80,14 @@ Cafe Centro cafe Tuxtla Gutierrez Chiapas osm cafe tranquilo Un lugar para plati
 
 ## Content Hash
 
-`content_hash` se calcula con SHA-256 sobre:
+`content_hash` se calcula con SHA-256 sobre el hash del contenido mas:
 
 ```json
 {
-  "document": "...",
-  "metadata": {...},
-  "is_active": true
+  "source_content_hash": "...",
+  "embedding_model": "facebook/fasttext-es-vectors",
+  "embedding_version": "common-crawl-300-v1",
+  "embedding_dimension": 300
 }
 ```
 
@@ -102,7 +98,7 @@ Si el hash no cambia, el job omite regenerar embedding.
 La API NLP usa:
 
 ```sql
-match_places(query_embedding VECTOR(16), match_count INTEGER, filters JSONB)
+match_places(query_embedding VECTOR(300), match_count INTEGER, filters JSONB)
 ```
 
 `filters.place_ids` acepta un arreglo de IDs generado por la consulta geografica a la API principal. `match_places` limita los resultados a esos `external_id`; no almacena coordenadas en esta tabla.
@@ -114,7 +110,7 @@ upsert_place_embedding(
     p_external_id TEXT,
     p_document TEXT,
     p_metadata JSONB,
-    p_embedding VECTOR(16),
+    p_embedding VECTOR(300),
     p_content_hash TEXT,
     p_embedding_model TEXT,
     p_embedding_version TEXT,

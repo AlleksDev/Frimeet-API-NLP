@@ -4,6 +4,8 @@ from app.modules.places.domain.models import PlaceCandidate, PlaceFilters
 
 
 class PlaceVectorRepository(Protocol):
+    source_name: str
+
     async def search(
         self,
         embedding: list[float],

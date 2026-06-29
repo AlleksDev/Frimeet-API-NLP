@@ -58,6 +58,7 @@ class EvaluatePlaceSearchUseCase:
             return cached
 
         query_results: list[PlaceSearchQueryMetrics] = []
+        engine = "unknown"
 
         for case in self._cases:
             search_result = await self._search_use_case.execute(
@@ -66,6 +67,7 @@ class EvaluatePlaceSearchUseCase:
                 limit=k,
             )
             ranking = [place.id for place in search_result.places]
+            engine = search_result.metrics.engine
             query_results.append(
                 PlaceSearchQueryMetrics(
                     query=case.query,
@@ -76,7 +78,7 @@ class EvaluatePlaceSearchUseCase:
 
         aggregate = average_metrics([result.metrics for result in query_results])
         result = EvaluatePlaceSearchResult(
-            engine="tfidf_cosine",
+            engine=engine,
             benchmark=self._benchmark,
             qrels_source=self._qrels_source,
             k=k,

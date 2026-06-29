@@ -2,7 +2,12 @@ import asyncio
 from typing import Any, Sequence
 
 from app.shared.config.settings import Settings
-from app.shared.nlp.llm.base import LLMProvider, LLMProviderError, LLMResult
+from app.shared.nlp.llm.base import (
+    LLMProvider,
+    LLMProviderError,
+    LLMResult,
+    PlaceResponseMode,
+)
 from app.shared.nlp.prompts.place_chat import build_place_chat_messages
 
 
@@ -31,11 +36,13 @@ class GroqLlamaProvider(LLMProvider):
         user_intent: str,
         region: str | None,
         places: Sequence[dict[str, Any]],
+        response_mode: PlaceResponseMode = "confident",
     ) -> LLMResult:
         messages = build_place_chat_messages(
             user_intent=user_intent,
             region=region,
             places=places,
+            response_mode=response_mode,
         )
         async with self._semaphore:
             try:
