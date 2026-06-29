@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
+
+
+PlaceResponseMode = Literal["no_match", "low_confidence", "confident"]
 
 
 @dataclass(frozen=True)
@@ -24,5 +27,6 @@ class LLMProvider(ABC):
         user_intent: str,
         region: str | None,
         places: Sequence[dict[str, Any]],
+        response_mode: PlaceResponseMode = "confident",
     ) -> LLMResult:
         """Draft a conversational answer using only provided place candidates."""

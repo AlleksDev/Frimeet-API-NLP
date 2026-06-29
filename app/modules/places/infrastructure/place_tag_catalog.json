@@ -1,0 +1,1554 @@
+{
+  "data": [
+    {
+      "id": 26,
+      "name": "Arte",
+      "category": "actividad"
+    },
+    {
+      "id": 22,
+      "name": "Baile",
+      "category": "actividad"
+    },
+    {
+      "id": 25,
+      "name": "Cine",
+      "category": "actividad"
+    },
+    {
+      "id": 29,
+      "name": "Compras",
+      "category": "actividad"
+    },
+    {
+      "id": 23,
+      "name": "Deportes",
+      "category": "actividad"
+    },
+    {
+      "id": 97,
+      "name": "Ejercicio",
+      "category": "actividad"
+    },
+    {
+      "id": 98,
+      "name": "Estudio",
+      "category": "actividad"
+    },
+    {
+      "id": 101,
+      "name": "Explorar",
+      "category": "actividad"
+    },
+    {
+      "id": 95,
+      "name": "Fotografía",
+      "category": "actividad"
+    },
+    {
+      "id": 94,
+      "name": "Juegos de mesa",
+      "category": "actividad"
+    },
+    {
+      "id": 93,
+      "name": "Karaoke",
+      "category": "actividad"
+    },
+    {
+      "id": 27,
+      "name": "Lectura",
+      "category": "actividad"
+    },
+    {
+      "id": 21,
+      "name": "Música en vivo",
+      "category": "actividad"
+    },
+    {
+      "id": 96,
+      "name": "Picnic",
+      "category": "actividad"
+    },
+    {
+      "id": 28,
+      "name": "Senderismo",
+      "category": "actividad"
+    },
+    {
+      "id": 99,
+      "name": "Trabajo remoto",
+      "category": "actividad"
+    },
+    {
+      "id": 100,
+      "name": "Turismo local",
+      "category": "actividad"
+    },
+    {
+      "id": 24,
+      "name": "Videojuegos",
+      "category": "actividad"
+    },
+    {
+      "id": 17,
+      "name": "Al aire libre",
+      "category": "ambiente"
+    },
+    {
+      "id": 78,
+      "name": "Alternativo",
+      "category": "ambiente"
+    },
+    {
+      "id": 77,
+      "name": "Casual",
+      "category": "ambiente"
+    },
+    {
+      "id": 20,
+      "name": "Concurrido",
+      "category": "ambiente"
+    },
+    {
+      "id": 16,
+      "name": "Cultural",
+      "category": "ambiente"
+    },
+    {
+      "id": 11,
+      "name": "Divertido",
+      "category": "ambiente"
+    },
+    {
+      "id": 76,
+      "name": "Elegante",
+      "category": "ambiente"
+    },
+    {
+      "id": 14,
+      "name": "Familiar",
+      "category": "ambiente"
+    },
+    {
+      "id": 79,
+      "name": "Instagrameable",
+      "category": "ambiente"
+    },
+    {
+      "id": 15,
+      "name": "Juvenil",
+      "category": "ambiente"
+    },
+    {
+      "id": 81,
+      "name": "Natural",
+      "category": "ambiente"
+    },
+    {
+      "id": 18,
+      "name": "Nocturno",
+      "category": "ambiente"
+    },
+    {
+      "id": 19,
+      "name": "Relajado",
+      "category": "ambiente"
+    },
+    {
+      "id": 13,
+      "name": "Romántico",
+      "category": "ambiente"
+    },
+    {
+      "id": 82,
+      "name": "Seguro",
+      "category": "ambiente"
+    },
+    {
+      "id": 83,
+      "name": "Silencioso",
+      "category": "ambiente"
+    },
+    {
+      "id": 80,
+      "name": "Tradicional",
+      "category": "ambiente"
+    },
+    {
+      "id": 12,
+      "name": "Tranquilo",
+      "category": "ambiente"
+    },
+    {
+      "id": 5,
+      "name": "Adultos mayores",
+      "category": "compania"
+    },
+    {
+      "id": 2,
+      "name": "Amigos",
+      "category": "compania"
+    },
+    {
+      "id": 61,
+      "name": "Citas dobles",
+      "category": "compania"
+    },
+    {
+      "id": 6,
+      "name": "Compañeros de trabajo",
+      "category": "compania"
+    },
+    {
+      "id": 10,
+      "name": "Convivencia",
+      "category": "compania"
+    },
+    {
+      "id": 3,
+      "name": "Familia",
+      "category": "compania"
+    },
+    {
+      "id": 9,
+      "name": "Grupos grandes",
+      "category": "compania"
+    },
+    {
+      "id": 7,
+      "name": "Mascotas",
+      "category": "compania"
+    },
+    {
+      "id": 62,
+      "name": "Networking",
+      "category": "compania"
+    },
+    {
+      "id": 4,
+      "name": "Niños",
+      "category": "compania"
+    },
+    {
+      "id": 1,
+      "name": "Pareja",
+      "category": "compania"
+    },
+    {
+      "id": 64,
+      "name": "Plan casual",
+      "category": "compania"
+    },
+    {
+      "id": 65,
+      "name": "Plan familiar",
+      "category": "compania"
+    },
+    {
+      "id": 8,
+      "name": "Solitario",
+      "category": "compania"
+    },
+    {
+      "id": 63,
+      "name": "Viaje en grupo",
+      "category": "compania"
+    },
+    {
+      "id": 194,
+      "name": "Accesorios baratos",
+      "category": "compras"
+    },
+    {
+      "id": 189,
+      "name": "Bazares",
+      "category": "compras"
+    },
+    {
+      "id": 195,
+      "name": "Calzado barato",
+      "category": "compras"
+    },
+    {
+      "id": 193,
+      "name": "Mayoreo",
+      "category": "compras"
+    },
+    {
+      "id": 192,
+      "name": "Ofertas",
+      "category": "compras"
+    },
+    {
+      "id": 191,
+      "name": "Outlets",
+      "category": "compras"
+    },
+    {
+      "id": 187,
+      "name": "Ropa barata",
+      "category": "compras"
+    },
+    {
+      "id": 30,
+      "name": "Ropa de paca",
+      "category": "compras"
+    },
+    {
+      "id": 188,
+      "name": "Ropa de segunda mano",
+      "category": "compras"
+    },
+    {
+      "id": 190,
+      "name": "Tianguis",
+      "category": "compras"
+    },
+    {
+      "id": 117,
+      "name": "Alitas",
+      "category": "gastronomia"
+    },
+    {
+      "id": 122,
+      "name": "Antojitos",
+      "category": "gastronomia"
+    },
+    {
+      "id": 40,
+      "name": "Bebidas",
+      "category": "gastronomia"
+    },
+    {
+      "id": 113,
+      "name": "Brunch",
+      "category": "gastronomia"
+    },
+    {
+      "id": 39,
+      "name": "Buffet",
+      "category": "gastronomia"
+    },
+    {
+      "id": 33,
+      "name": "Café",
+      "category": "gastronomia"
+    },
+    {
+      "id": 121,
+      "name": "Comida asiática",
+      "category": "gastronomia"
+    },
+    {
+      "id": 120,
+      "name": "Comida italiana",
+      "category": "gastronomia"
+    },
+    {
+      "id": 32,
+      "name": "Comida mexicana",
+      "category": "gastronomia"
+    },
+    {
+      "id": 31,
+      "name": "Comida rápida",
+      "category": "gastronomia"
+    },
+    {
+      "id": 112,
+      "name": "Desayunos",
+      "category": "gastronomia"
+    },
+    {
+      "id": 116,
+      "name": "Hamburguesas",
+      "category": "gastronomia"
+    },
+    {
+      "id": 118,
+      "name": "Helados",
+      "category": "gastronomia"
+    },
+    {
+      "id": 37,
+      "name": "Mariscos",
+      "category": "gastronomia"
+    },
+    {
+      "id": 119,
+      "name": "Panadería",
+      "category": "gastronomia"
+    },
+    {
+      "id": 38,
+      "name": "Parrilla",
+      "category": "gastronomia"
+    },
+    {
+      "id": 115,
+      "name": "Pizza",
+      "category": "gastronomia"
+    },
+    {
+      "id": 34,
+      "name": "Postres",
+      "category": "gastronomia"
+    },
+    {
+      "id": 114,
+      "name": "Tacos",
+      "category": "gastronomia"
+    },
+    {
+      "id": 36,
+      "name": "Vegano",
+      "category": "gastronomia"
+    },
+    {
+      "id": 35,
+      "name": "Vegetariano",
+      "category": "gastronomia"
+    },
+    {
+      "id": 152,
+      "name": "Anime",
+      "category": "interes"
+    },
+    {
+      "id": 156,
+      "name": "Coleccionables",
+      "category": "interes"
+    },
+    {
+      "id": 158,
+      "name": "Comics",
+      "category": "interes"
+    },
+    {
+      "id": 161,
+      "name": "Convenciones",
+      "category": "interes"
+    },
+    {
+      "id": 154,
+      "name": "Cosplay",
+      "category": "interes"
+    },
+    {
+      "id": 155,
+      "name": "Cultura geek",
+      "category": "interes"
+    },
+    {
+      "id": 159,
+      "name": "Gaming",
+      "category": "interes"
+    },
+    {
+      "id": 160,
+      "name": "J-pop",
+      "category": "interes"
+    },
+    {
+      "id": 157,
+      "name": "K-pop",
+      "category": "interes"
+    },
+    {
+      "id": 153,
+      "name": "Manga",
+      "category": "interes"
+    },
+    {
+      "id": 196,
+      "name": "Bibliotecas",
+      "category": "lectura"
+    },
+    {
+      "id": 198,
+      "name": "Club de lectura",
+      "category": "lectura"
+    },
+    {
+      "id": 202,
+      "name": "Investigación",
+      "category": "lectura"
+    },
+    {
+      "id": 201,
+      "name": "Lectura tranquila",
+      "category": "lectura"
+    },
+    {
+      "id": 197,
+      "name": "Librerías",
+      "category": "lectura"
+    },
+    {
+      "id": 200,
+      "name": "Libros baratos",
+      "category": "lectura"
+    },
+    {
+      "id": 199,
+      "name": "Libros usados",
+      "category": "lectura"
+    },
+    {
+      "id": 205,
+      "name": "Material escolar",
+      "category": "lectura"
+    },
+    {
+      "id": 204,
+      "name": "Papelería",
+      "category": "lectura"
+    },
+    {
+      "id": 203,
+      "name": "Tareas",
+      "category": "lectura"
+    },
+    {
+      "id": 183,
+      "name": "Acústico",
+      "category": "musica"
+    },
+    {
+      "id": 177,
+      "name": "Banda",
+      "category": "musica"
+    },
+    {
+      "id": 182,
+      "name": "Conciertos",
+      "category": "musica"
+    },
+    {
+      "id": 178,
+      "name": "Coro",
+      "category": "musica"
+    },
+    {
+      "id": 181,
+      "name": "DJ",
+      "category": "musica"
+    },
+    {
+      "id": 176,
+      "name": "Ensayo musical",
+      "category": "musica"
+    },
+    {
+      "id": 175,
+      "name": "Grupo de música",
+      "category": "musica"
+    },
+    {
+      "id": 180,
+      "name": "Instrumentos",
+      "category": "musica"
+    },
+    {
+      "id": 174,
+      "name": "Música",
+      "category": "musica"
+    },
+    {
+      "id": 185,
+      "name": "Regional mexicano",
+      "category": "musica"
+    },
+    {
+      "id": 184,
+      "name": "Rock",
+      "category": "musica"
+    },
+    {
+      "id": 179,
+      "name": "Tocada",
+      "category": "musica"
+    },
+    {
+      "id": 45,
+      "name": "Accesibilidad universal",
+      "category": "ocasion"
+    },
+    {
+      "id": 43,
+      "name": "Accesible",
+      "category": "ocasion"
+    },
+    {
+      "id": 137,
+      "name": "After office",
+      "category": "ocasion"
+    },
+    {
+      "id": 139,
+      "name": "Calor",
+      "category": "ocasion"
+    },
+    {
+      "id": 48,
+      "name": "Celebraciones",
+      "category": "ocasion"
+    },
+    {
+      "id": 49,
+      "name": "Citas",
+      "category": "ocasion"
+    },
+    {
+      "id": 136,
+      "name": "Cumpleaños",
+      "category": "ocasion"
+    },
+    {
+      "id": 141,
+      "name": "Dia completo",
+      "category": "ocasion"
+    },
+    {
+      "id": 41,
+      "name": "Económico",
+      "category": "ocasion"
+    },
+    {
+      "id": 135,
+      "name": "Fin de semana",
+      "category": "ocasion"
+    },
+    {
+      "id": 133,
+      "name": "Gratis",
+      "category": "ocasion"
+    },
+    {
+      "id": 138,
+      "name": "Lluvia",
+      "category": "ocasion"
+    },
+    {
+      "id": 140,
+      "name": "Noche",
+      "category": "ocasion"
+    },
+    {
+      "id": 46,
+      "name": "Para trabajar",
+      "category": "ocasion"
+    },
+    {
+      "id": 44,
+      "name": "Pet friendly",
+      "category": "ocasion"
+    },
+    {
+      "id": 134,
+      "name": "Plan rapido",
+      "category": "ocasion"
+    },
+    {
+      "id": 42,
+      "name": "Premium",
+      "category": "ocasion"
+    },
+    {
+      "id": 47,
+      "name": "Reuniones",
+      "category": "ocasion"
+    },
+    {
+      "id": 50,
+      "name": "Turismo",
+      "category": "ocasion"
+    },
+    {
+      "id": 346,
+      "name": "airport",
+      "category": "place_category"
+    },
+    {
+      "id": 267,
+      "name": "amusement_center",
+      "category": "place_category"
+    },
+    {
+      "id": 266,
+      "name": "amusement_park",
+      "category": "place_category"
+    },
+    {
+      "id": 276,
+      "name": "anime",
+      "category": "place_category"
+    },
+    {
+      "id": 277,
+      "name": "anime_store",
+      "category": "place_category"
+    },
+    {
+      "id": 268,
+      "name": "aquarium",
+      "category": "place_category"
+    },
+    {
+      "id": 251,
+      "name": "art_gallery",
+      "category": "place_category"
+    },
+    {
+      "id": 334,
+      "name": "atm",
+      "category": "place_category"
+    },
+    {
+      "id": 234,
+      "name": "bakery",
+      "category": "place_category"
+    },
+    {
+      "id": 333,
+      "name": "bank",
+      "category": "place_category"
+    },
+    {
+      "id": 237,
+      "name": "bar",
+      "category": "place_category"
+    },
+    {
+      "id": 238,
+      "name": "bar_and_grill",
+      "category": "place_category"
+    },
+    {
+      "id": 219,
+      "name": "barbecue_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 326,
+      "name": "beauty_salon",
+      "category": "place_category"
+    },
+    {
+      "id": 352,
+      "name": "bible_study_group",
+      "category": "place_category"
+    },
+    {
+      "id": 254,
+      "name": "biblioteca",
+      "category": "place_category"
+    },
+    {
+      "id": 298,
+      "name": "book_store",
+      "category": "place_category"
+    },
+    {
+      "id": 270,
+      "name": "botanical_garden",
+      "category": "place_category"
+    },
+    {
+      "id": 229,
+      "name": "breakfast_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 239,
+      "name": "brewery",
+      "category": "place_category"
+    },
+    {
+      "id": 230,
+      "name": "brunch_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 231,
+      "name": "buffet_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 335,
+      "name": "business_center",
+      "category": "place_category"
+    },
+    {
+      "id": 344,
+      "name": "bus_station",
+      "category": "place_category"
+    },
+    {
+      "id": 232,
+      "name": "cafe",
+      "category": "place_category"
+    },
+    {
+      "id": 332,
+      "name": "campground",
+      "category": "place_category"
+    },
+    {
+      "id": 342,
+      "name": "car_repair",
+      "category": "place_category"
+    },
+    {
+      "id": 343,
+      "name": "car_wash",
+      "category": "place_category"
+    },
+    {
+      "id": 356,
+      "name": "cemetery",
+      "category": "place_category"
+    },
+    {
+      "id": 354,
+      "name": "chapel",
+      "category": "place_category"
+    },
+    {
+      "id": 223,
+      "name": "chicken_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 226,
+      "name": "chinese_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 349,
+      "name": "christian_church",
+      "category": "place_category"
+    },
+    {
+      "id": 347,
+      "name": "church",
+      "category": "place_category"
+    },
+    {
+      "id": 305,
+      "name": "ciber",
+      "category": "place_category"
+    },
+    {
+      "id": 306,
+      "name": "cibercafe",
+      "category": "place_category"
+    },
+    {
+      "id": 243,
+      "name": "city_park",
+      "category": "place_category"
+    },
+    {
+      "id": 290,
+      "name": "clothing_store",
+      "category": "place_category"
+    },
+    {
+      "id": 233,
+      "name": "coffee_shop",
+      "category": "place_category"
+    },
+    {
+      "id": 279,
+      "name": "comic_book_store",
+      "category": "place_category"
+    },
+    {
+      "id": 265,
+      "name": "community_center",
+      "category": "place_category"
+    },
+    {
+      "id": 302,
+      "name": "computer_repair",
+      "category": "place_category"
+    },
+    {
+      "id": 301,
+      "name": "computer_store",
+      "category": "place_category"
+    },
+    {
+      "id": 257,
+      "name": "concert_hall",
+      "category": "place_category"
+    },
+    {
+      "id": 285,
+      "name": "convenience_store",
+      "category": "place_category"
+    },
+    {
+      "id": 307,
+      "name": "copy_shop",
+      "category": "place_category"
+    },
+    {
+      "id": 336,
+      "name": "corporate_office",
+      "category": "place_category"
+    },
+    {
+      "id": 337,
+      "name": "coworking_space",
+      "category": "place_category"
+    },
+    {
+      "id": 249,
+      "name": "cultural_landmark",
+      "category": "place_category"
+    },
+    {
+      "id": 252,
+      "name": "culture",
+      "category": "place_category"
+    },
+    {
+      "id": 304,
+      "name": "cyber_cafe",
+      "category": "place_category"
+    },
+    {
+      "id": 322,
+      "name": "dentist",
+      "category": "place_category"
+    },
+    {
+      "id": 287,
+      "name": "department_store",
+      "category": "place_category"
+    },
+    {
+      "id": 235,
+      "name": "dessert_shop",
+      "category": "place_category"
+    },
+    {
+      "id": 288,
+      "name": "discount_store",
+      "category": "place_category"
+    },
+    {
+      "id": 321,
+      "name": "doctor",
+      "category": "place_category"
+    },
+    {
+      "id": 319,
+      "name": "educational_institution",
+      "category": "place_category"
+    },
+    {
+      "id": 300,
+      "name": "electronics_store",
+      "category": "place_category"
+    },
+    {
+      "id": 264,
+      "name": "event_venue",
+      "category": "place_category"
+    },
+    {
+      "id": 220,
+      "name": "fast_food_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 359,
+      "name": "fire_station",
+      "category": "place_category"
+    },
+    {
+      "id": 275,
+      "name": "fitness_center",
+      "category": "place_category"
+    },
+    {
+      "id": 294,
+      "name": "flea_market",
+      "category": "place_category"
+    },
+    {
+      "id": 310,
+      "name": "furniture_store",
+      "category": "place_category"
+    },
+    {
+      "id": 281,
+      "name": "game_store",
+      "category": "place_category"
+    },
+    {
+      "id": 339,
+      "name": "gas_station",
+      "category": "place_category"
+    },
+    {
+      "id": 357,
+      "name": "government_office",
+      "category": "place_category"
+    },
+    {
+      "id": 286,
+      "name": "grocery_store",
+      "category": "place_category"
+    },
+    {
+      "id": 353,
+      "name": "grupo_biblico",
+      "category": "place_category"
+    },
+    {
+      "id": 263,
+      "name": "grupo_musica",
+      "category": "place_category"
+    },
+    {
+      "id": 274,
+      "name": "gym",
+      "category": "place_category"
+    },
+    {
+      "id": 327,
+      "name": "hair_salon",
+      "category": "place_category"
+    },
+    {
+      "id": 221,
+      "name": "hamburger_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 311,
+      "name": "hardware_store",
+      "category": "place_category"
+    },
+    {
+      "id": 324,
+      "name": "health",
+      "category": "place_category"
+    },
+    {
+      "id": 271,
+      "name": "hiking_area",
+      "category": "place_category"
+    },
+    {
+      "id": 248,
+      "name": "historical_place",
+      "category": "place_category"
+    },
+    {
+      "id": 280,
+      "name": "hobby_store",
+      "category": "place_category"
+    },
+    {
+      "id": 309,
+      "name": "home_goods_store",
+      "category": "place_category"
+    },
+    {
+      "id": 320,
+      "name": "hospital",
+      "category": "place_category"
+    },
+    {
+      "id": 330,
+      "name": "hostel",
+      "category": "place_category"
+    },
+    {
+      "id": 329,
+      "name": "hotel",
+      "category": "place_category"
+    },
+    {
+      "id": 236,
+      "name": "ice_cream_shop",
+      "category": "place_category"
+    },
+    {
+      "id": 348,
+      "name": "iglesia",
+      "category": "place_category"
+    },
+    {
+      "id": 303,
+      "name": "internet_cafe",
+      "category": "place_category"
+    },
+    {
+      "id": 224,
+      "name": "italian_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 225,
+      "name": "japanese_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 253,
+      "name": "library",
+      "category": "place_category"
+    },
+    {
+      "id": 299,
+      "name": "libreria",
+      "category": "place_category"
+    },
+    {
+      "id": 258,
+      "name": "live_music_venue",
+      "category": "place_category"
+    },
+    {
+      "id": 328,
+      "name": "lodging",
+      "category": "place_category"
+    },
+    {
+      "id": 278,
+      "name": "manga_store",
+      "category": "place_category"
+    },
+    {
+      "id": 283,
+      "name": "market",
+      "category": "place_category"
+    },
+    {
+      "id": 323,
+      "name": "medical_clinic",
+      "category": "place_category"
+    },
+    {
+      "id": 217,
+      "name": "mexican_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 331,
+      "name": "motel",
+      "category": "place_category"
+    },
+    {
+      "id": 255,
+      "name": "movie_theater",
+      "category": "place_category"
+    },
+    {
+      "id": 250,
+      "name": "museum",
+      "category": "place_category"
+    },
+    {
+      "id": 260,
+      "name": "music_school",
+      "category": "place_category"
+    },
+    {
+      "id": 259,
+      "name": "music_store",
+      "category": "place_category"
+    },
+    {
+      "id": 245,
+      "name": "national_park",
+      "category": "place_category"
+    },
+    {
+      "id": 240,
+      "name": "night_club",
+      "category": "place_category"
+    },
+    {
+      "id": 241,
+      "name": "nightlife",
+      "category": "place_category"
+    },
+    {
+      "id": 338,
+      "name": "office",
+      "category": "place_category"
+    },
+    {
+      "id": 289,
+      "name": "outlet_store",
+      "category": "place_category"
+    },
+    {
+      "id": 242,
+      "name": "park",
+      "category": "place_category"
+    },
+    {
+      "id": 340,
+      "name": "parking",
+      "category": "place_category"
+    },
+    {
+      "id": 341,
+      "name": "parking_lot",
+      "category": "place_category"
+    },
+    {
+      "id": 256,
+      "name": "performing_arts_theater",
+      "category": "place_category"
+    },
+    {
+      "id": 312,
+      "name": "pharmacy",
+      "category": "place_category"
+    },
+    {
+      "id": 222,
+      "name": "pizza_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 355,
+      "name": "place_of_worship",
+      "category": "place_category"
+    },
+    {
+      "id": 246,
+      "name": "plaza",
+      "category": "place_category"
+    },
+    {
+      "id": 358,
+      "name": "police",
+      "category": "place_category"
+    },
+    {
+      "id": 360,
+      "name": "post_office",
+      "category": "place_category"
+    },
+    {
+      "id": 316,
+      "name": "preschool",
+      "category": "place_category"
+    },
+    {
+      "id": 317,
+      "name": "primary_school",
+      "category": "place_category"
+    },
+    {
+      "id": 261,
+      "name": "record_store",
+      "category": "place_category"
+    },
+    {
+      "id": 262,
+      "name": "rehearsal_studio",
+      "category": "place_category"
+    },
+    {
+      "id": 351,
+      "name": "religious_group",
+      "category": "place_category"
+    },
+    {
+      "id": 350,
+      "name": "religious_organization",
+      "category": "place_category"
+    },
+    {
+      "id": 216,
+      "name": "restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 296,
+      "name": "ropa_barata",
+      "category": "place_category"
+    },
+    {
+      "id": 295,
+      "name": "ropa_de_paca",
+      "category": "place_category"
+    },
+    {
+      "id": 314,
+      "name": "school",
+      "category": "place_category"
+    },
+    {
+      "id": 218,
+      "name": "seafood_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 318,
+      "name": "secondary_school",
+      "category": "place_category"
+    },
+    {
+      "id": 292,
+      "name": "second_hand_store",
+      "category": "place_category"
+    },
+    {
+      "id": 297,
+      "name": "shoe_store",
+      "category": "place_category"
+    },
+    {
+      "id": 313,
+      "name": "shop",
+      "category": "place_category"
+    },
+    {
+      "id": 282,
+      "name": "shopping_mall",
+      "category": "place_category"
+    },
+    {
+      "id": 325,
+      "name": "spa",
+      "category": "place_category"
+    },
+    {
+      "id": 272,
+      "name": "sports_complex",
+      "category": "place_category"
+    },
+    {
+      "id": 273,
+      "name": "stadium",
+      "category": "place_category"
+    },
+    {
+      "id": 244,
+      "name": "state_park",
+      "category": "place_category"
+    },
+    {
+      "id": 308,
+      "name": "stationery_store",
+      "category": "place_category"
+    },
+    {
+      "id": 284,
+      "name": "supermarket",
+      "category": "place_category"
+    },
+    {
+      "id": 227,
+      "name": "sushi_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 345,
+      "name": "taxi_stand",
+      "category": "place_category"
+    },
+    {
+      "id": 293,
+      "name": "thrift_store",
+      "category": "place_category"
+    },
+    {
+      "id": 247,
+      "name": "tourist_attraction",
+      "category": "place_category"
+    },
+    {
+      "id": 315,
+      "name": "university",
+      "category": "place_category"
+    },
+    {
+      "id": 291,
+      "name": "used_clothing_store",
+      "category": "place_category"
+    },
+    {
+      "id": 228,
+      "name": "vegetarian_restaurant",
+      "category": "place_category"
+    },
+    {
+      "id": 269,
+      "name": "zoo",
+      "category": "place_category"
+    },
+    {
+      "id": 167,
+      "name": "Alabanza",
+      "category": "religion"
+    },
+    {
+      "id": 170,
+      "name": "Biblia",
+      "category": "religion"
+    },
+    {
+      "id": 169,
+      "name": "Comunidad cristiana",
+      "category": "religion"
+    },
+    {
+      "id": 173,
+      "name": "Coro religioso",
+      "category": "religion"
+    },
+    {
+      "id": 163,
+      "name": "Cristianos",
+      "category": "religion"
+    },
+    {
+      "id": 165,
+      "name": "Estudio bíblico",
+      "category": "religion"
+    },
+    {
+      "id": 164,
+      "name": "Grupo bíblico",
+      "category": "religion"
+    },
+    {
+      "id": 162,
+      "name": "Iglesia",
+      "category": "religion"
+    },
+    {
+      "id": 168,
+      "name": "Jóvenes cristianos",
+      "category": "religion"
+    },
+    {
+      "id": 166,
+      "name": "Oración",
+      "category": "religion"
+    },
+    {
+      "id": 171,
+      "name": "Retiro espiritual",
+      "category": "religion"
+    },
+    {
+      "id": 172,
+      "name": "Servicio religioso",
+      "category": "religion"
+    },
+    {
+      "id": 146,
+      "name": "Aire acondicionado",
+      "category": "servicio"
+    },
+    {
+      "id": 147,
+      "name": "Baños limpios",
+      "category": "servicio"
+    },
+    {
+      "id": 149,
+      "name": "Entrega a domicilio",
+      "category": "servicio"
+    },
+    {
+      "id": 143,
+      "name": "Estacionamiento",
+      "category": "servicio"
+    },
+    {
+      "id": 148,
+      "name": "Pago con tarjeta",
+      "category": "servicio"
+    },
+    {
+      "id": 150,
+      "name": "Para llevar",
+      "category": "servicio"
+    },
+    {
+      "id": 144,
+      "name": "Reservaciones",
+      "category": "servicio"
+    },
+    {
+      "id": 145,
+      "name": "Terraza",
+      "category": "servicio"
+    },
+    {
+      "id": 142,
+      "name": "WiFi",
+      "category": "servicio"
+    },
+    {
+      "id": 151,
+      "name": "Zona para niños",
+      "category": "servicio"
+    },
+    {
+      "id": 207,
+      "name": "Cibercafés",
+      "category": "tecnologia"
+    },
+    {
+      "id": 206,
+      "name": "Cibers",
+      "category": "tecnologia"
+    },
+    {
+      "id": 211,
+      "name": "Computadoras",
+      "category": "tecnologia"
+    },
+    {
+      "id": 210,
+      "name": "Copias",
+      "category": "tecnologia"
+    },
+    {
+      "id": 215,
+      "name": "Escaneo de documentos",
+      "category": "tecnologia"
+    },
+    {
+      "id": 212,
+      "name": "Gaming PC",
+      "category": "tecnologia"
+    },
+    {
+      "id": 209,
+      "name": "Impresiones",
+      "category": "tecnologia"
+    },
+    {
+      "id": 208,
+      "name": "Internet",
+      "category": "tecnologia"
+    },
+    {
+      "id": 213,
+      "name": "Renta de equipo",
+      "category": "tecnologia"
+    },
+    {
+      "id": 214,
+      "name": "Soporte técnico",
+      "category": "tecnologia"
+    }
+  ]
+}

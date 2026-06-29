@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from typing import Sequence
 
@@ -18,6 +18,14 @@ class SearchEngineMetrics:
     candidate_retrieval: str
     score_metric: str
     field_weights: dict[str, int]
+    ranking_parameters: dict[str, float]
+    relevance_threshold: float
+    match_quality: str
+    query_token_count: int
+    matched_query_token_count: int
+    query_coverage: float
+    scope: str
+    ground_truth_available: bool
     candidate_count: int
     returned_count: int
     nonzero_score_count: int
@@ -27,6 +35,17 @@ class SearchEngineMetrics:
     location_filter_applied: bool
     nearby_place_count: int | None
     radius_meters: int | None
+
+    def with_returned_scores(self, scores: Sequence[float]) -> "SearchEngineMetrics":
+        values = list(scores)
+        return replace(
+            self,
+            returned_count=len(values),
+            nonzero_score_count=sum(score > 0 for score in values),
+            min_score=min(values, default=0.0),
+            max_score=max(values, default=0.0),
+            mean_score=sum(values) / len(values) if values else 0.0,
+        )
 
 
 def evaluate_ranking(

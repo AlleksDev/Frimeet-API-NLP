@@ -91,6 +91,14 @@ class PlaceSearchEngineMetricsSchema(BaseModel):
     candidate_retrieval: str
     score_metric: str
     field_weights: dict[str, int]
+    ranking_parameters: dict[str, float]
+    relevance_threshold: float
+    match_quality: str
+    query_token_count: int
+    matched_query_token_count: int
+    query_coverage: float
+    scope: str
+    ground_truth_available: bool
     candidate_count: int
     returned_count: int
     nonzero_score_count: int
@@ -151,7 +159,6 @@ class PlaceRecommendationResponse(BaseModel):
     message: str
     places: list[PlaceResultSchema]
     metrics: PlaceSearchEngineMetricsSchema
-    evaluation_metrics: PlaceSearchMetricsResponse
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -260,6 +267,14 @@ def engine_metrics_to_schema(
         candidate_retrieval=metrics.candidate_retrieval,
         score_metric=metrics.score_metric,
         field_weights=metrics.field_weights,
+        ranking_parameters=metrics.ranking_parameters,
+        relevance_threshold=round(metrics.relevance_threshold, 4),
+        match_quality=metrics.match_quality,
+        query_token_count=metrics.query_token_count,
+        matched_query_token_count=metrics.matched_query_token_count,
+        query_coverage=round(metrics.query_coverage, 4),
+        scope=metrics.scope,
+        ground_truth_available=metrics.ground_truth_available,
         candidate_count=metrics.candidate_count,
         returned_count=metrics.returned_count,
         nonzero_score_count=metrics.nonzero_score_count,

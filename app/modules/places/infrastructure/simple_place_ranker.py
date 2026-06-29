@@ -5,6 +5,11 @@ from app.modules.places.domain.models import PlaceCandidate, PlaceFilters
 
 
 class SimplePlaceRanker(PlaceRanker):
+    engine_name = "vector_similarity"
+    score_metric = "cosine_similarity"
+    field_weights = {"other_text": 1}
+    ranking_parameters: dict[str, float] = {}
+
     def rank(
         self,
         query: str,

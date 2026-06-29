@@ -12,4 +12,5 @@ htmlcov/
 .agents/
 .codex/
 chroma_data/
+.models/
 *.log

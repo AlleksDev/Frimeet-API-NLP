@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8080, alias="API_PORT")
 
     main_api_base_url: str = Field(
-        default="http://52.86.8.11",
+        default="http://3.212.166.108",
         alias="MAIN_API_BASE_URL",
     )
     main_api_places_search_path: str = Field(
@@ -71,9 +71,49 @@ class Settings(BaseSettings):
     pgvector_ssl_mode: str = Field(default="require", alias="PGVECTOR_SSL_MODE")
     pgvector_places_table: str = "place_embeddings"
     pgvector_posts_table: str = "post_embeddings"
-    embedding_dimension: int = Field(default=16, alias="EMBEDDING_DIMENSION")
-    embedding_model: str = Field(default="mock-embedding", alias="EMBEDDING_MODEL")
-    embedding_version: str = Field(default="v1", alias="EMBEDDING_VERSION")
+    embedding_provider: str = Field(default="fasttext", alias="EMBEDDING_PROVIDER")
+    embedding_dimension: int = Field(default=300, alias="EMBEDDING_DIMENSION")
+    embedding_model: str = Field(
+        default="facebook/fasttext-es-vectors",
+        alias="EMBEDDING_MODEL",
+    )
+    embedding_version: str = Field(default="common-crawl-300-v1", alias="EMBEDDING_VERSION")
+    fasttext_model_path: str = Field(
+        default=".models/fasttext-es/model.bin",
+        alias="FASTTEXT_MODEL_PATH",
+    )
+    fasttext_model_repo_id: str = Field(
+        default="facebook/fasttext-es-vectors",
+        alias="FASTTEXT_MODEL_REPO_ID",
+    )
+    fasttext_model_filename: str = Field(
+        default="model.bin",
+        alias="FASTTEXT_MODEL_FILENAME",
+    )
+    fasttext_auto_download: bool = Field(
+        default=True,
+        alias="FASTTEXT_AUTO_DOWNLOAD",
+    )
+
+    bm25_k1: float = Field(default=1.5, gt=0, alias="BM25_K1")
+    bm25_b: float = Field(default=0.75, ge=0, le=1, alias="BM25_B")
+    bm25_relevance_threshold: float = Field(
+        default=3.0,
+        gt=0,
+        alias="BM25_RELEVANCE_THRESHOLD",
+    )
+    semantic_no_match_threshold: float = Field(
+        default=0.30,
+        ge=-1,
+        le=1,
+        alias="SEMANTIC_NO_MATCH_THRESHOLD",
+    )
+    semantic_relevance_threshold: float = Field(
+        default=0.50,
+        ge=-1,
+        le=1,
+        alias="SEMANTIC_RELEVANCE_THRESHOLD",
+    )
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     request_timeout_seconds: int = Field(default=10, alias="REQUEST_TIMEOUT_SECONDS")

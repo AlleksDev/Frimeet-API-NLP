@@ -19,3 +19,4 @@ build/
 .vscode/
 chroma/
 chroma_data/
+.models/

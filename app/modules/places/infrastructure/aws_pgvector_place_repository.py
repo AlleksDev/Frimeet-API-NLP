@@ -7,6 +7,8 @@ from app.shared.vector_store.models import VectorMatch
 
 
 class AwsPgvectorPlaceRepository(PlaceVectorRepository):
+    source_name = "pgvector"
+
     def __init__(self, vector_client: AwsPgvectorClient) -> None:
         self._vector_client = vector_client
 
