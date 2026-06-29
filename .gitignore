@@ -20,3 +20,4 @@ build/
 chroma/
 chroma_data/
 .models/
+*.pyc
