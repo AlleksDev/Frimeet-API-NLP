@@ -101,6 +101,9 @@ async def _flush_batch(
                 model=settings.embedding_model,
                 version=settings.embedding_version,
                 dimension=settings.embedding_dimension,
+                provider=settings.embedding_provider,
+                query_prefix=settings.sentence_transformer_query_prefix,
+                document_prefix=settings.sentence_transformer_document_prefix,
             )
             for record in batch
         }
@@ -113,7 +116,7 @@ async def _flush_batch(
         if not changed:
             return
 
-        embeddings = embedding_provider.embed_batch(
+        embeddings = embedding_provider.embed_documents(
             [record.document for record in changed]
         )
         upserts = [

@@ -20,4 +20,6 @@ build/
 chroma/
 chroma_data/
 .models/
+artifacts/
+*-checkpoints/
 *.pyc

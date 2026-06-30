@@ -13,4 +13,6 @@ htmlcov/
 .codex/
 chroma_data/
 .models/
+artifacts/
+*-checkpoints/
 *.log

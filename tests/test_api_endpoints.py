@@ -20,7 +20,7 @@ def test_places_search_endpoint() -> None:
     payload = response.json()
     assert payload["query"] == "lugares tranquilos para cenar"
     assert payload["places"]
-    assert payload["metrics"]["engine"] == "fasttext_mean_embeddings"
+    assert payload["metrics"]["engine"] == "dense_semantic_embeddings"
     assert payload["metrics"]["candidate_retrieval"] == "mock_embeddings"
     assert payload["metrics"]["score_metric"] == "cosine_similarity"
     assert payload["metrics"]["ranking_parameters"] == {"dimension": 16.0}
@@ -109,7 +109,7 @@ def test_places_recommendations_returns_llm_message_and_semantic_metadata() -> N
     payload = response.json()
     assert payload["message"]
     assert payload["places"]
-    assert payload["metrics"]["engine"] == "fasttext_mean_embeddings"
+    assert payload["metrics"]["engine"] == "dense_semantic_embeddings"
     assert payload["metrics"]["score_metric"] == "cosine_similarity"
     assert payload["metrics"]["returned_count"] == len(payload["places"])
     assert payload["metrics"]["candidate_retrieval"] == "mock_embeddings"
@@ -118,7 +118,7 @@ def test_places_recommendations_returns_llm_message_and_semantic_metadata() -> N
     assert payload["metrics"]["scope"] == "current_query"
     assert payload["metrics"]["ground_truth_available"] is False
     assert "evaluation_metrics" not in payload
-    assert payload["metadata"]["ranking"] == "fasttext_mean_embeddings"
+    assert payload["metadata"]["ranking"] == "dense_semantic_embeddings"
     assert payload["metadata"]["response_mode"] == "confident"
     assert payload["metadata"]["used_llm"] is True
 

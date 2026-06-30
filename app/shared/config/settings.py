@@ -71,13 +71,19 @@ class Settings(BaseSettings):
     pgvector_ssl_mode: str = Field(default="require", alias="PGVECTOR_SSL_MODE")
     pgvector_places_table: str = "place_embeddings"
     pgvector_posts_table: str = "post_embeddings"
-    embedding_provider: str = Field(default="fasttext", alias="EMBEDDING_PROVIDER")
-    embedding_dimension: int = Field(default=300, alias="EMBEDDING_DIMENSION")
+    embedding_provider: str = Field(
+        default="sentence_transformer",
+        alias="EMBEDDING_PROVIDER",
+    )
+    embedding_dimension: int = Field(default=384, alias="EMBEDDING_DIMENSION")
     embedding_model: str = Field(
-        default="facebook/fasttext-es-vectors",
+        default="intfloat/multilingual-e5-small",
         alias="EMBEDDING_MODEL",
     )
-    embedding_version: str = Field(default="common-crawl-300-v1", alias="EMBEDDING_VERSION")
+    embedding_version: str = Field(
+        default="multilingual-e5-small-base-v1",
+        alias="EMBEDDING_VERSION",
+    )
     fasttext_model_path: str = Field(
         default=".models/fasttext-es/model.bin",
         alias="FASTTEXT_MODEL_PATH",
@@ -94,6 +100,45 @@ class Settings(BaseSettings):
         default=True,
         alias="FASTTEXT_AUTO_DOWNLOAD",
     )
+    sentence_transformer_model_path: str | None = Field(
+        default=None,
+        alias="SENTENCE_TRANSFORMER_MODEL_PATH",
+    )
+    sentence_transformer_cache_dir: str = Field(
+        default=".models/sentence-transformers",
+        alias="SENTENCE_TRANSFORMER_CACHE_DIR",
+    )
+    sentence_transformer_revision: str = Field(
+        default="main",
+        alias="SENTENCE_TRANSFORMER_REVISION",
+    )
+    sentence_transformer_auto_download: bool = Field(
+        default=True,
+        alias="SENTENCE_TRANSFORMER_AUTO_DOWNLOAD",
+    )
+    sentence_transformer_query_prefix: str = Field(
+        default="query: ",
+        alias="SENTENCE_TRANSFORMER_QUERY_PREFIX",
+    )
+    sentence_transformer_document_prefix: str = Field(
+        default="passage: ",
+        alias="SENTENCE_TRANSFORMER_DOCUMENT_PREFIX",
+    )
+    sentence_transformer_batch_size: int = Field(
+        default=32,
+        gt=0,
+        alias="SENTENCE_TRANSFORMER_BATCH_SIZE",
+    )
+    sentence_transformer_device: str = Field(
+        default="cpu",
+        alias="SENTENCE_TRANSFORMER_DEVICE",
+    )
+    sentence_transformer_max_sequence_length: int = Field(
+        default=256,
+        gt=0,
+        le=512,
+        alias="SENTENCE_TRANSFORMER_MAX_SEQUENCE_LENGTH",
+    )
 
     bm25_k1: float = Field(default=1.5, gt=0, alias="BM25_K1")
     bm25_b: float = Field(default=0.75, ge=0, le=1, alias="BM25_B")
@@ -103,13 +148,13 @@ class Settings(BaseSettings):
         alias="BM25_RELEVANCE_THRESHOLD",
     )
     semantic_no_match_threshold: float = Field(
-        default=0.30,
+        default=0.70,
         ge=-1,
         le=1,
         alias="SEMANTIC_NO_MATCH_THRESHOLD",
     )
     semantic_relevance_threshold: float = Field(
-        default=0.50,
+        default=0.80,
         ge=-1,
         le=1,
         alias="SEMANTIC_RELEVANCE_THRESHOLD",

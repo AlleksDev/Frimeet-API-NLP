@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS post_embeddings (
     external_id TEXT PRIMARY KEY,
     document TEXT NOT NULL,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    embedding VECTOR(300) NOT NULL,
+    embedding VECTOR(384) NOT NULL,
     content_hash TEXT NOT NULL,
     embedding_model TEXT NOT NULL,
     embedding_version TEXT NOT NULL,
@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS post_embeddings (
 );
 ```
 
-`VECTOR(300)` corresponde al modelo preentrenado
-`facebook/fasttext-es-vectors` usado por `FastTextEmbeddingProvider`.
+`VECTOR(384)` corresponde al encoder de recuperación E5 usado por
+`SentenceTransformerEmbeddingProvider`.
 
 ## Columnas
 
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS post_embeddings (
 | `external_id` | `TEXT` | ID del post en la API principal. |
 | `document` | `TEXT` | Texto construido para generar el embedding. |
 | `metadata` | `JSONB` | Datos estructurados utiles para filtros y respuesta. |
-| `embedding` | `VECTOR(300)` | Promedio normalizado de embeddings FastText del `document`. |
+| `embedding` | `VECTOR(384)` | Embedding contextual L2-normalizado del `document`. |
 | `content_hash` | `TEXT` | SHA-256 del contenido y la configuracion/version del embedding. |
 | `embedding_model` | `TEXT` | Nombre del modelo usado para generar embeddings. |
 | `embedding_version` | `TEXT` | Version logica del embedding. |
@@ -75,9 +75,9 @@ Plan de cafe Tuxtla Gutierrez Chiapas internal cafe amigos Una publicacion para 
 ```json
 {
   "source_content_hash": "...",
-  "embedding_model": "facebook/fasttext-es-vectors",
-  "embedding_version": "common-crawl-300-v1",
-  "embedding_dimension": 300
+  "embedding_model": "intfloat/multilingual-e5-small",
+  "embedding_version": "multilingual-e5-small-base-v1",
+  "embedding_dimension": 384
 }
 ```
 
@@ -88,7 +88,7 @@ Si el hash no cambia, el job omite regenerar embedding.
 La API NLP usa:
 
 ```sql
-match_posts(query_embedding VECTOR(300), match_count INTEGER, filters JSONB)
+match_posts(query_embedding VECTOR(384), match_count INTEGER, filters JSONB)
 ```
 
 Los jobs usan:
@@ -98,7 +98,7 @@ upsert_post_embedding(
     p_external_id TEXT,
     p_document TEXT,
     p_metadata JSONB,
-    p_embedding VECTOR(300),
+    p_embedding VECTOR(384),
     p_content_hash TEXT,
     p_embedding_model TEXT,
     p_embedding_version TEXT,

@@ -1,4 +1,9 @@
-# Migracion FastText Con pgAdmin Y Google Colab
+# Migracion FastText Con pgAdmin Y Google Colab (Legado)
+
+> No ejecutar para la version E5. Este archivo documenta la migracion anterior a
+> `VECTOR(300)`. Para el estado actual usa
+> `docs/sentence_transformer_finetuning.md` y
+> `sql/pgadmin_migrate_sentence_transformer_384.sql`.
 
 ## 1. Antes De Modificar RDS
 

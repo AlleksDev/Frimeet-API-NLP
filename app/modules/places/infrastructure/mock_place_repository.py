@@ -178,7 +178,7 @@ class MockPlaceVectorRepository(PlaceVectorRepository):
                 {
                     "place": place,
                     "document": searchable_text,
-                    "embedding": embedding_provider.embed_text(
+                    "embedding": embedding_provider.embed_document(
                         prepare_for_embedding(searchable_text)
                     ),
                 }

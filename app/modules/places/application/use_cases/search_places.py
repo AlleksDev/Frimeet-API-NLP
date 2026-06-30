@@ -51,7 +51,7 @@ class SearchPlacesUseCase:
     ) -> SearchPlacesResult:
         normalized_query = prepare_for_embedding(query)
         cache_key = self._cache_key(
-            normalized_query,
+            query,
             filters,
             limit,
             latitude,
@@ -84,7 +84,9 @@ class SearchPlacesUseCase:
                 place_ids=tuple(sorted(nearby_ids)),
             )
 
-        query_embedding = self._embedding_provider.embed_text(normalized_query)
+        # Contextual encoders benefit from the original accents and word order.
+        # The normalized form remains available for lexical metrics and ranking.
+        query_embedding = self._embedding_provider.embed_query(query)
         candidates = await self._place_repository.search(
             embedding=query_embedding,
             filters=effective_filters,

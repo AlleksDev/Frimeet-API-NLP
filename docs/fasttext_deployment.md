@@ -1,4 +1,8 @@
-# Migracion Y Despliegue De FastText
+# Migracion Y Despliegue De FastText (Legado)
+
+> Este procedimiento conserva el historial de la migracion anterior. El despliegue
+> actual usa E5/Sentence Transformers; consulta
+> `docs/sentence_transformer_finetuning.md` y no vuelvas a ejecutar esta migracion.
 
 Esta migracion cambia los vectores derivados de 16 dimensiones mock a embeddings
 FastText reales de 300 dimensiones. No cambia ningun contrato HTTP.

@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from app.shared.cache.memory import SimpleTTLCache
 from app.shared.nlp.embeddings.base import EmbeddingProvider
 
@@ -12,14 +14,31 @@ class CachedEmbeddingProvider(EmbeddingProvider):
         self._cache = cache
 
     def embed_text(self, text: str) -> list[float]:
-        cache_key = f"embedding:{text}"
+        return self.embed_document(text)
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._get_or_create("query", text, self._provider.embed_query)
+
+    def embed_document(self, text: str) -> list[float]:
+        return self._get_or_create("document", text, self._provider.embed_document)
+
+    def _get_or_create(
+        self,
+        kind: str,
+        text: str,
+        embed: Callable[[str], list[float]],
+    ) -> list[float]:
+        cache_key = f"embedding:{kind}:{text}"
         cached = self._cache.get(cache_key)
         if cached is not None:
             return cached
 
-        embedding = self._provider.embed_text(text)
+        embedding = embed(text)
         self._cache.set(cache_key, embedding)
         return embedding
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed_text(text) for text in texts]
+        return self.embed_documents(texts)
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self.embed_document(text) for text in texts]

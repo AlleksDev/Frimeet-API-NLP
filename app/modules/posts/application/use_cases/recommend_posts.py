@@ -36,13 +36,13 @@ class RecommendPostsUseCase:
         limit: int = 10,
     ) -> RecommendPostsResult:
         normalized_query = prepare_for_embedding(query)
-        cache_key = f"posts:{normalized_query}:{city}:{limit}"
+        cache_key = f"posts:{query}:{city}:{limit}"
         if self._cache:
             cached = self._cache.get(cache_key)
             if cached is not None:
                 return cached
 
-        query_embedding = self._embedding_provider.embed_text(normalized_query)
+        query_embedding = self._embedding_provider.embed_query(query)
         candidates = await self._post_repository.search(
             embedding=query_embedding,
             city=city,

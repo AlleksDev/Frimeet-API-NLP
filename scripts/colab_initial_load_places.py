@@ -1,4 +1,4 @@
-"""Carga inicial de embeddings FastText de lugares desde Google Colab.
+"""Carga inicial de embeddings E5/Sentence-Transformers desde Google Colab.
 
 Ejecutar desde la raiz de un clon de este repositorio:
 
@@ -75,7 +75,7 @@ def _is_repository_root(path: Path) -> bool:
 
 
 REPO_ROOT = _find_repo_root()
-DEFAULT_MODEL_PATH = "/content/fasttext-es/model.bin"
+DEFAULT_MODEL_CACHE = "/content/sentence-transformers"
 
 
 def main() -> None:
@@ -102,20 +102,20 @@ def main() -> None:
     _check_pgvector_network()
 
     if not args.skip_download:
-        print("[3/4] Descargando o reutilizando el modelo FastText...", flush=True)
+        print("[3/4] Descargando o reutilizando el encoder E5...", flush=True)
         _run(
             sys.executable,
             "-m",
-            "app.shared.nlp.embeddings.download_fasttext_model",
+            "app.shared.nlp.embeddings.download_sentence_transformer_model",
             "--repo-id",
-            os.environ["FASTTEXT_MODEL_REPO_ID"],
-            "--filename",
-            os.environ["FASTTEXT_MODEL_FILENAME"],
-            "--destination",
-            os.environ["FASTTEXT_MODEL_PATH"],
+            os.environ["EMBEDDING_MODEL"],
+            "--revision",
+            os.environ["SENTENCE_TRANSFORMER_REVISION"],
+            "--cache-dir",
+            os.environ["SENTENCE_TRANSFORMER_CACHE_DIR"],
         )
     else:
-        print("[3/4] Reutilizando el modelo FastText descargado.", flush=True)
+        print("[3/4] Reutilizando el encoder E5 descargado.", flush=True)
 
     command = [
         sys.executable,
@@ -132,7 +132,7 @@ def main() -> None:
         command.append("--dry-run")
 
     print(
-        "[4/4] Cargando FastText y sincronizando lugares. "
+        "[4/4] Cargando E5 y sincronizando lugares. "
         "La carga inicial del modelo puede tardar varios minutos...",
         flush=True,
     )
@@ -154,14 +154,18 @@ def _configure_environment() -> None:
         "PGVECTOR_DATABASE": "nlp_vectors",
         "PGVECTOR_WRITER_USER": "nlp_writer",
         "PGVECTOR_SSL_MODE": "require",
-        "EMBEDDING_PROVIDER": "fasttext",
-        "EMBEDDING_DIMENSION": "300",
-        "EMBEDDING_MODEL": "facebook/fasttext-es-vectors",
-        "EMBEDDING_VERSION": "common-crawl-300-v1",
-        "FASTTEXT_MODEL_PATH": DEFAULT_MODEL_PATH,
-        "FASTTEXT_MODEL_REPO_ID": "facebook/fasttext-es-vectors",
-        "FASTTEXT_MODEL_FILENAME": "model.bin",
-        "FASTTEXT_AUTO_DOWNLOAD": "false",
+        "EMBEDDING_PROVIDER": "sentence_transformer",
+        "EMBEDDING_DIMENSION": "384",
+        "EMBEDDING_MODEL": "intfloat/multilingual-e5-small",
+        "EMBEDDING_VERSION": "multilingual-e5-small-base-v1",
+        "SENTENCE_TRANSFORMER_CACHE_DIR": DEFAULT_MODEL_CACHE,
+        "SENTENCE_TRANSFORMER_REVISION": "main",
+        "SENTENCE_TRANSFORMER_AUTO_DOWNLOAD": "false",
+        "SENTENCE_TRANSFORMER_QUERY_PREFIX": "query: ",
+        "SENTENCE_TRANSFORMER_DOCUMENT_PREFIX": "passage: ",
+        "SENTENCE_TRANSFORMER_BATCH_SIZE": "32",
+        "SENTENCE_TRANSFORMER_DEVICE": "cuda",
+        "SENTENCE_TRANSFORMER_MAX_SEQUENCE_LENGTH": "256",
         "LOG_LEVEL": "INFO",
     }
     for name, default in defaults.items():
@@ -262,7 +266,7 @@ def _run(*command: str) -> None:
         raise RuntimeError(
             f"Fallo el comando con codigo {exc.returncode}: {executable}. "
             "Revisa la salida inmediatamente anterior; si API y red aparecen OK, "
-            "verifica la password/permisos de nlp_writer y la migracion VECTOR(300)."
+            "verifica la password/permisos de nlp_writer y la migracion VECTOR(384)."
         ) from exc
 
 

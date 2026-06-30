@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS place_embeddings (
     external_id TEXT PRIMARY KEY,
     document TEXT NOT NULL,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    embedding VECTOR(300) NOT NULL,
+    embedding VECTOR(384) NOT NULL,
     content_hash TEXT NOT NULL,
     embedding_model TEXT NOT NULL,
     embedding_version TEXT NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS post_embeddings (
     external_id TEXT PRIMARY KEY,
     document TEXT NOT NULL,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    embedding VECTOR(300) NOT NULL,
+    embedding VECTOR(384) NOT NULL,
     content_hash TEXT NOT NULL,
     embedding_model TEXT NOT NULL,
     embedding_version TEXT NOT NULL,
@@ -40,7 +40,7 @@ CREATE INDEX IF NOT EXISTS post_embeddings_metadata_gin_idx
 ON post_embeddings USING gin (metadata);
 
 CREATE OR REPLACE FUNCTION match_places(
-    query_embedding VECTOR(300),
+    query_embedding VECTOR(384),
     match_count INTEGER,
     filters JSONB DEFAULT '{}'::jsonb
 )
@@ -77,7 +77,7 @@ AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION match_posts(
-    query_embedding VECTOR(300),
+    query_embedding VECTOR(384),
     match_count INTEGER,
     filters JSONB DEFAULT '{}'::jsonb
 )
@@ -109,7 +109,7 @@ CREATE OR REPLACE FUNCTION upsert_place_embedding(
     p_external_id TEXT,
     p_document TEXT,
     p_metadata JSONB,
-    p_embedding VECTOR(300),
+    p_embedding VECTOR(384),
     p_content_hash TEXT,
     p_embedding_model TEXT,
     p_embedding_version TEXT,
@@ -157,7 +157,7 @@ CREATE OR REPLACE FUNCTION upsert_post_embedding(
     p_external_id TEXT,
     p_document TEXT,
     p_metadata JSONB,
-    p_embedding VECTOR(300),
+    p_embedding VECTOR(384),
     p_content_hash TEXT,
     p_embedding_model TEXT,
     p_embedding_version TEXT,

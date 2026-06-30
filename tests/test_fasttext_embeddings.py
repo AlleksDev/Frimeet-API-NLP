@@ -48,3 +48,26 @@ def test_embedding_hash_changes_with_model_configuration() -> None:
     second = versioned_embedding_hash("source", "fasttext", "v2", 300)
 
     assert first != second
+
+
+def test_embedding_hash_changes_with_retrieval_prefixes() -> None:
+    first = versioned_embedding_hash(
+        "source",
+        "intfloat/multilingual-e5-small",
+        "v1",
+        384,
+        provider="sentence_transformer",
+        query_prefix="query: ",
+        document_prefix="passage: ",
+    )
+    second = versioned_embedding_hash(
+        "source",
+        "intfloat/multilingual-e5-small",
+        "v1",
+        384,
+        provider="sentence_transformer",
+        query_prefix="consulta: ",
+        document_prefix="passage: ",
+    )
+
+    assert first != second

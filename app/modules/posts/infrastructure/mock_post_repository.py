@@ -40,7 +40,7 @@ class MockPostVectorRepository(PostVectorRepository):
             self._records.append(
                 {
                     "post": post,
-                    "embedding": embedding_provider.embed_text(
+                    "embedding": embedding_provider.embed_document(
                         prepare_for_embedding(searchable_text)
                     ),
                 }

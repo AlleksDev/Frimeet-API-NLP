@@ -10,11 +10,11 @@ from app.modules.places.infrastructure.place_semantic_document import (
 class SemanticPlaceRanker(PlaceRanker):
     """Preserve the cosine-similarity order returned by PGVector."""
 
-    engine_name = "fasttext_mean_embeddings"
+    engine_name = "dense_semantic_embeddings"
     score_metric = "cosine_similarity"
     field_weights = PLACE_SEMANTIC_FIELD_WEIGHTS
 
-    def __init__(self, dimension: int = 300) -> None:
+    def __init__(self, dimension: int = 384) -> None:
         self.ranking_parameters = {"dimension": float(dimension)}
 
     def rank(

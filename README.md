@@ -7,7 +7,7 @@ pinned: false
 
 # Frimeet API NLP
 
-Servicio NLP independiente para busqueda semantica con FastText + pgvector, recomendaciones y redaccion conversacional con Llama via Groq.
+Servicio NLP independiente para busqueda semantica con Sentence Transformers/E5 + pgvector, recomendaciones y redaccion conversacional con Llama via Groq.
 
 La API principal sigue siendo la fuente de verdad de lugares, posts, usuarios, sesiones, permisos y reportes. Este servicio NLP solo trabaja con datos derivados para busqueda semantica.
 
@@ -21,7 +21,7 @@ API principal
 Hugging Face API NLP
   |-- usa credenciales nlp_reader
   |-- consulta RDS PostgreSQL + pgvector
-  |-- genera el embedding FastText del query del usuario
+  |-- genera el embedding E5 del query del usuario
   |-- ordena por similitud coseno en pgvector
   `-- usa Groq/Llama para embellecer recomendaciones y chat
 
@@ -74,10 +74,19 @@ PGVECTOR_WRITER_USER=nlp_writer
 PGVECTOR_WRITER_PASSWORD=CAMBIA_ESTA_PASSWORD_WRITER
 PGVECTOR_SSL_MODE=require
 
-EMBEDDING_PROVIDER=fasttext
-EMBEDDING_DIMENSION=300
-EMBEDDING_MODEL=facebook/fasttext-es-vectors
-EMBEDDING_VERSION=common-crawl-300-v1
+EMBEDDING_PROVIDER=sentence_transformer
+EMBEDDING_DIMENSION=384
+EMBEDDING_MODEL=intfloat/multilingual-e5-small
+EMBEDDING_VERSION=multilingual-e5-small-base-v1
+SENTENCE_TRANSFORMER_MODEL_PATH=
+SENTENCE_TRANSFORMER_CACHE_DIR=.models/sentence-transformers
+SENTENCE_TRANSFORMER_REVISION=main
+SENTENCE_TRANSFORMER_AUTO_DOWNLOAD=true
+SENTENCE_TRANSFORMER_QUERY_PREFIX="query: "
+SENTENCE_TRANSFORMER_DOCUMENT_PREFIX="passage: "
+SENTENCE_TRANSFORMER_BATCH_SIZE=32
+SENTENCE_TRANSFORMER_DEVICE=cpu
+SENTENCE_TRANSFORMER_MAX_SEQUENCE_LENGTH=256
 FASTTEXT_MODEL_PATH=.models/fasttext-es/model.bin
 FASTTEXT_MODEL_REPO_ID=facebook/fasttext-es-vectors
 FASTTEXT_MODEL_FILENAME=model.bin
@@ -86,8 +95,8 @@ FASTTEXT_AUTO_DOWNLOAD=true
 BM25_K1=1.5
 BM25_B=0.75
 BM25_RELEVANCE_THRESHOLD=3.0
-SEMANTIC_NO_MATCH_THRESHOLD=0.30
-SEMANTIC_RELEVANCE_THRESHOLD=0.50
+SEMANTIC_NO_MATCH_THRESHOLD=0.70
+SEMANTIC_RELEVANCE_THRESHOLD=0.80
 
 LOG_LEVEL=INFO
 REQUEST_TIMEOUT_SECONDS=10
@@ -139,10 +148,9 @@ El proyecto incluye `Dockerfile` para Hugging Face Spaces. El contenedor expone 
 uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}
 ```
 
-Durante el build, Docker descarga `model.bin` desde el repositorio oficial
-`facebook/fasttext-es-vectors` y lo guarda en `/opt/models/fasttext-es/model.bin`.
-La capa queda cacheada, por lo que un cambio normal de codigo no vuelve a descargar
-el modelo de varios GB.
+Durante el build, Docker precarga `intfloat/multilingual-e5-small` en una capa
+cacheada. El modelo afinado se puede seleccionar con `EMBEDDING_MODEL`; consulta
+`docs/sentence_transformer_finetuning.md` para entrenamiento y despliegue.
 
 ## Endpoints
 
@@ -201,43 +209,38 @@ docs/pgvector_post_embeddings_schema.md
 
 Ese SQL debe ejecutarse una vez con un rol administrador/DBA fuera de Hugging Face. La API NLP usa solo `nlp_reader`; los jobs usan solo `nlp_writer`.
 
-### Migracion De VECTOR(16) A FastText VECTOR(300)
+### Migracion De FastText VECTOR(300) A E5 VECTOR(384)
 
-La guia operativa completa esta en `docs/fasttext_deployment.md`.
+La guia completa de modelo, dataset, entrenamiento, PGVector y Space esta en
+`docs/sentence_transformer_finetuning.md`.
 
-Los vectores son datos derivados. Para esta migracion no se intenta convertir los
-16 valores mock en 300 valores semanticos: se vacian ambas tablas y se reconstruyen
-desde la API principal.
+Los vectores son indices derivados y no se pueden convertir entre modelos. Con el
+Space y los jobs pausados, ejecuta desde pgAdmin:
 
-Con la API NLP y los jobs pausados, ejecuta como `nlp_owner` o administrador:
-
-```powershell
-psql "host=<host> port=5432 dbname=nlp_vectors user=<admin> sslmode=require" -f sql/migrate_fasttext_300.sql
-psql "host=<host> port=5432 dbname=nlp_vectors user=<admin> sslmode=require" -f sql/aws_pgvector_contract.sql
+```text
+sql/pgadmin_migrate_sentence_transformer_384.sql
 ```
 
-Despues configura las variables FastText, despliega la nueva imagen y repuebla:
+La migracion vacia solamente `place_embeddings` y `post_embeddings`, cambia ambas
+columnas a `VECTOR(384)` y reconstruye funciones, indices y permisos. Despues repuebla
+ambas tablas con los scripts de Colab y ejecuta:
 
-```powershell
-python -m app.jobs.initial_load_place_embeddings
-python -m app.jobs.initial_load_post_embeddings
-psql "host=<host> port=5432 dbname=nlp_vectors user=<admin> sslmode=require" -f sql/verify_fasttext_embeddings.sql
+```text
+sql/verify_sentence_transformer_embeddings.sql
 ```
 
-La verificacion debe reportar dimension `300`, modelo
-`facebook/fasttext-es-vectors` y normas cercanas a `1`.
+No repitas la migracion una vez que las columnas sean `VECTOR(384)`.
 
-## Ranking Semantico FastText Y Llama Via Groq
+## Ranking Semantico E5 Y Llama Via Groq
 
-`/places/search` y `/places/recommendations` aplican el flujo de
-`Lab5_Embeddings_Busqueda_Semantica.ipynb`: tokenizan el texto, obtienen los vectores
-FastText de cada termino, calculan su promedio, normalizan el documento y consultan
-pgvector mediante similitud coseno. FastText usa subpalabras, por lo que puede relacionar
-variantes morfologicas y palabras fuera de vocabulario.
+`/places/search` y `/places/recommendations` generan embeddings contextuales con un
+encoder E5. Las consultas usan el prefijo `query:` y los documentos almacenados usan
+`passage:`. Ambos vectores se normalizan y PGVector ordena por similitud coseno.
 
-Las requests y responses HTTP no cambian. Las metricas existentes ahora describen el
-motor `fasttext_mean_embeddings`, similitud coseno y dimension 300. `match_quality`
-usa `SEMANTIC_NO_MATCH_THRESHOLD` y `SEMANTIC_RELEVANCE_THRESHOLD`.
+Las requests y responses HTTP no cambian. Las metricas describen el motor
+`dense_semantic_embeddings`, similitud coseno y dimension 384. `match_quality` usa
+`SEMANTIC_NO_MATCH_THRESHOLD` y `SEMANTIC_RELEVANCE_THRESHOLD`; estos umbrales deben
+calibrarse nuevamente cuando se publica una version afinada.
 
 Ambos endpoints aceptan filtro geografico mediante `lat`, `lng` y `radius` en metros. Cuando se proporcionan coordenadas, el servicio NLP consulta `GET /api/v1/places/nearby` en la API principal y limita pgvector a los IDs devueltos. Las coordenadas siguen perteneciendo a la API principal; no es necesario guardarlas en pgvector, truncar tablas ni regenerar embeddings.
 
@@ -263,8 +266,8 @@ Llama solo embellece el tono y recibe exclusivamente los lugares seleccionados.
 
 Los IDs numericos de tags devueltos por la API principal se resuelven mediante el
 catalogo versionado en `app/modules/places/infrastructure/place_tag_catalog.json`.
-El documento que se envia a FastText contiene exclusivamente señales semanticas y
-aplica estos pesos mediante repeticion antes del promedio de embeddings:
+El documento que se envia al encoder contiene exclusivamente señales semanticas y
+aplica estos pesos mediante repeticion antes de generar el embedding contextual:
 
 ```text
 tags x6, category x4, description x3, name x1
@@ -275,7 +278,7 @@ ciudad, estado, `source`, precio e IDs desconocidos permanecen fuera del embeddi
 siguen disponibles como metadatos o filtros cuando corresponde. La version interna
 `weighted-tags-v2` forma parte del hash del documento, por lo que ejecutar nuevamente
 `initial_load_place_embeddings` actualiza todas las filas por `UPSERT` sin truncar la
-tabla ni cambiar `VECTOR(300)`.
+tabla ni cambiar `VECTOR(384)`.
 
 `GET` o `POST /places/search/metrics?k=5` conserva un benchmark offline separado llamado `built_in_places_v3_bm25`. Contiene doce lugares controlados, diez consultas y qrels graduados para calcular honestamente `Precision@k`, `Recall@k`, `MRR`, `MAP` y `nDCG@k`. Estas metricas requieren juicios de relevancia y por eso no se presentan como si midieran una consulta arbitraria de produccion.
 
@@ -287,7 +290,7 @@ GET /places/search/metrics?k=5
 
 Para actualizar funciones o permisos sin cambiar nuevamente la dimension, vuelve a
 ejecutar `sql/aws_pgvector_contract.sql`. No repitas la migracion destructiva una vez
-que las columnas ya sean `VECTOR(300)`.
+que las columnas ya sean `VECTOR(384)`.
 
 Groq/Llama se usa en `/places/recommendations` y `/places/chat` para redactar una respuesta conversacional. No decide que lugares recomendar, no hace busqueda y no inventa lugares.
 
