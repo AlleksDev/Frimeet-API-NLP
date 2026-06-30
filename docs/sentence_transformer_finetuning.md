@@ -58,6 +58,30 @@ Ejemplo:
 El archivo `examples/training/place_retrieval.example.jsonl` solo ilustra el formato.
 Sus IDs son ficticios y no debe usarse para entrenar el modelo desplegado.
 
+Para crear una primera propuesta balanceada desde el corpus real:
+
+```powershell
+python scripts/build_place_retrieval_labels.py `
+  --input ..\place_corpus.jsonl `
+  --output ..\frimeet_retrieval_weak_labels.jsonl `
+  --review-csv ..\frimeet_retrieval_review.csv `
+  --report ..\frimeet_retrieval_labeling_report.json
+```
+
+El JSONL generado ya cumple el esquema, pero contiene etiquetas debiles. Abrir el CSV,
+revisar positivo y negativo, y cambiar `review_status` de `pending` a `approved` o
+`rejected`. Después construir el dataset final:
+
+```powershell
+python scripts/finalize_place_retrieval_labels.py `
+  --labels ..\frimeet_retrieval_weak_labels.jsonl `
+  --review-csv ..\frimeet_retrieval_review.csv `
+  --output ..\frimeet_retrieval_final.jsonl
+```
+
+El finalizador se detiene si queda alguna fila pendiente y vuelve a validar splits,
+documentos e IDs antes de permitir el entrenamiento.
+
 ### Como Obtener Los Textos
 
 Los textos positivo y negativo deben salir de la misma funcion que alimenta PGVector:
