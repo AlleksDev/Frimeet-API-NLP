@@ -156,6 +156,7 @@ POST /places/recommendations
 POST /places/chat
 POST /posts/recommendations
 GET  /posts/clusters
+POST /search
 ```
 
 ## Sync Jobs
@@ -165,6 +166,7 @@ Probar sin escribir:
 ```powershell
 python -m app.jobs.sync_place_embeddings --dry-run --max-pages 1
 python -m app.jobs.sync_post_embeddings --dry-run --max-pages 1
+python -m app.jobs.sync_search_embeddings --resource all --dry-run --max-pages 1
 ```
 
 Primera carga:
@@ -172,6 +174,7 @@ Primera carga:
 ```powershell
 python -m app.jobs.initial_load_place_embeddings
 python -m app.jobs.initial_load_post_embeddings
+python -m app.jobs.initial_load_search_embeddings --resource all
 ```
 
 Sincronizaciones posteriores:
@@ -179,10 +182,38 @@ Sincronizaciones posteriores:
 ```powershell
 python -m app.jobs.sync_place_embeddings
 python -m app.jobs.sync_post_embeddings
+python -m app.jobs.sync_search_embeddings --resource all
 ```
 
 Los jobs calculan un `content_hash` versionado con el contenido, modelo, version y
 dimension. Un cambio de modelo fuerza la regeneracion aunque el texto no haya cambiado.
+
+## Busqueda Global Hibrida
+
+`POST /search` consulta lugares, posts, usuarios, clubes, grupos y eventos en paralelo.
+El query genera un solo embedding FastText. Cada proveedor combina similitud coseno con
+full-text search de PostgreSQL mediante Reciprocal Rank Fusion y el caso de uso devuelve
+un `top_results` diversificado mas una seccion independiente por recurso.
+
+```json
+{
+  "query": "club universitario de ajedrez",
+  "resource_types": ["clubs", "groups", "events", "users"],
+  "per_type_limit": 5,
+  "top_limit": 10,
+  "requester_id": "b83ab97e-91a4-4f69-b102-b27c6092e9cb"
+}
+```
+
+`requester_id` debe provenir de la identidad autenticada por la API principal, nunca de
+texto libre enviado directamente por la app. Cuando se envia, la llamada tambien debe
+incluir `X-Search-Internal-Token` con el valor de `SEARCH_INTERNAL_TOKEN`. Los grupos privados solo son recuperables
+por su creador, miembros agregados o invitados. Clubes privados y eventos no publicos
+permanecen ocultos mientras la API principal no entregue una lista de usuarios autorizados.
+
+El indice de usuarios excluye correo, fecha de nacimiento, genero y ubicacion actual. Los
+IDs de tags de eventos se conservan como metadatos; para aportar significado semantico la
+API principal debe enviar tambien sus nombres.
 
 ## SQL RDS
 

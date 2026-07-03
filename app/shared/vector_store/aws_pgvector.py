@@ -15,7 +15,12 @@ from app.shared.vector_store.sql import quote_identifier, vector_literal
 READ_CONTRACT_SIGNATURES = {
     "match_places": "match_places(vector, integer, jsonb)",
     "match_posts": "match_posts(vector, integer, jsonb)",
+    "search_resource_embeddings": (
+        "search_resource_embeddings(text, text, vector, integer, jsonb)"
+    ),
 }
+
+SEARCH_RESOURCE_TYPES = frozenset({"places", "posts", "users", "clubs", "groups", "events"})
 
 
 class AwsPgvectorClient:
@@ -60,6 +65,38 @@ class AwsPgvectorClient:
             filters=filters,
             limit=limit,
         )
+
+    async def search_resource_embeddings(
+        self,
+        resource_type: str,
+        query_text: str,
+        embedding: list[float],
+        filters: dict[str, Any],
+        limit: int,
+    ) -> list[VectorMatch]:
+        _validate_resource_type(resource_type)
+        query = (
+            "SELECT * FROM search_resource_embeddings("
+            "$1::text, $2::text, $3::vector, $4::integer, $5::jsonb)"
+        )
+        try:
+            async with self.connection() as connection:
+                rows = await connection.fetch(
+                    query,
+                    resource_type,
+                    query_text,
+                    vector_literal(embedding),
+                    limit,
+                    json.dumps(filters, ensure_ascii=False),
+                )
+        except asyncpg.exceptions.UndefinedFunctionError as exc:
+            raise AppError(
+                "Hybrid search SQL contract is missing. Run "
+                "sql/aws_pgvector_contract.sql and grant EXECUTE to nlp_reader.",
+                code="pgvector_hybrid_contract_missing",
+                status_code=503,
+            ) from exc
+        return [_row_to_vector_match(row) for row in rows]
 
     async def check_read_contract(self) -> dict[str, Any]:
         """Check that read-only pgvector functions are visible and executable."""
@@ -125,6 +162,27 @@ class AwsPgvectorClient:
             ids=ids,
         )
 
+    async def fetch_resource_content_hashes(
+        self,
+        resource_type: str,
+        ids: Iterable[str],
+    ) -> dict[str, str]:
+        _validate_resource_type(resource_type)
+        id_list = list(ids)
+        if not id_list:
+            return {}
+        async with self.connection() as connection:
+            rows = await connection.fetch(
+                "SELECT * FROM get_resource_content_hashes($1::text, $2::text[])",
+                resource_type,
+                id_list,
+            )
+        return {
+            str(row["external_id"]): str(row["content_hash"])
+            for row in rows
+            if row["content_hash"] is not None
+        }
+
     async def upsert_place_embeddings(
         self,
         records: list[VectorUpsertRecord],
@@ -142,6 +200,37 @@ class AwsPgvectorClient:
             function_name="upsert_post_embedding",
             records=records,
         )
+
+    async def upsert_resource_embeddings(
+        self,
+        resource_type: str,
+        records: list[VectorUpsertRecord],
+    ) -> None:
+        _validate_resource_type(resource_type)
+        if not records:
+            return
+        query = """
+            SELECT upsert_resource_embedding(
+                $1::text, $2::text, $3::text, $4::jsonb, $5::vector,
+                $6::text, $7::text, $8::text, $9::boolean
+            )
+        """
+        rows = [
+            (
+                resource_type,
+                record.id,
+                record.document,
+                json.dumps(record.metadata, ensure_ascii=False),
+                vector_literal(record.embedding),
+                record.content_hash,
+                self._settings.embedding_model,
+                self._settings.embedding_version,
+                record.is_active,
+            )
+            for record in records
+        ]
+        async with self.connection() as connection:
+            await connection.executemany(query, rows)
 
     async def _match(
         self,
@@ -235,7 +324,18 @@ def _row_to_vector_match(row: Any) -> VectorMatch:
         score=float(score or 0.0),
         metadata=dict(metadata),
         document=_row_value(row, "document"),
+        semantic_score=_optional_float(_row_value(row, "semantic_score")),
+        lexical_score=_optional_float(_row_value(row, "lexical_score")),
     )
+
+
+def _optional_float(value: Any) -> float | None:
+    return float(value) if value is not None else None
+
+
+def _validate_resource_type(resource_type: str) -> None:
+    if resource_type not in SEARCH_RESOURCE_TYPES:
+        raise ValueError(f"Unsupported search resource type: {resource_type}")
 
 
 def _row_value(row: Any, key: str, default: Any = None) -> Any:

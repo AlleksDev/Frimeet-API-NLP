@@ -1,0 +1,1 @@
+"""Club search indexing module."""
