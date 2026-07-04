@@ -1,0 +1,1 @@
+"""Event search indexing module."""

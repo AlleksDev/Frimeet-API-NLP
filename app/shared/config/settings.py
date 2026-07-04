@@ -31,14 +31,28 @@ class Settings(BaseSettings):
         default="/api/v1/posts/search",
         alias="MAIN_API_POSTS_SEARCH_PATH",
     )
+    main_api_users_search_path: str = Field(
+        default="/api/v1/users/search", alias="MAIN_API_USERS_SEARCH_PATH"
+    )
+    main_api_clubs_search_path: str = Field(
+        default="/api/v1/clubs/search", alias="MAIN_API_CLUBS_SEARCH_PATH"
+    )
+    main_api_groups_search_path: str = Field(
+        default="/api/v1/groups/search", alias="MAIN_API_GROUPS_SEARCH_PATH"
+    )
+    main_api_events_search_path: str = Field(
+        default="/api/v1/events/search", alias="MAIN_API_EVENTS_SEARCH_PATH"
+    )
     main_api_internal_token: str | None = Field(
         default=None,
         alias="MAIN_API_INTERNAL_TOKEN",
     )
     main_api_auth_token: str | None = Field(default=None, alias="MAIN_API_AUTH_TOKEN")
+    search_internal_token: str | None = Field(default=None, alias="SEARCH_INTERNAL_TOKEN")
     main_api_timeout_seconds: int = Field(default=15, alias="MAIN_API_TIMEOUT_SECONDS")
     main_api_places_page_limit: int = Field(default=100, alias="MAIN_API_PLACES_PAGE_LIMIT")
     main_api_posts_page_limit: int = Field(default=100, alias="MAIN_API_POSTS_PAGE_LIMIT")
+    main_api_search_page_limit: int = Field(default=100, alias="MAIN_API_SEARCH_PAGE_LIMIT")
     main_api_places_pagination_mode: str = Field(
         default="cursor",
         alias="MAIN_API_PLACES_PAGINATION_MODE",
@@ -46,6 +60,9 @@ class Settings(BaseSettings):
     main_api_posts_pagination_mode: str = Field(
         default="cursor",
         alias="MAIN_API_POSTS_PAGINATION_MODE",
+    )
+    main_api_search_pagination_mode: str = Field(
+        default="cursor", alias="MAIN_API_SEARCH_PAGINATION_MODE"
     )
 
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")

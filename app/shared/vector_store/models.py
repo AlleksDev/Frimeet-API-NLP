@@ -8,6 +8,8 @@ class VectorMatch:
     score: float
     metadata: dict[str, Any] = field(default_factory=dict)
     document: str | None = None
+    semantic_score: float | None = None
+    lexical_score: float | None = None
 
 
 @dataclass(frozen=True)

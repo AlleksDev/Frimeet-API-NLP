@@ -1,0 +1,1 @@
+"""Global search HTTP interface."""
