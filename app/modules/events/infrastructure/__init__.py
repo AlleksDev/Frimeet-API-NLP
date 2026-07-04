@@ -1,0 +1,1 @@
+"""Event indexing adapters."""
