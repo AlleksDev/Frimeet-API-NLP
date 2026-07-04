@@ -3,7 +3,10 @@ import secrets
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app.modules.search.api.dependencies import get_search_all_use_case
-from app.modules.search.api.cursor import decode_search_cursor
+from app.modules.search.api.cursor import (
+    build_search_cursor_context,
+    decode_search_cursor,
+)
 from app.modules.search.api.schemas import (
     GlobalSearchRequest,
     GlobalSearchResponse,
@@ -26,8 +29,9 @@ async def search_all(
     authorization: str | None = Header(default=None, alias="Authorization"),
     use_case: SearchAllUseCase = Depends(get_search_all_use_case),
 ) -> GlobalSearchResponse:
+    settings = get_settings()
     if payload.requester_id:
-        expected_token = get_settings().search_internal_token
+        expected_token = settings.search_internal_token
         bearer_token = _extract_bearer_token(authorization)
         if not expected_token or not bearer_token or not secrets.compare_digest(
             bearer_token, expected_token
@@ -41,12 +45,15 @@ async def search_all(
         if payload.resource_types
         else ALL_SEARCH_RESOURCE_TYPES
     )
+    cursor_context = build_search_cursor_context(
+        payload.cursor_context_payload(settings.global_search_nearby_boost)
+    )
     try:
         offsets = {
             resource_type: decode_search_cursor(
                 cursor=cursor,
                 resource_type=resource_type,
-                query=payload.query,
+                context_fingerprint=cursor_context,
             )
             for resource_type, cursor in payload.cursors.items()
         }
@@ -59,6 +66,8 @@ async def search_all(
         top_limit=payload.top_limit,
         requester_id=str(payload.requester_id) if payload.requester_id else None,
         offsets=offsets,
+        criteria=payload.to_domain_criteria(settings.global_search_nearby_boost),
+        cursor_context=cursor_context,
     )
     return result_to_schema(result)
 
