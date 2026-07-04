@@ -21,15 +21,19 @@ class PgvectorPlaceSearchProvider(SearchProvider):
         query: str,
         embedding: list[float],
         limit: int,
+        offset: int,
         requester_id: str | None,
     ) -> Sequence[SearchHit]:
         del query, requester_id
         matches = await self._vector_client.match_places(
             embedding=embedding,
             filters={"is_active": True},
-            limit=limit,
+            limit=offset + limit,
         )
-        return [_to_search_hit(self.resource_type, match) for match in matches]
+        return [
+            _to_search_hit(self.resource_type, match)
+            for match in matches[offset : offset + limit]
+        ]
 
 
 class PgvectorHybridSearchProvider(SearchProvider):
@@ -46,6 +50,7 @@ class PgvectorHybridSearchProvider(SearchProvider):
         query: str,
         embedding: list[float],
         limit: int,
+        offset: int,
         requester_id: str | None,
     ) -> Sequence[SearchHit]:
         filters = {"is_active": True}
@@ -56,9 +61,12 @@ class PgvectorHybridSearchProvider(SearchProvider):
             query_text=query,
             embedding=embedding,
             filters=filters,
-            limit=limit,
+            limit=offset + limit,
         )
-        return [_to_search_hit(self.resource_type, match) for match in matches]
+        return [
+            _to_search_hit(self.resource_type, match)
+            for match in matches[offset : offset + limit]
+        ]
 
 
 def _to_search_hit(resource_type: SearchResourceType, match: VectorMatch) -> SearchHit:

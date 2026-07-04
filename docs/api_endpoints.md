@@ -447,8 +447,13 @@ No recibe query parameters. Toda la entrada se envia en el body.
 | `per_type_limit` | `integer` | No | `5` | Entre 1 y 20 |
 | `top_limit` | `integer` | No | `10` | Entre 1 y 50 |
 | `requester_id` | `UUID \| null` | No | `null` | Activa busqueda privada |
+| `cursors` | `object` | No | `{}` | Cursor opaco por tipo de recurso |
 
 No se aceptan campos adicionales.
+
+En la primera solicitud se omite `cursors`. La respuesta incluye un bloque
+`pagination` independiente para cada recurso consultado. Cuando `has_more` es `true`,
+`next_cursor` se envia en la siguiente solicitud usando la misma consulta.
 
 #### Busqueda publica
 
@@ -522,6 +527,26 @@ debe obtenerlo de la sesion autenticada y construir la llamada interna.
     "events": [],
     "users": []
   },
+  "pagination": {
+    "clubs": {
+      "page_size": 5,
+      "returned_count": 1,
+      "has_more": false,
+      "next_cursor": null
+    },
+    "events": {
+      "page_size": 5,
+      "returned_count": 0,
+      "has_more": false,
+      "next_cursor": null
+    },
+    "users": {
+      "page_size": 5,
+      "returned_count": 0,
+      "has_more": false,
+      "next_cursor": null
+    }
+  },
   "metadata": {
     "strategy": "parallel_hybrid_fasttext_full_text_rrf",
     "queried_resources": ["clubs", "events", "users"],
@@ -533,6 +558,44 @@ debe obtenerlo de la sesion autenticada y construir la llamada interna.
 
 `top_results` es una seleccion global diversificada. `sections` conserva los resultados
 separados por tipo de recurso.
+
+#### Solicitar la siguiente pagina
+
+Cada recurso se pagina de manera independiente. Para cargar mas lugares, la interfaz
+debe reutilizar exactamente `query`, declarar `resource_types: ["places"]` y enviar el
+cursor recibido en `pagination.places.next_cursor`:
+
+```json
+{
+  "query": "cafeteria tranquila",
+  "resource_types": ["places"],
+  "per_type_limit": 5,
+  "top_limit": 5,
+  "cursors": {
+    "places": "CURSOR_DEVUELTO_POR_LA_PAGINA_ANTERIOR"
+  }
+}
+```
+
+La respuesta de cada seccion contiene:
+
+| Campo | Descripcion |
+| --- | --- |
+| `page_size` | Limite solicitado para esa pagina |
+| `returned_count` | Cantidad realmente devuelta |
+| `has_more` | Indica si existe al menos otra pagina |
+| `next_cursor` | Cursor opaco de continuacion o `null` si termino |
+
+Reglas de los cursores:
+
+- estan asociados al tipo de recurso y a la consulta normalizada;
+- no deben interpretarse ni construirse en la app cliente;
+- no pueden reutilizarse con otra consulta o con otro recurso;
+- cuando se envia `cursors`, `resource_types` es obligatorio y debe contener sus claves;
+- se pueden pedir varias continuaciones en una llamada enviando un cursor por recurso.
+
+El contrato SQL utiliza el ID externo como desempate estable cuando dos resultados tienen
+el mismo puntaje. Esto evita cambios arbitrarios de orden entre paginas consecutivas.
 
 Si falla un proveedor individual, los demas pueden responder normalmente. El recurso
 fallido aparece en `metadata.failed_resources`.

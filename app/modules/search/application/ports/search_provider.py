@@ -11,6 +11,7 @@ class SearchProvider(Protocol):
         query: str,
         embedding: list[float],
         limit: int,
+        offset: int,
         requester_id: str | None,
     ) -> Sequence[SearchHit]:
         """Return already-ranked candidates for exactly one resource type."""

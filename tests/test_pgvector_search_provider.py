@@ -26,8 +26,14 @@ class RecordingVectorClient:
                 score=0.82,
                 metadata={"name": "Cafe Central", "category": "cafe"},
                 document="cafe tranquilo para trabajar",
-            )
-        ]
+            ),
+            VectorMatch(
+                id="place-2",
+                score=0.75,
+                metadata={"name": "Cafe Sur", "category": "cafe"},
+                document="cafe para conversar",
+            ),
+        ][:limit]
 
     async def search_resource_embeddings(self, **kwargs: object) -> list[VectorMatch]:
         raise AssertionError("Places must not use the hybrid RRF search function")
@@ -41,7 +47,8 @@ async def test_places_use_same_cosine_match_function_as_recommendations() -> Non
     hits = await provider.search(
         query="cafe tranquilo",
         embedding=[0.1, 0.2, 0.3],
-        limit=5,
+        limit=1,
+        offset=1,
         requester_id=None,
     )
 
@@ -49,10 +56,11 @@ async def test_places_use_same_cosine_match_function_as_recommendations() -> Non
         {
             "embedding": [0.1, 0.2, 0.3],
             "filters": {"is_active": True},
-            "limit": 5,
+            "limit": 2,
         }
     ]
+    assert hits[0].id == "place-2"
     assert hits[0].resource_type == SearchResourceType.PLACES
-    assert hits[0].score == 0.82
-    assert hits[0].semantic_score == 0.82
+    assert hits[0].score == 0.75
+    assert hits[0].semantic_score == 0.75
     assert hits[0].lexical_score is None
