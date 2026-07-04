@@ -42,61 +42,6 @@ RDS PostgreSQL + pgvector
   `-- upsert_post_embedding
 ```
 
-## Variables De Entorno
-
-```env
-ENV=local
-API_HOST=0.0.0.0
-API_PORT=8080
-
-MAIN_API_BASE_URL=http://3.212.166.108
-MAIN_API_PLACES_SEARCH_PATH=/api/v1/places/search
-MAIN_API_PLACES_NEARBY_PATH=/api/v1/places/nearby
-MAIN_API_POSTS_SEARCH_PATH=/api/v1/posts/search
-MAIN_API_INTERNAL_TOKEN=
-MAIN_API_TIMEOUT_SECONDS=15
-MAIN_API_PLACES_PAGE_LIMIT=100
-MAIN_API_POSTS_PAGE_LIMIT=100
-MAIN_API_PLACES_PAGINATION_MODE=cursor
-MAIN_API_POSTS_PAGINATION_MODE=cursor
-
-GROQ_API_KEY=
-GROQ_MODEL=llama-3.1-8b-instant
-
-VECTOR_STORE_PROVIDER=aws_pgvector
-
-PGVECTOR_HOST=nlp-vector-db.c2jwncm87zsa.us-east-1.rds.amazonaws.com
-PGVECTOR_PORT=5432
-PGVECTOR_DATABASE=nlp_vectors
-PGVECTOR_READER_USER=nlp_reader
-PGVECTOR_READER_PASSWORD=CAMBIA_ESTA_PASSWORD_READER
-PGVECTOR_WRITER_USER=nlp_writer
-PGVECTOR_WRITER_PASSWORD=CAMBIA_ESTA_PASSWORD_WRITER
-PGVECTOR_SSL_MODE=require
-
-EMBEDDING_PROVIDER=fasttext
-EMBEDDING_DIMENSION=300
-EMBEDDING_MODEL=facebook/fasttext-es-vectors
-EMBEDDING_VERSION=common-crawl-300-v1
-FASTTEXT_MODEL_PATH=.models/fasttext-es/model.bin
-FASTTEXT_MODEL_REPO_ID=facebook/fasttext-es-vectors
-FASTTEXT_MODEL_FILENAME=model.bin
-FASTTEXT_AUTO_DOWNLOAD=true
-
-BM25_K1=1.5
-BM25_B=0.75
-BM25_RELEVANCE_THRESHOLD=3.0
-SEMANTIC_NO_MATCH_THRESHOLD=0.30
-SEMANTIC_RELEVANCE_THRESHOLD=0.50
-
-LOG_LEVEL=INFO
-REQUEST_TIMEOUT_SECONDS=10
-LLM_TIMEOUT_SECONDS=12
-MAX_LLM_CONCURRENT_REQUESTS=4
-EMBEDDING_CACHE_TTL_SECONDS=300
-VECTOR_SEARCH_CACHE_TTL_SECONDS=120
-```
-
 La API crea el cliente RDS con rol `reader`. Los jobs crean el cliente con rol `writer`. Si configuras `PGVECTOR_READER_*` y `PGVECTOR_WRITER_*` en el mismo entorno, el codigo elige automaticamente las credenciales correctas para cada flujo.
 
 En Hugging Face, guarda passwords y tokens como Secrets.

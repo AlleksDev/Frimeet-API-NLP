@@ -8,6 +8,30 @@ from app.shared.vector_store.models import VectorMatch
 _PRIVATE_METADATA_KEYS = {"authorized_user_ids", "creator_id"}
 
 
+class PgvectorPlaceSearchProvider(SearchProvider):
+    """Use the same FastText cosine retrieval path as place recommendations."""
+
+    resource_type = SearchResourceType.PLACES
+
+    def __init__(self, vector_client: AwsPgvectorClient) -> None:
+        self._vector_client = vector_client
+
+    async def search(
+        self,
+        query: str,
+        embedding: list[float],
+        limit: int,
+        requester_id: str | None,
+    ) -> Sequence[SearchHit]:
+        del query, requester_id
+        matches = await self._vector_client.match_places(
+            embedding=embedding,
+            filters={"is_active": True},
+            limit=limit,
+        )
+        return [_to_search_hit(self.resource_type, match) for match in matches]
+
+
 class PgvectorHybridSearchProvider(SearchProvider):
     def __init__(
         self,
@@ -52,13 +76,16 @@ def _to_search_hit(resource_type: SearchResourceType, match: VectorMatch) -> Sea
         or match.id
     )
     subtitle = _subtitle(resource_type, metadata)
+    semantic_score = match.semantic_score
+    if resource_type == SearchResourceType.PLACES and semantic_score is None:
+        semantic_score = match.score
     return SearchHit(
         id=match.id,
         resource_type=resource_type,
         title=title,
         subtitle=subtitle,
         score=match.score,
-        semantic_score=match.semantic_score,
+        semantic_score=semantic_score,
         lexical_score=match.lexical_score,
         metadata=metadata,
     )

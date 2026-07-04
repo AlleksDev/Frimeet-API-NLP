@@ -2,12 +2,15 @@ from functools import lru_cache
 
 from app.modules.search.application.ports.search_provider import SearchProvider
 from app.modules.search.application.use_cases.search_all import SearchAllUseCase
-from app.modules.search.domain.models import ALL_SEARCH_RESOURCE_TYPES
+from app.modules.search.domain.models import ALL_SEARCH_RESOURCE_TYPES, SearchResourceType
 from app.modules.search.infrastructure.mock_provider import (
     MockHybridSearchProvider,
     get_mock_search_documents,
 )
-from app.modules.search.infrastructure.pgvector_provider import PgvectorHybridSearchProvider
+from app.modules.search.infrastructure.pgvector_provider import (
+    PgvectorHybridSearchProvider,
+    PgvectorPlaceSearchProvider,
+)
 from app.shared.config.settings import get_settings
 from app.shared.dependencies import get_embedding_provider
 from app.shared.vector_store.aws_pgvector import AwsPgvectorClient
@@ -20,7 +23,11 @@ def get_global_search_providers() -> tuple[SearchProvider, ...]:
     if settings.vector_store_provider == "aws_pgvector":
         vector_client = AwsPgvectorClient(settings, role="reader")
         return tuple(
-            PgvectorHybridSearchProvider(resource_type, vector_client)
+            (
+                PgvectorPlaceSearchProvider(vector_client)
+                if resource_type == SearchResourceType.PLACES
+                else PgvectorHybridSearchProvider(resource_type, vector_client)
+            )
             for resource_type in ALL_SEARCH_RESOURCE_TYPES
         )
 
