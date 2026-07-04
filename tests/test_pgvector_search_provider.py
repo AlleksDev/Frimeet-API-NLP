@@ -1,0 +1,58 @@
+import pytest
+
+from app.modules.search.domain.models import SearchResourceType
+from app.modules.search.infrastructure.pgvector_provider import (
+    PgvectorPlaceSearchProvider,
+)
+from app.shared.vector_store.models import VectorMatch
+
+
+class RecordingVectorClient:
+    def __init__(self) -> None:
+        self.match_places_calls: list[dict[str, object]] = []
+
+    async def match_places(
+        self,
+        embedding: list[float],
+        filters: dict[str, object],
+        limit: int,
+    ) -> list[VectorMatch]:
+        self.match_places_calls.append(
+            {"embedding": embedding, "filters": filters, "limit": limit}
+        )
+        return [
+            VectorMatch(
+                id="place-1",
+                score=0.82,
+                metadata={"name": "Cafe Central", "category": "cafe"},
+                document="cafe tranquilo para trabajar",
+            )
+        ]
+
+    async def search_resource_embeddings(self, **kwargs: object) -> list[VectorMatch]:
+        raise AssertionError("Places must not use the hybrid RRF search function")
+
+
+@pytest.mark.asyncio
+async def test_places_use_same_cosine_match_function_as_recommendations() -> None:
+    vector_client = RecordingVectorClient()
+    provider = PgvectorPlaceSearchProvider(vector_client)  # type: ignore[arg-type]
+
+    hits = await provider.search(
+        query="cafe tranquilo",
+        embedding=[0.1, 0.2, 0.3],
+        limit=5,
+        requester_id=None,
+    )
+
+    assert vector_client.match_places_calls == [
+        {
+            "embedding": [0.1, 0.2, 0.3],
+            "filters": {"is_active": True},
+            "limit": 5,
+        }
+    ]
+    assert hits[0].resource_type == SearchResourceType.PLACES
+    assert hits[0].score == 0.82
+    assert hits[0].semantic_score == 0.82
+    assert hits[0].lexical_score is None

@@ -110,17 +110,28 @@ class PagedMainApiSearchClient:
 
     def _extract_resources(self, payload: Any) -> list[dict[str, Any]]:
         if isinstance(payload, list):
-            return [item for item in payload if isinstance(item, dict)]
+            resources = [item for item in payload if isinstance(item, dict)]
+            if resources:
+                return resources
+            return []
         if not isinstance(payload, dict):
             return []
-        for key in ("data", *self._collection_keys, "items", "results"):
+
+        preferred_keys = ("data", *self._collection_keys, "items", "results")
+        for key in preferred_keys:
             candidate = payload.get(key)
-            if isinstance(candidate, list):
-                return [item for item in candidate if isinstance(item, dict)]
-            if isinstance(candidate, dict):
-                nested = self._extract_resources(candidate)
-                if nested:
-                    return nested
+            nested = self._extract_resources(candidate)
+            if nested:
+                return nested
+
+        # Some main-API endpoints add an extra response-envelope key. Search
+        # nested containers as a fallback without coupling the indexer to it.
+        for key, candidate in payload.items():
+            if key in preferred_keys or not isinstance(candidate, (dict, list)):
+                continue
+            nested = self._extract_resources(candidate)
+            if nested:
+                return nested
         return []
 
     @staticmethod
