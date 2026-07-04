@@ -370,7 +370,7 @@ BEGIN
                         SELECT 1
                         FROM jsonb_array_elements_text($4->'tags') AS allowed(value)
                         WHERE lower(COALESCE(e.metadata->>'tags', ''))
-                              LIKE ('%' || lower(allowed.value) || '%')
+                              LIKE ('%%' || lower(allowed.value) || '%%')
                     )
               )
               AND (
