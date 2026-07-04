@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     main_api_search_pagination_mode: str = Field(
         default="cursor", alias="MAIN_API_SEARCH_PAGINATION_MODE"
     )
+    global_search_nearby_boost: float = Field(
+        default=0.12,
+        ge=0.0,
+        le=1.0,
+        alias="GLOBAL_SEARCH_NEARBY_BOOST",
+    )
 
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
     groq_model: str = Field(default="llama-3.1-8b-instant", alias="GROQ_MODEL")

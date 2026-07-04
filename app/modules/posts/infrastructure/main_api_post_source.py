@@ -141,6 +141,9 @@ def post_to_source_record(post: dict[str, Any]) -> PostSourceRecord | None:
     state = _first_present(post, "state", default="Chiapas")
     text = str(_first_present(post, "text", "content", "description", "body", default=""))
     source = _first_present(post, "source")
+    published_at = _first_present(
+        post, "published_at", "publishedAt", "created_at", "createdAt"
+    )
     is_active = _first_present(post, "is_active", "isActive", default=True)
     tags = _as_text_list(_first_present(post, "tags", "keywords", default=[]))
 
@@ -156,6 +159,7 @@ def post_to_source_record(post: dict[str, Any]) -> PostSourceRecord | None:
         "city": city,
         "state": state,
         "source": source,
+        "published_at": published_at,
         "tags": ",".join(tags),
         "is_active": bool(is_active),
     }

@@ -2,6 +2,8 @@ import asyncio
 import math
 
 from app.modules.search.application.ports.search_provider import SearchProvider
+from app.modules.search.application.ports.nearby_place_provider import NearbyPlaceProvider
+from app.modules.search.domain.filters import SearchCriteria
 from app.modules.search.domain.models import (
     ALL_SEARCH_RESOURCE_TYPES,
     SearchAllResult,
@@ -21,9 +23,11 @@ class SearchAllUseCase:
         self,
         embedding_provider: EmbeddingProvider,
         providers: list[SearchProvider],
+        nearby_place_provider: NearbyPlaceProvider | None = None,
     ) -> None:
         self._embedding_provider = embedding_provider
         self._providers = {provider.resource_type: provider for provider in providers}
+        self._nearby_place_provider = nearby_place_provider
 
     async def execute(
         self,
@@ -33,10 +37,22 @@ class SearchAllUseCase:
         top_limit: int = 10,
         requester_id: str | None = None,
         offsets: dict[SearchResourceType, int] | None = None,
+        criteria: SearchCriteria | None = None,
+        cursor_context: str = "",
     ) -> SearchAllResult:
         normalized_query = prepare_for_embedding(query)
         embedding = self._embedding_provider.embed_text(normalized_query)
         effective_offsets = offsets or {}
+        effective_criteria = criteria or SearchCriteria()
+        if effective_criteria.location is not None:
+            if self._nearby_place_provider is None:
+                raise RuntimeError("nearby place provider is not configured")
+            nearby_ids = await self._nearby_place_provider.get_nearby_place_ids(
+                latitude=effective_criteria.location.latitude,
+                longitude=effective_criteria.location.longitude,
+                radius_meters=effective_criteria.location.radius_meters,
+            )
+            effective_criteria = effective_criteria.with_nearby_place_ids(nearby_ids)
         providers = [
             self._providers[resource_type]
             for resource_type in resource_types
@@ -50,6 +66,7 @@ class SearchAllUseCase:
                     limit=per_type_limit + 1,
                     offset=effective_offsets.get(provider.resource_type, 0),
                     requester_id=requester_id,
+                    criteria=effective_criteria,
                 )
                 for provider in providers
             ],
@@ -75,7 +92,7 @@ class SearchAllUseCase:
                     has_more=False,
                 )
                 continue
-            ranked = sorted(list(outcome), key=lambda hit: hit.score, reverse=True)
+            ranked = list(outcome)
             page_hits = ranked[:per_type_limit]
             has_more = len(ranked) > per_type_limit
             current_offset = effective_offsets.get(provider.resource_type, 0)
@@ -95,6 +112,7 @@ class SearchAllUseCase:
             sections=sections,
             pagination=pagination,
             failed_resources=failures,
+            cursor_context=cursor_context,
         )
 
 
@@ -106,8 +124,11 @@ def _diversified_top_results(
         return []
     candidates = sorted(
         (hit for hits in sections.values() for hit in hits),
-        key=lambda hit: hit.score,
-        reverse=True,
+        key=lambda hit: (
+            -(hit.ranking_score if hit.ranking_score is not None else hit.score),
+            -hit.score,
+            hit.id,
+        ),
     )
     max_per_type = max(2, math.ceil(limit / 3))
     counts: dict[SearchResourceType, int] = {}

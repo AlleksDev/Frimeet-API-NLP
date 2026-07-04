@@ -5,6 +5,7 @@ from typing import Any, Sequence
 from app.modules.places.infrastructure.mock_place_repository import SAMPLE_PLACES
 from app.modules.posts.infrastructure.mock_post_repository import SAMPLE_POSTS
 from app.modules.search.application.ports.search_provider import SearchProvider
+from app.modules.search.domain.filters import SearchCriteria, filter_and_rank_hits
 from app.modules.search.domain.models import SearchHit, SearchResourceType
 from app.shared.nlp.embeddings.base import EmbeddingProvider
 from app.shared.nlp.preprocessing.text import prepare_for_embedding
@@ -38,6 +39,7 @@ class MockHybridSearchProvider(SearchProvider):
         limit: int,
         offset: int,
         requester_id: str | None,
+        criteria: SearchCriteria,
     ) -> Sequence[SearchHit]:
         query_terms = set(prepare_for_embedding(query).split())
         hits: list[SearchHit] = []
@@ -68,7 +70,7 @@ class MockHybridSearchProvider(SearchProvider):
                     metadata=metadata,
                 )
             )
-        ranked = sorted(hits, key=lambda hit: hit.score, reverse=True)
+        ranked = filter_and_rank_hits(self.resource_type, hits, criteria)
         return ranked[offset : offset + limit]
 
 

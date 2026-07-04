@@ -1,6 +1,11 @@
 from typing import Sequence
 
 from app.modules.search.application.ports.search_provider import SearchProvider
+from app.modules.search.domain.filters import (
+    LocationSearchMode,
+    SearchCriteria,
+    filter_and_rank_hits,
+)
 from app.modules.search.domain.models import SearchHit, SearchResourceType
 from app.shared.vector_store.aws_pgvector import AwsPgvectorClient
 from app.shared.vector_store.models import VectorMatch
@@ -23,17 +28,28 @@ class PgvectorPlaceSearchProvider(SearchProvider):
         limit: int,
         offset: int,
         requester_id: str | None,
+        criteria: SearchCriteria,
     ) -> Sequence[SearchHit]:
         del query, requester_id
+        if (
+            criteria.location is not None
+            and criteria.location.mode == LocationSearchMode.STRICT
+            and not criteria.nearby_place_ids
+        ):
+            return []
+        metadata_filters = _place_metadata_filters(criteria)
+        fetch_limit = _candidate_limit(offset, limit, criteria, self.resource_type)
         matches = await self._vector_client.match_places(
             embedding=embedding,
-            filters={"is_active": True},
-            limit=offset + limit,
+            filters=metadata_filters,
+            limit=fetch_limit,
         )
-        return [
+        hits = [
             _to_search_hit(self.resource_type, match)
-            for match in matches[offset : offset + limit]
+            for match in matches
         ]
+        ranked = filter_and_rank_hits(self.resource_type, hits, criteria)
+        return ranked[offset : offset + limit]
 
 
 class PgvectorHybridSearchProvider(SearchProvider):
@@ -52,21 +68,106 @@ class PgvectorHybridSearchProvider(SearchProvider):
         limit: int,
         offset: int,
         requester_id: str | None,
+        criteria: SearchCriteria,
     ) -> Sequence[SearchHit]:
+        if (
+            criteria.location is not None
+            and criteria.location.mode == LocationSearchMode.STRICT
+            and self.resource_type in {SearchResourceType.CLUBS, SearchResourceType.EVENTS}
+            and not criteria.nearby_place_ids
+        ):
+            return []
         filters = {"is_active": True}
         if requester_id:
             filters["requester_id"] = requester_id
+        filters.update(_hybrid_metadata_filters(criteria, self.resource_type))
+        fetch_limit = _candidate_limit(offset, limit, criteria, self.resource_type)
         matches = await self._vector_client.search_resource_embeddings(
             resource_type=self.resource_type.value,
             query_text=query,
             embedding=embedding,
             filters=filters,
-            limit=offset + limit,
+            limit=fetch_limit,
         )
-        return [
+        hits = [
             _to_search_hit(self.resource_type, match)
-            for match in matches[offset : offset + limit]
+            for match in matches
         ]
+        ranked = filter_and_rank_hits(self.resource_type, hits, criteria)
+        return ranked[offset : offset + limit]
+
+
+def _candidate_limit(
+    offset: int,
+    limit: int,
+    criteria: SearchCriteria,
+    resource_type: SearchResourceType,
+) -> int:
+    requested = offset + limit
+    if not criteria.requires_extended_candidates(resource_type):
+        return requested
+    return min(max(requested * 5, 100), 1000)
+
+
+def _place_metadata_filters(criteria: SearchCriteria) -> dict[str, object]:
+    filters: dict[str, object] = {"is_active": True}
+    if criteria.filters.city:
+        filters["city"] = criteria.filters.city
+    if criteria.filters.state:
+        filters["state"] = criteria.filters.state
+    if criteria.filters.categories:
+        filters["categories"] = list(criteria.filters.categories)
+    if criteria.filters.price_ranges:
+        filters["price_ranges"] = list(criteria.filters.price_ranges)
+    if criteria.filters.tags:
+        filters["tags"] = list(criteria.filters.tags)
+    if (
+        criteria.location is not None
+        and criteria.location.mode == LocationSearchMode.STRICT
+    ):
+        filters["place_ids"] = sorted(criteria.nearby_place_ids)
+    return filters
+
+
+def _hybrid_metadata_filters(
+    criteria: SearchCriteria,
+    resource_type: SearchResourceType,
+) -> dict[str, object]:
+    source = criteria.filters
+    filters: dict[str, object] = {}
+    if resource_type == SearchResourceType.POSTS:
+        if source.city:
+            filters["city"] = source.city
+        if source.state:
+            filters["state"] = source.state
+        if source.tags:
+            filters["tags"] = list(source.tags)
+        if source.published_from:
+            filters["published_from"] = source.published_from.isoformat()
+        if source.published_to:
+            filters["published_to"] = source.published_to.isoformat()
+    elif resource_type == SearchResourceType.CLUBS:
+        if source.categories:
+            filters["categories"] = list(source.categories)
+        if source.club_mode is not None:
+            filters["is_online"] = source.club_mode.value == "online"
+    elif resource_type == SearchResourceType.EVENTS:
+        if source.tags:
+            filters["tags"] = list(source.tags)
+        if source.event_from:
+            filters["event_from"] = source.event_from.isoformat()
+        if source.event_to:
+            filters["event_to"] = source.event_to.isoformat()
+    elif resource_type == SearchResourceType.USERS and source.user_roles:
+        filters["user_roles"] = list(source.user_roles)
+
+    if (
+        criteria.location is not None
+        and criteria.location.mode == LocationSearchMode.STRICT
+        and resource_type in {SearchResourceType.CLUBS, SearchResourceType.EVENTS}
+    ):
+        filters["place_ids"] = sorted(criteria.nearby_place_ids)
+    return filters
 
 
 def _to_search_hit(resource_type: SearchResourceType, match: VectorMatch) -> SearchHit:

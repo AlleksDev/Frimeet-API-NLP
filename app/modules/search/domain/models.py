@@ -25,6 +25,9 @@ class SearchHit:
     semantic_score: float | None = None
     lexical_score: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    ranking_score: float | None = None
+    is_nearby: bool | None = None
+    proximity_boost: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -43,3 +46,4 @@ class SearchAllResult:
     sections: dict[SearchResourceType, list[SearchHit]]
     pagination: dict[SearchResourceType, SearchSectionPagination]
     failed_resources: dict[SearchResourceType, str]
+    cursor_context: str
