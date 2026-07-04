@@ -22,13 +22,14 @@ router = APIRouter(
 @router.post("/search", response_model=GlobalSearchResponse)
 async def search_all(
     payload: GlobalSearchRequest,
-    search_internal_token: str | None = Header(default=None, alias="X-Search-Internal-Token"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
     use_case: SearchAllUseCase = Depends(get_search_all_use_case),
 ) -> GlobalSearchResponse:
     if payload.requester_id:
         expected_token = get_settings().search_internal_token
-        if not expected_token or not search_internal_token or not secrets.compare_digest(
-            search_internal_token, expected_token
+        bearer_token = _extract_bearer_token(authorization)
+        if not expected_token or not bearer_token or not secrets.compare_digest(
+            bearer_token, expected_token
         ):
             raise HTTPException(
                 status_code=403,
@@ -47,3 +48,12 @@ async def search_all(
         requester_id=str(payload.requester_id) if payload.requester_id else None,
     )
     return result_to_schema(result)
+
+
+def _extract_bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    scheme, separator, token = authorization.partition(" ")
+    if not separator or scheme.lower() != "bearer" or not token.strip():
+        return None
+    return token.strip()

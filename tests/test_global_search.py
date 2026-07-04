@@ -31,7 +31,7 @@ def test_private_group_requires_authorized_requester() -> None:
     )
     authorized = client.post(
         "/search",
-        headers={"X-Search-Internal-Token": "test-search-token"},
+        headers={"Authorization": "Bearer test-search-token"},
         json={
             "query": "amigos universidad",
             "resource_types": ["groups"],

@@ -207,7 +207,8 @@ un `top_results` diversificado mas una seccion independiente por recurso.
 
 `requester_id` debe provenir de la identidad autenticada por la API principal, nunca de
 texto libre enviado directamente por la app. Cuando se envia, la llamada tambien debe
-incluir `X-Search-Internal-Token` con el valor de `SEARCH_INTERNAL_TOKEN`. Los grupos privados solo son recuperables
+incluir `Authorization: Bearer <SEARCH_INTERNAL_TOKEN>`. Este header solo se requiere cuando la solicitud incluye
+`requester_id`; las busquedas publicas no requieren autenticacion. Los grupos privados solo son recuperables
 por su creador, miembros agregados o invitados. Clubes privados y eventos no publicos
 permanecen ocultos mientras la API principal no entregue una lista de usuarios autorizados.
 
