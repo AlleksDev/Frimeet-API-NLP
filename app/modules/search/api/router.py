@@ -3,6 +3,7 @@ import secrets
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app.modules.search.api.dependencies import get_search_all_use_case
+from app.modules.search.api.cursor import decode_search_cursor
 from app.modules.search.api.schemas import (
     GlobalSearchRequest,
     GlobalSearchResponse,
@@ -40,12 +41,24 @@ async def search_all(
         if payload.resource_types
         else ALL_SEARCH_RESOURCE_TYPES
     )
+    try:
+        offsets = {
+            resource_type: decode_search_cursor(
+                cursor=cursor,
+                resource_type=resource_type,
+                query=payload.query,
+            )
+            for resource_type, cursor in payload.cursors.items()
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     result = await use_case.execute(
         query=payload.query,
         resource_types=resource_types,
         per_type_limit=payload.per_type_limit,
         top_limit=payload.top_limit,
         requester_id=str(payload.requester_id) if payload.requester_id else None,
+        offsets=offsets,
     )
     return result_to_schema(result)
 

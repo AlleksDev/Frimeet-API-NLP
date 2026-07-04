@@ -122,7 +122,7 @@ AS $$
           (filters ? 'place_ids') IS FALSE
           OR p.external_id IN (SELECT jsonb_array_elements_text(filters->'place_ids'))
       )
-    ORDER BY p.embedding <=> query_embedding
+    ORDER BY p.embedding <=> query_embedding, p.external_id ASC
     LIMIT match_count;
 $$;
 
@@ -342,9 +342,11 @@ BEGIN
             SELECT
                 e.external_id,
                 1 - (e.embedding <=> $1) AS semantic_score,
-                row_number() OVER (ORDER BY e.embedding <=> $1) AS vector_rank
+                row_number() OVER (
+                    ORDER BY e.embedding <=> $1, e.external_id ASC
+                ) AS vector_rank
             FROM eligible e
-            ORDER BY e.embedding <=> $1
+            ORDER BY e.embedding <=> $1, e.external_id ASC
             LIMIT GREATEST($3 * 3, 30)
         ),
         lexical_results AS (
@@ -352,12 +354,12 @@ BEGIN
                 e.external_id,
                 ts_rank_cd(e.textsearch, query.value) AS lexical_score,
                 row_number() OVER (
-                    ORDER BY ts_rank_cd(e.textsearch, query.value) DESC
+                    ORDER BY ts_rank_cd(e.textsearch, query.value) DESC, e.external_id ASC
                 ) AS lexical_rank
             FROM eligible e
             CROSS JOIN websearch_to_tsquery('simple', $2) AS query(value)
             WHERE e.textsearch @@ query.value
-            ORDER BY lexical_score DESC
+            ORDER BY lexical_score DESC, e.external_id ASC
             LIMIT GREATEST($3 * 3, 30)
         ),
         fused AS (
@@ -392,7 +394,7 @@ BEGIN
             f.lexical_score::double precision
         FROM fused f
         JOIN eligible e USING (external_id)
-        ORDER BY score DESC, f.semantic_score DESC NULLS LAST
+        ORDER BY score DESC, f.semantic_score DESC NULLS LAST, e.external_id ASC
         LIMIT GREATEST($3, 1)
     $query$, target_table)
     USING p_query_embedding, p_query_text, p_match_count, p_filters;

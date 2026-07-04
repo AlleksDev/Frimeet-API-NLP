@@ -28,9 +28,18 @@ class SearchHit:
 
 
 @dataclass(frozen=True)
+class SearchSectionPagination:
+    page_size: int
+    returned_count: int
+    has_more: bool
+    next_offset: int | None = None
+
+
+@dataclass(frozen=True)
 class SearchAllResult:
     query: str
     normalized_query: str
     top_results: list[SearchHit]
     sections: dict[SearchResourceType, list[SearchHit]]
+    pagination: dict[SearchResourceType, SearchSectionPagination]
     failed_resources: dict[SearchResourceType, str]
