@@ -1,7 +1,11 @@
 from app.modules.clubs.infrastructure.main_api_club_source import club_to_source_record
 from app.modules.events.infrastructure.main_api_event_source import event_to_source_record
 from app.modules.groups.infrastructure.main_api_group_source import group_to_source_record
-from app.modules.users.infrastructure.main_api_user_source import user_to_source_record
+from app.modules.users.infrastructure.main_api_user_source import (
+    MainApiUsersClient,
+    user_to_source_record,
+)
+from app.shared.config.settings import Settings
 
 
 def test_user_document_excludes_sensitive_profile_fields() -> None:
@@ -23,6 +27,42 @@ def test_user_document_excludes_sensitive_profile_fields() -> None:
     assert "email" not in record.metadata
     assert "birth_date" not in record.metadata
     assert "current_location" not in record.metadata
+
+
+def test_users_client_extracts_main_api_data_envelope() -> None:
+    client = MainApiUsersClient(Settings())
+    resources = client._extract_resources(
+        {
+            "data": [
+                {
+                    "id": "3b4c8098-87a2-4b06-a4d4-b0a0aa56167e",
+                    "username": "testuser",
+                    "full_name": "Test Friend",
+                    "avatar_url": None,
+                    "role": "cliente",
+                    "bio": None,
+                    "created_at": "2026-06-28T08:48:04.881738Z",
+                    "friendship_status": "none",
+                },
+                {
+                    "id": "2a8de0e1-a133-4a35-9eb1-901cac3a3f84",
+                    "username": "testeradmin",
+                    "full_name": "Tester Admin",
+                    "avatar_url": None,
+                    "role": "admin",
+                    "bio": "Soy el mas perron aqui",
+                    "created_at": "2026-06-28T08:46:46.374301Z",
+                    "friendship_status": "none",
+                },
+            ]
+        }
+    )
+
+    records = [user_to_source_record(user) for user in resources]
+
+    assert len(records) == 2
+    assert all(record is not None for record in records)
+    assert records[0].id == "3b4c8098-87a2-4b06-a4d4-b0a0aa56167e"
 
 
 def test_club_document_owns_club_fields_and_privacy_flag() -> None:
