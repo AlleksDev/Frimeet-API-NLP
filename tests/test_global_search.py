@@ -122,4 +122,53 @@ def test_search_cursor_cannot_be_reused_for_another_query() -> None:
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "cursor belongs to another query"
+    assert response.json()["detail"] == "cursor belongs to another search context"
+
+
+def test_global_search_applies_typed_place_filters() -> None:
+    client = TestClient(create_app())
+    response = client.post(
+        "/search",
+        json={
+            "query": "lugar para salir",
+            "resource_types": ["places"],
+            "per_type_limit": 10,
+            "filters": {
+                "city": "Tuxtla Gutierrez",
+                "price_ranges": ["$$"],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    places = response.json()["sections"]["places"]
+    assert places
+    assert all(place["metadata"]["city"] == "Tuxtla Gutierrez" for place in places)
+    assert all(place["metadata"]["price_range"] == "$$" for place in places)
+
+
+def test_search_cursor_is_invalidated_when_filters_change() -> None:
+    client = TestClient(create_app())
+    first = client.post(
+        "/search",
+        json={
+            "query": "lugar tranquilo",
+            "resource_types": ["places"],
+            "per_type_limit": 1,
+        },
+    ).json()
+    cursor = first["pagination"]["places"]["next_cursor"]
+
+    response = client.post(
+        "/search",
+        json={
+            "query": "lugar tranquilo",
+            "resource_types": ["places"],
+            "per_type_limit": 1,
+            "filters": {"price_ranges": ["$$"]},
+            "cursors": {"places": cursor},
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "cursor belongs to another search context"

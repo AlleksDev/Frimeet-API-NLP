@@ -116,7 +116,32 @@ AS $$
       AND ((filters ? 'city') IS FALSE OR lower(p.metadata->>'city') = lower(filters->>'city'))
       AND ((filters ? 'state') IS FALSE OR lower(p.metadata->>'state') = lower(filters->>'state'))
       AND ((filters ? 'category') IS FALSE OR lower(p.metadata->>'category') = lower(filters->>'category'))
+      AND (
+          (filters ? 'categories') IS FALSE
+          OR EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(filters->'categories') AS allowed(value)
+              WHERE lower(p.metadata->>'category') = lower(allowed.value)
+          )
+      )
       AND ((filters ? 'price_range') IS FALSE OR p.metadata->>'price_range' = filters->>'price_range')
+      AND (
+          (filters ? 'price_ranges') IS FALSE
+          OR EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(filters->'price_ranges') AS allowed(value)
+              WHERE p.metadata->>'price_range' = allowed.value
+          )
+      )
+      AND (
+          (filters ? 'tags') IS FALSE
+          OR EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(filters->'tags') AS allowed(value)
+              WHERE lower(COALESCE(p.metadata->>'tags', ''))
+                    LIKE ('%' || lower(allowed.value) || '%')
+          )
+      )
       AND ((filters ? 'occasion') IS FALSE OR p.metadata->>'occasion' ILIKE ('%' || (filters->>'occasion') || '%'))
       AND (
           (filters ? 'place_ids') IS FALSE
@@ -323,6 +348,70 @@ BEGIN
             FROM public.%I e
             WHERE e.is_active = true
               AND COALESCE(($4->>'is_active')::boolean, true) = true
+              AND (
+                    ($4 ? 'city') IS FALSE
+                    OR lower(e.metadata->>'city') = lower($4->>'city')
+              )
+              AND (
+                    ($4 ? 'state') IS FALSE
+                    OR lower(e.metadata->>'state') = lower($4->>'state')
+              )
+              AND (
+                    ($4 ? 'categories') IS FALSE
+                    OR EXISTS (
+                        SELECT 1
+                        FROM jsonb_array_elements_text($4->'categories') AS allowed(value)
+                        WHERE lower(e.metadata->>'category') = lower(allowed.value)
+                    )
+              )
+              AND (
+                    ($4 ? 'tags') IS FALSE
+                    OR EXISTS (
+                        SELECT 1
+                        FROM jsonb_array_elements_text($4->'tags') AS allowed(value)
+                        WHERE lower(COALESCE(e.metadata->>'tags', ''))
+                              LIKE ('%' || lower(allowed.value) || '%')
+                    )
+              )
+              AND (
+                    ($4 ? 'published_from') IS FALSE
+                    OR NULLIF(e.metadata->>'published_at', '')::timestamptz
+                       >= ($4->>'published_from')::timestamptz
+              )
+              AND (
+                    ($4 ? 'published_to') IS FALSE
+                    OR NULLIF(e.metadata->>'published_at', '')::timestamptz
+                       <= ($4->>'published_to')::timestamptz
+              )
+              AND (
+                    ($4 ? 'event_from') IS FALSE
+                    OR NULLIF(e.metadata->>'start_time', '')::timestamptz
+                       >= ($4->>'event_from')::timestamptz
+              )
+              AND (
+                    ($4 ? 'event_to') IS FALSE
+                    OR NULLIF(e.metadata->>'start_time', '')::timestamptz
+                       <= ($4->>'event_to')::timestamptz
+              )
+              AND (
+                    ($4 ? 'is_online') IS FALSE
+                    OR COALESCE((e.metadata->>'is_online')::boolean, false)
+                       = ($4->>'is_online')::boolean
+              )
+              AND (
+                    ($4 ? 'user_roles') IS FALSE
+                    OR EXISTS (
+                        SELECT 1
+                        FROM jsonb_array_elements_text($4->'user_roles') AS allowed(value)
+                        WHERE lower(e.metadata->>'role') = lower(allowed.value)
+                    )
+              )
+              AND (
+                    ($4 ? 'place_ids') IS FALSE
+                    OR e.metadata->>'place_id' IN (
+                        SELECT jsonb_array_elements_text($4->'place_ids')
+                    )
+              )
               AND (
                     (
                         COALESCE((e.metadata->>'is_private')::boolean, false) = false

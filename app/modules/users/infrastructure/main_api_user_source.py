@@ -45,6 +45,7 @@ def user_to_source_record(user: dict[str, Any]) -> SearchSourceRecord | None:
             "full_name": full_name,
             "avatar_url": first_present(user, "avatar_url", "avatarUrl"),
             "bio": bio[:300],
+            "role": first_present(user, "role"),
             "is_active": is_active,
             "document_version": USER_SEARCH_DOCUMENT_VERSION,
         },

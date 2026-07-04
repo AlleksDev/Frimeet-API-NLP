@@ -1,5 +1,6 @@
 import pytest
 
+from app.modules.search.domain.filters import SearchCriteria
 from app.modules.search.domain.models import SearchResourceType
 from app.modules.search.infrastructure.pgvector_provider import (
     PgvectorPlaceSearchProvider,
@@ -50,6 +51,7 @@ async def test_places_use_same_cosine_match_function_as_recommendations() -> Non
         limit=1,
         offset=1,
         requester_id=None,
+        criteria=SearchCriteria(),
     )
 
     assert vector_client.match_places_calls == [

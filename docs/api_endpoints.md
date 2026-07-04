@@ -448,12 +448,80 @@ No recibe query parameters. Toda la entrada se envia en el body.
 | `top_limit` | `integer` | No | `10` | Entre 1 y 50 |
 | `requester_id` | `UUID \| null` | No | `null` | Activa busqueda privada |
 | `cursors` | `object` | No | `{}` | Cursor opaco por tipo de recurso |
+| `location` | `object \| null` | No | `null` | Ubicacion y radio del usuario |
+| `filters` | `object` | No | `{}` | Filtros tipados por recurso |
 
 No se aceptan campos adicionales.
 
 En la primera solicitud se omite `cursors`. La respuesta incluye un bloque
 `pagination` independiente para cada recurso consultado. Cuando `has_more` es `true`,
 `next_cursor` se envia en la siguiente solicitud usando la misma consulta.
+
+#### Ubicacion
+
+`location` consulta una sola vez `GET /api/v1/places/nearby` en la API principal. Las
+coordenadas siguen siendo propiedad de la API principal y no se almacenan en pgvector.
+
+| Campo | Tipo | Obligatorio | Default | Restricciones |
+| --- | --- | --- | --- | --- |
+| `lat` | `number` | Si | - | Entre -90 y 90 |
+| `lng` | `number` | Si | - | Entre -180 y 180 |
+| `radius` | `integer` | No | `5000` | Entre 1 y 50000 metros |
+| `mode` | `string` | No | `prioritize` | `prioritize` o `strict` |
+
+- `prioritize`: aumenta solamente el ranking interno de lugares cercanos, sin modificar
+  su `score` semantico.
+- `strict`: excluye lugares, clubs presenciales y eventos cuyo `place_id` no este dentro
+  del radio.
+- La ubicacion aplica a `places`, `clubs` y `events`. No se inventa proximidad para
+  usuarios, posts o grupos porque esos indices no contienen una relacion geografica
+  verificada.
+
+#### Filtros
+
+Todos los campos son opcionales. Cada filtro se aplica solamente a los recursos que
+poseen esa señal.
+
+| Campo | Recursos | Tipo | Descripcion |
+| --- | --- | --- | --- |
+| `city` | places, posts | `string` | Coincidencia exacta sin distinguir mayusculas |
+| `state` | places, posts | `string` | Estado o region |
+| `categories` | places, clubs | `string[]` | Una o varias categorias admitidas |
+| `price_ranges` | places | `string[]` | Rangos como `$`, `$$` o `$$$` |
+| `tags` | places, posts, events | `string[]` | Debe coincidir al menos un tag |
+| `published_from` | posts | `datetime` | Fecha minima de publicacion ISO 8601 |
+| `published_to` | posts | `datetime` | Fecha maxima de publicacion ISO 8601 |
+| `event_from` | events | `datetime` | Inicio minimo del evento |
+| `event_to` | events | `datetime` | Inicio maximo del evento |
+| `club_mode` | clubs | `string` | `online` o `in_person` |
+| `user_roles` | users | `string[]` | Roles admitidos, por ejemplo `cliente` |
+
+Ejemplo completo:
+
+```json
+{
+  "query": "actividad para conocer personas",
+  "resource_types": ["places", "clubs", "events", "posts"],
+  "per_type_limit": 5,
+  "top_limit": 12,
+  "location": {
+    "lat": 16.7531,
+    "lng": -93.1156,
+    "radius": 10000,
+    "mode": "prioritize"
+  },
+  "filters": {
+    "city": "Tuxtla Gutierrez",
+    "categories": ["cafe", "community"],
+    "price_ranges": ["$", "$$"],
+    "tags": ["musica", "cultura"],
+    "published_from": "2026-07-01T00:00:00Z",
+    "event_from": "2026-07-04T00:00:00Z",
+    "event_to": "2026-08-04T23:59:59Z",
+    "club_mode": "in_person"
+  }
+}
+```
 
 #### Busqueda publica
 
@@ -508,6 +576,8 @@ debe obtenerlo de la sesion autenticada y construir la llamada interna.
       "score": 0.92,
       "semantic_score": 0.81,
       "lexical_score": 0.38,
+      "is_nearby": true,
+      "proximity_boost": 0.12,
       "metadata": {}
     }
   ],
@@ -521,6 +591,8 @@ debe obtenerlo de la sesion autenticada y construir la llamada interna.
         "score": 0.92,
         "semantic_score": 0.81,
         "lexical_score": 0.38,
+        "is_nearby": true,
+        "proximity_boost": 0.12,
         "metadata": {}
       }
     ],
@@ -588,7 +660,7 @@ La respuesta de cada seccion contiene:
 
 Reglas de los cursores:
 
-- estan asociados al tipo de recurso y a la consulta normalizada;
+- estan asociados al tipo de recurso, consulta, filtros, ubicacion, usuario y tamano de pagina;
 - no deben interpretarse ni construirse en la app cliente;
 - no pueden reutilizarse con otra consulta o con otro recurso;
 - cuando se envia `cursors`, `resource_types` es obligatorio y debe contener sus claves;
@@ -642,3 +714,5 @@ Ejemplo de error de validacion `422`:
 | `EMBEDDING_DIMENSION` | Dimension vectorial; FastText utiliza `300` |
 | `GROQ_API_KEY` | Habilita Groq/Llama para redactar respuestas conversacionales |
 | `MAIN_API_BASE_URL` | API principal usada para fuentes y filtros geograficos |
+| `MAIN_API_PLACES_NEARBY_PATH` | Endpoint que resuelve los IDs dentro del radio solicitado |
+| `GLOBAL_SEARCH_NEARBY_BOOST` | Peso de priorizacion geografica; default `0.12` |

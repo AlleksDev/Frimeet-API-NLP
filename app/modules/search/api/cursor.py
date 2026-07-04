@@ -5,22 +5,29 @@ import secrets
 from typing import Any
 
 from app.modules.search.domain.models import SearchResourceType
-from app.shared.nlp.preprocessing.text import prepare_for_embedding
-
-
 CURSOR_VERSION = 1
 MAX_SEARCH_OFFSET = 1000
 
 
+def build_search_cursor_context(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:24]
+
+
 def encode_search_cursor(
     resource_type: SearchResourceType,
-    normalized_query: str,
+    context_fingerprint: str,
     offset: int,
 ) -> str:
     payload = {
         "v": CURSOR_VERSION,
         "r": resource_type.value,
-        "q": _query_fingerprint(normalized_query),
+        "c": context_fingerprint,
         "o": offset,
     }
     encoded = base64.urlsafe_b64encode(
@@ -32,7 +39,7 @@ def encode_search_cursor(
 def decode_search_cursor(
     cursor: str,
     resource_type: SearchResourceType,
-    query: str,
+    context_fingerprint: str,
 ) -> int:
     if not cursor or len(cursor) > 512:
         raise ValueError("cursor has an invalid length")
@@ -48,12 +55,11 @@ def decode_search_cursor(
     if payload.get("r") != resource_type.value:
         raise ValueError("cursor belongs to another resource type")
 
-    expected_query = _query_fingerprint(prepare_for_embedding(query))
-    cursor_query = payload.get("q")
-    if not isinstance(cursor_query, str) or not secrets.compare_digest(
-        cursor_query, expected_query
+    cursor_context = payload.get("c")
+    if not isinstance(cursor_context, str) or not secrets.compare_digest(
+        cursor_context, context_fingerprint
     ):
-        raise ValueError("cursor belongs to another query")
+        raise ValueError("cursor belongs to another search context")
 
     offset = payload.get("o")
     if not isinstance(offset, int) or isinstance(offset, bool):
@@ -61,7 +67,3 @@ def decode_search_cursor(
     if offset < 1 or offset > MAX_SEARCH_OFFSET:
         raise ValueError("cursor offset is outside the supported range")
     return offset
-
-
-def _query_fingerprint(normalized_query: str) -> str:
-    return hashlib.sha256(normalized_query.encode("utf-8")).hexdigest()[:24]

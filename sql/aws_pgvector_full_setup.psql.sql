@@ -100,13 +100,38 @@ AS $$
       AND ((filters ? 'city') IS FALSE OR lower(p.metadata->>'city') = lower(filters->>'city'))
       AND ((filters ? 'state') IS FALSE OR lower(p.metadata->>'state') = lower(filters->>'state'))
       AND ((filters ? 'category') IS FALSE OR lower(p.metadata->>'category') = lower(filters->>'category'))
+      AND (
+          (filters ? 'categories') IS FALSE
+          OR EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(filters->'categories') AS allowed(value)
+              WHERE lower(p.metadata->>'category') = lower(allowed.value)
+          )
+      )
       AND ((filters ? 'price_range') IS FALSE OR p.metadata->>'price_range' = filters->>'price_range')
+      AND (
+          (filters ? 'price_ranges') IS FALSE
+          OR EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(filters->'price_ranges') AS allowed(value)
+              WHERE p.metadata->>'price_range' = allowed.value
+          )
+      )
+      AND (
+          (filters ? 'tags') IS FALSE
+          OR EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(filters->'tags') AS allowed(value)
+              WHERE lower(COALESCE(p.metadata->>'tags', ''))
+                    LIKE ('%' || lower(allowed.value) || '%')
+          )
+      )
       AND ((filters ? 'occasion') IS FALSE OR p.metadata->>'occasion' ILIKE ('%' || (filters->>'occasion') || '%'))
       AND (
           (filters ? 'place_ids') IS FALSE
           OR p.external_id IN (SELECT jsonb_array_elements_text(filters->'place_ids'))
       )
-    ORDER BY p.embedding <=> query_embedding
+    ORDER BY p.embedding <=> query_embedding, p.external_id ASC
     LIMIT match_count;
 $$;
 
