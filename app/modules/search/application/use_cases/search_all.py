@@ -7,6 +7,7 @@ from app.modules.search.domain.models import (
     SearchAllResult,
     SearchHit,
     SearchResourceType,
+    SearchSectionPagination,
 )
 from app.shared.logging.config import get_logger
 from app.shared.nlp.embeddings.base import EmbeddingProvider
@@ -31,9 +32,11 @@ class SearchAllUseCase:
         per_type_limit: int = 5,
         top_limit: int = 10,
         requester_id: str | None = None,
+        offsets: dict[SearchResourceType, int] | None = None,
     ) -> SearchAllResult:
         normalized_query = prepare_for_embedding(query)
         embedding = self._embedding_provider.embed_text(normalized_query)
+        effective_offsets = offsets or {}
         providers = [
             self._providers[resource_type]
             for resource_type in resource_types
@@ -44,7 +47,8 @@ class SearchAllUseCase:
                 provider.search(
                     query=normalized_query,
                     embedding=embedding,
-                    limit=per_type_limit,
+                    limit=per_type_limit + 1,
+                    offset=effective_offsets.get(provider.resource_type, 0),
                     requester_id=requester_id,
                 )
                 for provider in providers
@@ -55,6 +59,7 @@ class SearchAllUseCase:
         sections: dict[SearchResourceType, list[SearchHit]] = {
             resource_type: [] for resource_type in resource_types
         }
+        pagination: dict[SearchResourceType, SearchSectionPagination] = {}
         failures: dict[SearchResourceType, str] = {}
         for provider, outcome in zip(providers, outcomes):
             if isinstance(outcome, BaseException):
@@ -64,10 +69,23 @@ class SearchAllUseCase:
                     type(outcome).__name__,
                 )
                 failures[provider.resource_type] = type(outcome).__name__
+                pagination[provider.resource_type] = SearchSectionPagination(
+                    page_size=per_type_limit,
+                    returned_count=0,
+                    has_more=False,
+                )
                 continue
-            sections[provider.resource_type] = sorted(
-                list(outcome), key=lambda hit: hit.score, reverse=True
-            )[:per_type_limit]
+            ranked = sorted(list(outcome), key=lambda hit: hit.score, reverse=True)
+            page_hits = ranked[:per_type_limit]
+            has_more = len(ranked) > per_type_limit
+            current_offset = effective_offsets.get(provider.resource_type, 0)
+            sections[provider.resource_type] = page_hits
+            pagination[provider.resource_type] = SearchSectionPagination(
+                page_size=per_type_limit,
+                returned_count=len(page_hits),
+                has_more=has_more,
+                next_offset=(current_offset + len(page_hits) if has_more else None),
+            )
 
         top_results = _diversified_top_results(sections, top_limit)
         return SearchAllResult(
@@ -75,6 +93,7 @@ class SearchAllUseCase:
             normalized_query=normalized_query,
             top_results=top_results,
             sections=sections,
+            pagination=pagination,
             failed_resources=failures,
         )
 

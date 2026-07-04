@@ -36,6 +36,7 @@ class MockHybridSearchProvider(SearchProvider):
         query: str,
         embedding: list[float],
         limit: int,
+        offset: int,
         requester_id: str | None,
     ) -> Sequence[SearchHit]:
         query_terms = set(prepare_for_embedding(query).split())
@@ -67,7 +68,8 @@ class MockHybridSearchProvider(SearchProvider):
                     metadata=metadata,
                 )
             )
-        return sorted(hits, key=lambda hit: hit.score, reverse=True)[:limit]
+        ranked = sorted(hits, key=lambda hit: hit.score, reverse=True)
+        return ranked[offset : offset + limit]
 
 
 def get_mock_search_documents() -> dict[SearchResourceType, list[MockSearchDocument]]:
