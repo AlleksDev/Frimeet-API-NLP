@@ -98,6 +98,40 @@ def test_event_identifier_tags_are_not_embedded_as_semantics() -> None:
     assert record.metadata["tag_ids"] == ["7", "b83ab97e-91a4-4f69-b102-b27c6092e9cb"]
 
 
+def test_event_sync_normalizes_valid_temporal_metadata() -> None:
+    record = event_to_source_record(
+        {
+            "id": "event-valid",
+            "title": "Evento futuro",
+            "start_time": "2026-07-12T14:00:00-06:00",
+            "duration_minutes": "90",
+        }
+    )
+
+    assert record is not None
+    assert record.is_active is True
+    assert record.metadata["start_time"] == "2026-07-12T20:00:00+00:00"
+    assert record.metadata["duration_minutes"] == 90
+    assert record.metadata["temporal_metadata_valid"] is True
+
+
+def test_event_sync_deactivates_invalid_temporal_metadata() -> None:
+    record = event_to_source_record(
+        {
+            "id": "event-invalid",
+            "title": "Evento invalido",
+            "start_time": "not-a-date",
+            "duration_minutes": 60,
+        }
+    )
+
+    assert record is not None
+    assert record.is_active is False
+    assert record.metadata["temporal_metadata_valid"] is False
+    assert "start_time" not in record.metadata
+    assert "duration_minutes" not in record.metadata
+
+
 def test_group_builds_private_search_acl_from_members_and_invites() -> None:
     record = group_to_source_record(
         {

@@ -58,3 +58,48 @@ def test_post_feed_v2_and_convergent_schema_are_present() -> None:
     assert "CREATE TABLE IF NOT EXISTS post_embeddings" in convergent
     assert "CREATE OR REPLACE FUNCTION public.get_post_feed_features" in convergent
     assert "migrate_post_feed_v2.sql" not in convergent  # contenido inline, sin includes
+
+
+def test_global_search_candidate_filters_are_convergent_and_incremental() -> None:
+    contract = Path("sql/aws_pgvector_contract.sql").read_text(encoding="utf-8")
+    convergent = Path("sql/new_pgvector_schema.sql").read_text(encoding="utf-8")
+    migration = Path(
+        "sql/migrations/20260712_01_global_search_candidate_filters.sql"
+    ).read_text(encoding="utf-8")
+    verifier = Path("sql/verify_global_search_candidate_filters.sql")
+
+    for token in (
+        "event_active_at",
+        "min_semantic_score",
+        "min_lexical_score",
+        "make_interval",
+        "try_parse_timestamptz",
+        "try_parse_positive_integer",
+    ):
+        assert token in contract
+        assert token in convergent
+        assert token in migration
+    upper_migration = migration.upper()
+    assert "BEGIN;" in upper_migration
+    assert "COMMIT;" in upper_migration
+    assert "CREATE OR REPLACE FUNCTION PUBLIC.SEARCH_RESOURCE_EMBEDDINGS" in upper_migration
+    assert "CREATE TABLE" not in upper_migration
+    assert "ALTER TABLE" not in upper_migration
+    assert "CREATE INDEX" not in upper_migration
+    assert "DROP FUNCTION" not in upper_migration
+    assert "TO NLP_READER" in upper_migration
+    assert verifier.exists()
+    verifier_sql = verifier.read_text(encoding="utf-8")
+    assert "RAISE EXCEPTION 'Verify search V2" in verifier_sql
+    assert "SET TRANSACTION READ ONLY" in verifier_sql
+
+
+def test_global_search_sql_does_not_directly_cast_untrusted_event_metadata() -> None:
+    for path in (
+        Path("sql/aws_pgvector_contract.sql"),
+        Path("sql/new_pgvector_schema.sql"),
+        Path("sql/migrations/20260712_01_global_search_candidate_filters.sql"),
+    ):
+        sql = path.read_text(encoding="utf-8")
+        assert "NULLIF(e.metadata->>'start_time', '')::timestamptz" not in sql
+        assert "(e.metadata->>'duration_minutes')::integer" not in sql

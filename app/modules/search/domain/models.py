@@ -39,6 +39,26 @@ class SearchSectionPagination:
 
 
 @dataclass(frozen=True)
+class SearchCandidate:
+    id: str
+    resource_type: SearchResourceType
+    score: float
+    semantic_score: float | None = None
+    lexical_score: float | None = None
+
+
+@dataclass(frozen=True)
+class SearchCandidatesResult:
+    query: str
+    normalized_query: str
+    sections: dict[SearchResourceType, list[SearchCandidate]]
+    pagination: dict[SearchResourceType, SearchSectionPagination]
+    failed_resources: dict[SearchResourceType, str]
+    cursor_context: str
+    policy_version: str
+
+
+@dataclass(frozen=True)
 class SearchAllResult:
     query: str
     normalized_query: str

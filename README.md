@@ -142,10 +142,21 @@ dimension. Un cambio de modelo fuerza la regeneracion aunque el texto no haya ca
 
 ## Busqueda Global Hibrida
 
-`POST /search` consulta lugares, posts, usuarios, clubes, grupos y eventos en paralelo.
+La app movil debe llamar `POST /api/v1/search` en la API principal con su token de
+sesion. Go valida permisos y filtros de negocio, llama al endpoint interno
+`POST /internal/search/candidates` de NLP, hidrata los IDs y devuelve los recursos
+completos. NLP solo calcula candidatos y puntajes; no es la fuente de verdad ni devuelve
+datos de presentacion.
+
 El query genera un solo embedding FastText. Cada proveedor combina similitud coseno con
-full-text search de PostgreSQL mediante Reciprocal Rank Fusion y el caso de uso devuelve
-un `top_results` diversificado mas una seccion independiente por recurso.
+full-text search de PostgreSQL mediante Reciprocal Rank Fusion. Los resultados que no
+superan el umbral semantico ni el lexical se descartan: no se agregan recursos de relleno.
+Los eventos se descartan antes del ranking cuando
+`start_time + duration_minutes <= as_of`.
+
+`POST /search` permanece como endpoint publico de compatibilidad temporal. Puede
+deshabilitarse con `PUBLIC_GLOBAL_SEARCH_ENABLED=false` cuando la app movil ya use solo
+la API principal.
 
 ```json
 {
@@ -157,12 +168,9 @@ un `top_results` diversificado mas una seccion independiente por recurso.
 }
 ```
 
-`requester_id` debe provenir de la identidad autenticada por la API principal, nunca de
-texto libre enviado directamente por la app. Cuando se envia, la llamada tambien debe
-incluir `Authorization: Bearer <SEARCH_INTERNAL_TOKEN>`. Este header solo se requiere cuando la solicitud incluye
-`requester_id`; las busquedas publicas no requieren autenticacion. Los grupos privados solo son recuperables
-por su creador, miembros agregados o invitados. Clubes privados y eventos no publicos
-permanecen ocultos mientras la API principal no entregue una lista de usuarios autorizados.
+La API principal obtiene la identidad desde el token de login; la app no debe enviar
+`requester_id` como autoridad. El endpoint interno de NLP exige
+`Authorization: Bearer <NLP_SERVICE_TOKEN>` y devuelve exclusivamente IDs y puntajes.
 
 El indice de usuarios excluye correo, fecha de nacimiento, genero y ubicacion actual. Los
 IDs de tags de eventos se conservan como metadatos; para aportar significado semantico la
@@ -196,6 +204,24 @@ sql/verify_post_feed_v2.sql
 
 `sql/rollback_post_feed_v1.sql` es el rollback destructivo de emergencia. No se debe
 ejecutar ninguna de estas migraciones desde la API ni desde un job.
+
+La busqueda coordinada por la API principal requiere, para una BD existente:
+
+```text
+sql/migrations/20260712_01_global_search_candidate_filters.sql
+sql/verify_global_search_candidate_filters.sql
+```
+
+La migracion reemplaza de forma transaccional `search_resource_embeddings` y agrega dos
+helpers de parseo seguro para timestamps y duraciones. No crea ni modifica tablas,
+columnas o indices. El segundo archivo es de solo lectura, falla con una excepcion si
+detecta deriva y debe ejecutarse despues para comprobar el contrato.
+
+`/ready` exige la firma y los marcadores V2 de search; una funcion heredada ya no puede
+declarar el servicio listo. Las conexiones y consultas pgvector usan
+`REQUEST_TIMEOUT_SECONDS`, y las rutas tienen un limite local configurable con
+`RATE_LIMIT_REQUESTS_PER_WINDOW`, `INTERNAL_RATE_LIMIT_REQUESTS_PER_WINDOW` y
+`RATE_LIMIT_WINDOW_SECONDS`.
 
 Para una BD vacía o una BD existente que ya use `VECTOR(300)`, puede ejecutarse
 `sql/new_pgvector_schema.sql` desde pgAdmin. El archivo es convergente e incluye
