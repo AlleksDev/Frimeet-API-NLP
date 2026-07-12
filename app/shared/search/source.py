@@ -34,6 +34,8 @@ class PagedMainApiSearchClient:
         self._settings = settings
         self._base_url = settings.main_api_base_url.rstrip("/") + "/"
         self._path = path.lstrip("/")
+        if not self._path.startswith("api/v1/internal/search/"):
+            raise ValueError("search sync source must use an internal snapshot endpoint")
         self._collection_keys = collection_keys
         self._mapper = mapper
         self._page_limit = page_limit
@@ -88,8 +90,12 @@ class PagedMainApiSearchClient:
                 offset += limit
 
     def _build_headers(self) -> dict[str, str]:
-        token = self._settings.main_api_internal_token or self._settings.main_api_auth_token
-        return {"Authorization": f"Bearer {token}"} if token else {}
+        token = (self._settings.main_api_internal_token or "").strip()
+        if not token:
+            raise RuntimeError(
+                "MAIN_API_INTERNAL_TOKEN is required for search snapshot synchronization"
+            )
+        return {"Authorization": f"Bearer {token}"}
 
     def _pagination_params(
         self,

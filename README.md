@@ -140,6 +140,19 @@ python -m app.jobs.sync_search_embeddings --resource all
 Los jobs calculan un `content_hash` versionado con el contenido, modelo, version y
 dimension. Un cambio de modelo fuerza la regeneracion aunque el texto no haya cambiado.
 
+La sincronizacion de users, clubs, groups y events consume exclusivamente los snapshots
+internos de la API principal:
+
+```text
+/api/v1/internal/search/users/snapshot
+/api/v1/internal/search/clubs/snapshot
+/api/v1/internal/search/groups/snapshot
+/api/v1/internal/search/events/snapshot
+```
+
+Estos clientes requieren `MAIN_API_INTERNAL_TOKEN`; nunca usan un JWT de usuario ni
+hacen fallback a `MAIN_API_AUTH_TOKEN`.
+
 ## Busqueda Global Hibrida
 
 La app movil debe llamar `POST /api/v1/search` en la API principal con su token de

@@ -90,11 +90,13 @@ def test_event_identifier_tags_are_not_embedded_as_semantics() -> None:
             "title": "Fiesta de Cumpleanos",
             "description": "Evento totalmente independiente",
             "is_public": True,
-            "tags": ["7", "b83ab97e-91a4-4f69-b102-b27c6092e9cb"],
+            "tags": ["musica", "b83ab97e-91a4-4f69-b102-b27c6092e9cb"],
+            "tag_ids": ["7", "b83ab97e-91a4-4f69-b102-b27c6092e9cb"],
         }
     )
     assert record is not None
     assert "b83ab97e" not in record.document
+    assert "musica" in record.document
     assert record.metadata["tag_ids"] == ["7", "b83ab97e-91a4-4f69-b102-b27c6092e9cb"]
 
 

@@ -113,6 +113,19 @@ referencia.
 
 ## Sincronizacion
 
+Las fuentes para users, clubs, groups y events son endpoints internos paginados de Go,
+autenticados con `MAIN_API_INTERNAL_TOKEN`:
+
+```dotenv
+MAIN_API_USERS_SNAPSHOT_PATH=/api/v1/internal/search/users/snapshot
+MAIN_API_CLUBS_SNAPSHOT_PATH=/api/v1/internal/search/clubs/snapshot
+MAIN_API_GROUPS_SNAPSHOT_PATH=/api/v1/internal/search/groups/snapshot
+MAIN_API_EVENTS_SNAPSHOT_PATH=/api/v1/internal/search/events/snapshot
+```
+
+Los jobs de search no aceptan `MAIN_API_AUTH_TOKEN` como reemplazo. La identidad de un
+usuario final no debe controlar la construccion del indice derivado.
+
 Antes de activar la busqueda:
 
 1. Ejecutar dry-run de `python -m app.jobs.sync_search_embeddings --resource all`.

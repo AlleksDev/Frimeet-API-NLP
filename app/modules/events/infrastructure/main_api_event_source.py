@@ -14,7 +14,7 @@ class MainApiEventsClient(PagedMainApiSearchClient):
     def __init__(self, settings: Settings) -> None:
         super().__init__(
             settings=settings,
-            path=settings.main_api_events_search_path,
+            path=settings.main_api_events_snapshot_path,
             collection_keys=("events",),
             mapper=event_to_source_record,
             page_limit=settings.main_api_search_page_limit,
@@ -32,10 +32,10 @@ def event_to_source_record(event: dict[str, Any]) -> SearchSourceRecord | None:
         return None
     title = str(first_present(event, "title", "name", default="")).strip()
     description = str(first_present(event, "description", "summary", default="")).strip()
-    tag_values = first_present(event, "tags", "tag_ids", "tagIds", default=[])
-    tag_ids = as_text_list(tag_values)
+    tag_names = as_text_list(first_present(event, "tags", default=[]))
+    tag_ids = as_text_list(first_present(event, "tag_ids", "tagIds", default=[]))
     # Only textual tag names are semantic. UUID/numeric IDs stay as filters/metadata.
-    tag_names = [tag for tag in tag_ids if not _looks_like_identifier(tag)]
+    tag_names = [tag for tag in tag_names if not _looks_like_identifier(tag)]
     start_time, duration_minutes = _normalized_temporal_metadata(event)
     temporal_metadata_valid = start_time is not None and duration_minutes is not None
     is_active = (

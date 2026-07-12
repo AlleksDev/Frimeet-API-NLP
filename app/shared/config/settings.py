@@ -40,17 +40,21 @@ class Settings(BaseSettings):
         default="/api/v1/internal/feed/interactions/changes",
         alias="MAIN_API_FEED_INTERACTIONS_PATH",
     )
-    main_api_users_search_path: str = Field(
-        default="/api/v1/users/search", alias="MAIN_API_USERS_SEARCH_PATH"
+    main_api_users_snapshot_path: str = Field(
+        default="/api/v1/internal/search/users/snapshot",
+        alias="MAIN_API_USERS_SNAPSHOT_PATH",
     )
-    main_api_clubs_search_path: str = Field(
-        default="/api/v1/clubs/search", alias="MAIN_API_CLUBS_SEARCH_PATH"
+    main_api_clubs_snapshot_path: str = Field(
+        default="/api/v1/internal/search/clubs/snapshot",
+        alias="MAIN_API_CLUBS_SNAPSHOT_PATH",
     )
-    main_api_groups_search_path: str = Field(
-        default="/api/v1/groups/search", alias="MAIN_API_GROUPS_SEARCH_PATH"
+    main_api_groups_snapshot_path: str = Field(
+        default="/api/v1/internal/search/groups/snapshot",
+        alias="MAIN_API_GROUPS_SNAPSHOT_PATH",
     )
-    main_api_events_search_path: str = Field(
-        default="/api/v1/events/search", alias="MAIN_API_EVENTS_SEARCH_PATH"
+    main_api_events_snapshot_path: str = Field(
+        default="/api/v1/internal/search/events/snapshot",
+        alias="MAIN_API_EVENTS_SNAPSHOT_PATH",
     )
     main_api_internal_token: str | None = Field(
         default=None,

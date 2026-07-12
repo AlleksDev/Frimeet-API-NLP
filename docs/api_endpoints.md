@@ -815,6 +815,10 @@ finalizados. Los cursores quedan ligados a query, recursos, filtros, ubicacion,
 | `EMBEDDING_DIMENSION` | Dimension vectorial; FastText utiliza `300` |
 | `GROQ_API_KEY` | Habilita Groq/Llama para redactar respuestas conversacionales |
 | `MAIN_API_BASE_URL` | API principal usada para fuentes y filtros geograficos |
+| `MAIN_API_USERS_SNAPSHOT_PATH` | Snapshot interno paginado de usuarios para search |
+| `MAIN_API_CLUBS_SNAPSHOT_PATH` | Snapshot interno paginado de clubs para search |
+| `MAIN_API_GROUPS_SNAPSHOT_PATH` | Snapshot interno paginado de grupos para search |
+| `MAIN_API_EVENTS_SNAPSHOT_PATH` | Snapshot interno paginado de eventos para search |
 | `MAIN_API_PLACES_NEARBY_PATH` | Endpoint que resuelve los IDs dentro del radio solicitado |
 | `GLOBAL_SEARCH_NEARBY_BOOST` | Peso de priorizacion geografica; default `0.12` |
 | `PUBLIC_GLOBAL_SEARCH_ENABLED` | Mantiene o deshabilita el endpoint publico heredado `POST /search` |
