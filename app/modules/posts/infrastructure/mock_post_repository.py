@@ -1,7 +1,7 @@
 import math
 from typing import Sequence
 
-from app.modules.posts.application.ports.post_repository import PostVectorRepository
+from app.modules.posts.domain.ports.post_repository import PostVectorRepository
 from app.modules.posts.domain.models import PostCandidate
 from app.shared.nlp.embeddings.base import EmbeddingProvider
 from app.shared.nlp.preprocessing.text import prepare_for_embedding

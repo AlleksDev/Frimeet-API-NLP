@@ -184,7 +184,4 @@ def test_posts_clusters_endpoint() -> None:
 
     response = client.get("/posts/clusters")
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["clusters"]
-    assert payload["metadata"]["computed_during_request"] is False
+    assert response.status_code == 404

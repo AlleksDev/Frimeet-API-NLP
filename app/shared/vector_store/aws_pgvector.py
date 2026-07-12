@@ -18,6 +18,7 @@ READ_CONTRACT_SIGNATURES = {
     "search_resource_embeddings": (
         "search_resource_embeddings(text, text, vector, integer, jsonb)"
     ),
+    "get_post_feed_features": "get_post_feed_features(text, text[])",
 }
 
 SEARCH_RESOURCE_TYPES = frozenset({"places", "posts", "users", "clubs", "groups", "events"})
@@ -196,10 +197,34 @@ class AwsPgvectorClient:
         self,
         records: list[VectorUpsertRecord],
     ) -> None:
-        await self._upsert_records(
-            function_name="upsert_post_embedding",
-            records=records,
-        )
+        if not records:
+            return
+        query = """
+            SELECT upsert_post_embedding(
+                $1::text, $2::text, $3::jsonb, $4::vector,
+                $5::text, $6::text, $7::text, $8::boolean,
+                $9::text, $10::text, $11::timestamptz, $12::bigint
+            )
+        """
+        rows = [
+            (
+                record.id,
+                record.document,
+                json.dumps(record.metadata, ensure_ascii=False),
+                vector_literal(record.embedding),
+                record.content_hash,
+                self._settings.embedding_model,
+                self._settings.embedding_version,
+                record.is_active,
+                record.author_type,
+                record.author_id,
+                record.published_at,
+                record.source_version,
+            )
+            for record in records
+        ]
+        async with self.connection() as connection:
+            await connection.executemany(query, rows)
 
     async def upsert_resource_embeddings(
         self,

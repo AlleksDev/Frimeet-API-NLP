@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 
@@ -20,3 +21,7 @@ class VectorUpsertRecord:
     embedding: list[float]
     content_hash: str
     is_active: bool
+    author_type: str | None = None
+    author_id: str | None = None
+    published_at: datetime | None = None
+    source_version: int | None = None

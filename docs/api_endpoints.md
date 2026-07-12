@@ -36,7 +36,11 @@ Todas las peticiones y respuestas con body utilizan `application/json`.
 | `POST` | `/places/recommendations` | Recomendar lugares y redactar una respuesta | No |
 | `POST` | `/places/chat` | Conversacion orientada a lugares | No |
 | `POST` | `/posts/recommendations` | Recomendar publicaciones | No |
-| `GET` | `/posts/clusters` | Consultar agrupaciones de publicaciones | No |
+| `POST` | `/internal/posts/feed/rank` | Ordenar allowlist de posts | Servicio |
+| `POST` | `/internal/posts/clusters/runs` | Agendar entrenamiento de clusters | Servicio |
+| `GET` | `/internal/posts/clusters/status` | Estado del run activo | Servicio |
+| `GET` | `/internal/posts/clusters/runs/{id}` | Detalle de un run de clusters | Servicio |
+| `POST` | `/internal/posts/clusters/runs/{id}/activate` | Activar/rollback de run | Servicio |
 | `POST` | `/search` | Busqueda global sobre todos los recursos | Condicional |
 
 La autenticacion de `/search` solo es obligatoria cuando el body contiene
@@ -396,26 +400,78 @@ Respuesta:
 }
 ```
 
-### `GET /posts/clusters`
+### `POST /internal/posts/feed/rank`
 
-Devuelve agrupaciones de publicaciones relacionadas.
+Endpoint servicio-a-servicio. Requiere:
 
-No recibe body ni query parameters.
+```http
+Authorization: Bearer <NLP_SERVICE_TOKEN>
+```
+
+La API Go envia exclusivamente candidatos ya autorizados. NLP nunca introduce IDs
+externos y devuelve también candidatos sin embedding con score técnico de cold start.
 
 ```json
 {
-  "clusters": [
+  "user_id": "uuid",
+  "candidate_posts": [
     {
-      "id": "cluster-id",
-      "label": "Deportes",
-      "post_ids": ["post-1", "post-2"],
-      "size": 2,
-      "metadata": {}
+      "post_id": "uuid",
+      "author_id": "uuid",
+      "created_at": "2026-07-05T12:00:00Z",
+      "social_affinity": 1.0,
+      "engagement_score": 0.4,
+      "author_affinity": 0.0
     }
   ],
-  "metadata": {}
+  "snapshot_at": "2026-07-05T12:01:00Z",
+  "result_limit": 500
 }
 ```
+
+Respuesta:
+
+```json
+{
+  "items": [
+    {
+      "post_id": "uuid",
+      "score": 0.87,
+      "cluster_id": 12
+    }
+  ],
+  "ranking_version": "feed-v1",
+  "cluster_run_id": "uuid",
+  "cold_start": false,
+  "missing_embedding_count": 0,
+  "diversity_relaxations": 0,
+  "duplicate_penalized_count": 0
+}
+```
+
+### Operación interna de clusters
+
+```http
+POST /internal/posts/clusters/runs
+GET  /internal/posts/clusters/status
+GET  /internal/posts/clusters/runs/{run_id}
+POST /internal/posts/clusters/runs/{run_id}/activate
+Authorization: Bearer <NLP_SERVICE_TOKEN>
+```
+
+`POST /internal/posts/clusters/runs` agenda el entrenamiento y responde `202 Accepted`:
+
+```json
+{
+  "status": "scheduled",
+  "message": "entrenamiento enviado al worker en background"
+}
+```
+
+`GET /internal/posts/clusters/runs/{run_id}` devuelve estado, metricas y error si fallo.
+El entrenamiento normal debe ejecutarse con `python -m app.jobs.train_post_clusters`;
+los endpoints son controles administrativos. Si `KMEANS_AUTO_ACTIVATE=false`, primero
+queda en `validated` y despues se activa con el endpoint de activate.
 
 ## 4. Busqueda global
 
@@ -708,6 +764,9 @@ Ejemplo de error de validacion `422`:
 | Variable | Uso |
 | --- | --- |
 | `SEARCH_INTERNAL_TOKEN` | Valida `Authorization: Bearer ...` cuando `/search` recibe `requester_id` |
+| `NLP_SERVICE_TOKEN` | Autentica todos los endpoints `/internal/posts/*`; debe coincidir con Go |
+| `MAIN_API_INTERNAL_TOKEN` | Autentica los jobs NLP al leer endpoints internos de Go |
+| `MAX_REQUEST_BODY_BYTES` | Debe ser al menos `131072`; valor recomendado `262144` para 500 candidatos |
 | `VECTOR_STORE_PROVIDER` | Selecciona `aws_pgvector` o el proveedor mock |
 | `PGVECTOR_*` | Conexion y roles de PostgreSQL/pgvector |
 | `EMBEDDING_PROVIDER` | Proveedor de embeddings; produccion utiliza `fasttext` |
