@@ -1,0 +1,9 @@
+from typing import Protocol
+
+from app.modules.posts.domain.clustering import ClusterRunDetail, ClusterStatus
+
+
+class ClusterOperationsRepository(Protocol):
+    async def get_status(self) -> ClusterStatus: ...
+    async def get_run(self, run_id: str) -> ClusterRunDetail | None: ...
+    async def activate_run(self, run_id: str) -> None: ...

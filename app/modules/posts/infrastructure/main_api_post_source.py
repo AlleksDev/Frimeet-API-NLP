@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, AsyncIterator
 
 import httpx
@@ -6,15 +6,7 @@ import httpx
 from app.shared.config.settings import Settings
 from app.shared.content_hash import stable_content_hash
 from app.shared.nlp.preprocessing.text import clean_text
-
-
-@dataclass(frozen=True)
-class PostSourceRecord:
-    id: str
-    document: str
-    metadata: dict[str, Any]
-    content_hash: str
-    is_active: bool
+from app.modules.posts.domain.sync import PostChangeRecord, PostSourceRecord
 
 
 class MainApiPostsClient:
@@ -23,9 +15,10 @@ class MainApiPostsClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._base_url = settings.main_api_base_url.rstrip("/") + "/"
-        self._path = settings.main_api_posts_search_path.lstrip("/")
+        self._snapshot_path = settings.main_api_posts_snapshot_path.lstrip("/")
+        self._changes_path = settings.main_api_posts_changes_path.lstrip("/")
 
-    async def iter_posts(
+    async def iter_snapshot(
         self,
         page_limit: int | None = None,
         max_pages: int | None = None,
@@ -45,7 +38,7 @@ class MainApiPostsClient:
         ) as client:
             while True:
                 params = self._build_pagination_params(limit, page, offset, cursor)
-                response = await client.get(self._path, params=params)
+                response = await client.get(self._snapshot_path, params=params)
                 response.raise_for_status()
                 payload = response.json()
                 posts = self._extract_posts(payload)
@@ -73,8 +66,62 @@ class MainApiPostsClient:
                 page += 1
                 offset += limit
 
+    def iter_posts(
+        self,
+        page_limit: int | None = None,
+        max_pages: int | None = None,
+    ) -> AsyncIterator[PostSourceRecord]:
+        """Backward-compatible alias for the snapshot iterator."""
+        return self.iter_snapshot(page_limit, max_pages)
+
+    async def iter_changes(
+        self,
+        after_id: int,
+        page_limit: int | None = None,
+        max_pages: int | None = None,
+    ) -> AsyncIterator[PostChangeRecord]:
+        limit = page_limit or self._settings.main_api_posts_page_limit
+        page = 1
+        current_after_id = max(0, after_id)
+        headers = self._build_headers()
+        async with httpx.AsyncClient(
+            base_url=self._base_url,
+            timeout=self._settings.main_api_timeout_seconds,
+            headers=headers,
+        ) as client:
+            while True:
+                response = await client.get(
+                    self._changes_path,
+                    params={"after_id": current_after_id, "limit": limit},
+                )
+                response.raise_for_status()
+                payload = response.json()
+                items = self._extract_posts(payload)
+                if not items:
+                    break
+                last_event_id = current_after_id
+                for item in items:
+                    change = post_change_to_record(item)
+                    if change is None:
+                        raise ValueError("cambio de post invalido recibido de la API principal")
+                    if change.event_id <= last_event_id:
+                        raise ValueError(
+                            "post changes debe estar ordenado por event_id "
+                            "estrictamente ascendente"
+                        )
+                    last_event_id = change.event_id
+                    yield change
+                if last_event_id == current_after_id:
+                    break
+                current_after_id = last_event_id
+                if not self._extract_has_more(payload):
+                    break
+                if max_pages is not None and page >= max_pages:
+                    break
+                page += 1
+
     def _build_headers(self) -> dict[str, str]:
-        token = self._settings.main_api_internal_token or self._settings.main_api_auth_token
+        token = self._settings.main_api_internal_token
         if not token:
             return {}
         return {"Authorization": f"Bearer {token}"}
@@ -145,6 +192,12 @@ def post_to_source_record(post: dict[str, Any]) -> PostSourceRecord | None:
         post, "published_at", "publishedAt", "created_at", "createdAt"
     )
     is_active = _first_present(post, "is_active", "isActive", default=True)
+    author_type = _first_present(post, "author_type", "authorType")
+    author_id = _first_present(post, "author_id", "authorId")
+    if author_id is None and isinstance(post.get("author"), dict):
+        author_type = author_type or post["author"].get("type")
+        author_id = post["author"].get("id")
+    source_version = _as_int(_first_present(post, "source_version", "sourceVersion"))
     tags = _as_text_list(_first_present(post, "tags", "keywords", default=[]))
 
     document = clean_text(
@@ -162,6 +215,9 @@ def post_to_source_record(post: dict[str, Any]) -> PostSourceRecord | None:
         "published_at": published_at,
         "tags": ",".join(tags),
         "is_active": bool(is_active),
+        "author_type": author_type,
+        "author_id": author_id,
+        "source_version": source_version,
     }
     filtered_metadata = {
         key: value for key, value in metadata.items() if value not in (None, "")
@@ -179,7 +235,34 @@ def post_to_source_record(post: dict[str, Any]) -> PostSourceRecord | None:
         metadata=filtered_metadata,
         content_hash=content_hash,
         is_active=bool(is_active),
+        author_type=str(author_type) if author_type is not None else None,
+        author_id=str(author_id) if author_id is not None else None,
+        published_at=_as_datetime(published_at),
+        source_version=source_version,
     )
+
+
+def post_change_to_record(payload: dict[str, Any]) -> PostChangeRecord | None:
+    event_id = _as_int(_first_present(payload, "event_id", "id", "outbox_id"))
+    post_id = _first_present(payload, "post_id", "aggregate_id")
+    operation = str(_first_present(payload, "operation", "event_type", default="upsert")).lower()
+    source_version = _as_int(
+        _first_present(payload, "source_version", "version", default=event_id)
+    )
+    if event_id is None or post_id is None or source_version is None:
+        return None
+    normalized = {
+        "post.created": "upsert",
+        "post.updated": "upsert",
+        "post.restored": "upsert",
+        "post.archived": "archive",
+        "post.deleted": "delete",
+    }.get(operation, operation)
+    raw_post = payload.get("post") or payload.get("data")
+    if raw_post is None and normalized == "upsert":
+        raw_post = payload
+    post = post_to_source_record(raw_post) if isinstance(raw_post, dict) else None
+    return PostChangeRecord(event_id, str(post_id), normalized, source_version, post)
 
 
 def _first_present(
@@ -202,3 +285,22 @@ def _as_text_list(value: Any) -> list[str]:
     if isinstance(value, str):
         return [item.strip() for item in value.split(",") if item.strip()]
     return [str(value).strip()]
+
+
+def _as_int(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+    except ValueError:
+        return None

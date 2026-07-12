@@ -1,0 +1,6 @@
+from typing import Protocol, Sequence
+
+
+class EmbeddingProvider(Protocol):
+    def embed_text(self, text: str) -> list[float]: ...
+    def embed_batch(self, texts: Sequence[str]) -> list[list[float]]: ...

@@ -100,7 +100,11 @@ POST /places/search/metrics?k=5
 POST /places/recommendations
 POST /places/chat
 POST /posts/recommendations
-GET  /posts/clusters
+POST /internal/posts/feed/rank
+POST /internal/posts/clusters/runs
+GET  /internal/posts/clusters/status
+GET  /internal/posts/clusters/runs/{run_id}
+POST /internal/posts/clusters/runs/{run_id}/activate
 POST /search
 ```
 
@@ -110,7 +114,7 @@ Probar sin escribir:
 
 ```powershell
 python -m app.jobs.sync_place_embeddings --dry-run --max-pages 1
-python -m app.jobs.sync_post_embeddings --dry-run --max-pages 1
+python -m app.jobs.sync_post_embeddings --mode snapshot --max-pages 1
 python -m app.jobs.sync_search_embeddings --resource all --dry-run --max-pages 1
 ```
 
@@ -126,7 +130,10 @@ Sincronizaciones posteriores:
 
 ```powershell
 python -m app.jobs.sync_place_embeddings
-python -m app.jobs.sync_post_embeddings
+python -m app.jobs.sync_post_embeddings --mode incremental
+python -m app.jobs.sync_feed_interactions
+python -m app.jobs.rebuild_user_interest_profiles
+python -m app.jobs.train_post_clusters
 python -m app.jobs.sync_search_embeddings --resource all
 ```
 
@@ -177,6 +184,40 @@ docs/pgvector_post_embeddings_schema.md
 ```
 
 Ese SQL debe ejecutarse una vez con un rol administrador/DBA fuera de Hugging Face. La API NLP usa solo `nlp_reader`; los jobs usan solo `nlp_writer`.
+
+El feed requiere, en este orden para una BD ya existente:
+
+```text
+sql/migrate_post_feed_v1.sql
+sql/verify_post_feed_v1.sql
+sql/migrate_post_feed_v2.sql
+sql/verify_post_feed_v2.sql
+```
+
+`sql/rollback_post_feed_v1.sql` es el rollback destructivo de emergencia. No se debe
+ejecutar ninguna de estas migraciones desde la API ni desde un job.
+
+Para una BD vacía o una BD existente que ya use `VECTOR(300)`, puede ejecutarse
+`sql/new_pgvector_schema.sql` desde pgAdmin. El archivo es convergente e incluye
+el contrato base, feed V1, correcciones V2, propietarios y permisos. No convierte
+`VECTOR(16)`; esa conversión sigue usando la migración FastText separada.
+
+Los perfiles no se actualizan dentro del request móvil. Configura un scheduler
+(cron, EventBridge o worker) con estos comandos, en orden:
+
+```powershell
+python -m app.jobs.sync_post_embeddings --mode incremental
+python -m app.jobs.sync_feed_interactions
+```
+
+Una frecuencia inicial razonable es cada minuto. El entrenamiento de clusters se
+ejecuta aparte con `python -m app.jobs.train_post_clusters`; con pocos posts ajusta
+`KMEANS_MIN_POSTS`, `KMEANS_MIN_K` y `KMEANS_MIN_CLUSTER_SIZE` sin usar `k >= n`.
+
+El endpoint `POST /internal/posts/clusters/runs` agenda el entrenamiento en background
+y responde `202`. Para operacion normal se recomienda el job
+`python -m app.jobs.train_post_clusters`. Si `KMEANS_AUTO_ACTIVATE=false`, activa el run
+validado con `POST /internal/posts/clusters/runs/{run_id}/activate`.
 
 ### Migracion De VECTOR(16) A FastText VECTOR(300)
 

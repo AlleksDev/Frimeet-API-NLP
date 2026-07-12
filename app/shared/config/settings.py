@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,9 +27,17 @@ class Settings(BaseSettings):
         default="/api/v1/places/nearby",
         alias="MAIN_API_PLACES_NEARBY_PATH",
     )
-    main_api_posts_search_path: str = Field(
-        default="/api/v1/posts/search",
-        alias="MAIN_API_POSTS_SEARCH_PATH",
+    main_api_posts_snapshot_path: str = Field(
+        default="/api/v1/internal/posts/snapshot",
+        alias="MAIN_API_POSTS_SNAPSHOT_PATH",
+    )
+    main_api_posts_changes_path: str = Field(
+        default="/api/v1/internal/posts/changes",
+        alias="MAIN_API_POSTS_CHANGES_PATH",
+    )
+    main_api_feed_interactions_path: str = Field(
+        default="/api/v1/internal/feed/interactions/changes",
+        alias="MAIN_API_FEED_INTERACTIONS_PATH",
     )
     main_api_users_search_path: str = Field(
         default="/api/v1/users/search", alias="MAIN_API_USERS_SEARCH_PATH"
@@ -49,6 +57,13 @@ class Settings(BaseSettings):
     )
     main_api_auth_token: str | None = Field(default=None, alias="MAIN_API_AUTH_TOKEN")
     search_internal_token: str | None = Field(default=None, alias="SEARCH_INTERNAL_TOKEN")
+    post_feed_internal_token: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "NLP_SERVICE_TOKEN",
+            "POST_FEED_INTERNAL_TOKEN",
+        ),
+    )
     main_api_timeout_seconds: int = Field(default=15, alias="MAIN_API_TIMEOUT_SECONDS")
     main_api_places_page_limit: int = Field(default=100, alias="MAIN_API_PLACES_PAGE_LIMIT")
     main_api_posts_page_limit: int = Field(default=100, alias="MAIN_API_POSTS_PAGE_LIMIT")
@@ -145,12 +160,55 @@ class Settings(BaseSettings):
         default=4,
         alias="MAX_LLM_CONCURRENT_REQUESTS",
     )
-    max_request_body_bytes: int = Field(default=65_536, alias="MAX_REQUEST_BODY_BYTES")
+    max_request_body_bytes: int = Field(
+        default=262_144, ge=131_072, alias="MAX_REQUEST_BODY_BYTES"
+    )
     embedding_cache_ttl_seconds: int = Field(default=300, alias="EMBEDDING_CACHE_TTL_SECONDS")
     vector_search_cache_ttl_seconds: int = Field(
         default=120,
         alias="VECTOR_SEARCH_CACHE_TTL_SECONDS",
     )
+    kmeans_random_state: int = Field(default=42, alias="KMEANS_RANDOM_STATE")
+    kmeans_batch_size: int = Field(default=1024, gt=0, alias="KMEANS_BATCH_SIZE")
+    kmeans_min_posts: int = Field(default=200, ge=3, alias="KMEANS_MIN_POSTS")
+    kmeans_min_k: int = Field(default=8, ge=2, alias="KMEANS_MIN_K")
+    kmeans_max_k: int = Field(default=50, ge=2, alias="KMEANS_MAX_K")
+    kmeans_lookback_days: int = Field(default=90, ge=1, alias="KMEANS_LOOKBACK_DAYS")
+    kmeans_min_cluster_size: int = Field(
+        default=3, ge=1, alias="KMEANS_MIN_CLUSTER_SIZE"
+    )
+    kmeans_max_cluster_ratio: float = Field(
+        default=0.70, gt=0, le=1, alias="KMEANS_MAX_CLUSTER_RATIO"
+    )
+    kmeans_auto_activate: bool = Field(default=False, alias="KMEANS_AUTO_ACTIVATE")
+    user_profile_half_life_days: float = Field(
+        default=30.0, gt=0, alias="USER_PROFILE_HALF_LIFE_DAYS"
+    )
+    feed_duplicate_similarity_threshold: float = Field(
+        default=0.92, ge=-1, le=1, alias="FEED_DUPLICATE_SIMILARITY_THRESHOLD"
+    )
+    feed_duplicate_penalty: float = Field(
+        default=0.15, ge=0, le=1, alias="FEED_DUPLICATE_PENALTY"
+    )
+
+    @model_validator(mode="after")
+    def validate_post_feed_security(self) -> "Settings":
+        self.vector_store_provider = self.vector_store_provider.strip().lower()
+        if self.env.lower() != "local":
+            missing: list[str] = []
+            if not self.post_feed_internal_token:
+                missing.append("NLP_SERVICE_TOKEN")
+            if not self.main_api_internal_token:
+                missing.append("MAIN_API_INTERNAL_TOKEN")
+            if missing:
+                raise ValueError(
+                    f"{', '.join(missing)} es obligatorio fuera del entorno local"
+                )
+            if self.vector_store_provider.lower() != "aws_pgvector":
+                raise ValueError(
+                    "VECTOR_STORE_PROVIDER=aws_pgvector es obligatorio fuera del entorno local"
+                )
+        return self
 
 
 @lru_cache

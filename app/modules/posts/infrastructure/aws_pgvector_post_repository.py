@@ -1,6 +1,6 @@
 from typing import Sequence
 
-from app.modules.posts.application.ports.post_repository import PostVectorRepository
+from app.modules.posts.domain.ports.post_repository import PostVectorRepository
 from app.modules.posts.domain.models import PostCandidate
 from app.shared.vector_store.aws_pgvector import AwsPgvectorClient
 from app.shared.vector_store.models import VectorMatch

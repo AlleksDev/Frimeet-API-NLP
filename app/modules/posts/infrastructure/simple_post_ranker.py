@@ -1,6 +1,6 @@
 from typing import Sequence
 
-from app.modules.posts.application.ports.ranker import PostRanker
+from app.modules.posts.domain.ports.ranker import PostRanker
 from app.modules.posts.domain.models import PostCandidate
 
 

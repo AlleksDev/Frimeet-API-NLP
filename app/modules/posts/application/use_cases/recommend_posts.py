@@ -1,12 +1,12 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.modules.posts.application.ports.post_repository import PostVectorRepository
-from app.modules.posts.application.ports.ranker import PostRanker
 from app.modules.posts.domain.models import PostCandidate
-from app.shared.cache.memory import SimpleTTLCache
-from app.shared.nlp.embeddings.base import EmbeddingProvider
-from app.shared.nlp.preprocessing.text import prepare_for_embedding
+from app.modules.posts.domain.ports.cache import Cache
+from app.modules.posts.domain.ports.embedding_provider import EmbeddingProvider
+from app.modules.posts.domain.ports.post_repository import PostVectorRepository
+from app.modules.posts.domain.ports.ranker import PostRanker
+from app.modules.posts.domain.ports.text_preprocessor import TextPreprocessor
 
 
 @dataclass(frozen=True)
@@ -20,11 +20,13 @@ class RecommendPostsUseCase:
     def __init__(
         self,
         embedding_provider: EmbeddingProvider,
+        text_preprocessor: TextPreprocessor,
         post_repository: PostVectorRepository,
         ranker: PostRanker,
-        cache: SimpleTTLCache | None = None,
+        cache: Cache | None = None,
     ) -> None:
         self._embedding_provider = embedding_provider
+        self._text_preprocessor = text_preprocessor
         self._post_repository = post_repository
         self._ranker = ranker
         self._cache = cache
@@ -35,7 +37,7 @@ class RecommendPostsUseCase:
         city: str | None = None,
         limit: int = 10,
     ) -> RecommendPostsResult:
-        normalized_query = prepare_for_embedding(query)
+        normalized_query = self._text_preprocessor.prepare(query)
         cache_key = f"posts:{normalized_query}:{city}:{limit}"
         if self._cache:
             cached = self._cache.get(cache_key)

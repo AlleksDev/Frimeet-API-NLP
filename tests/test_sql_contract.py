@@ -9,3 +9,52 @@ def test_hybrid_search_dynamic_sql_escapes_format_percent_signs() -> None:
     remaining_percent_signs = dynamic_sql.replace("%%", "").replace("%I", "")
 
     assert "%" not in remaining_percent_signs
+
+
+def test_post_feed_contract_is_synchronized() -> None:
+    migration = Path("sql/migrate_post_feed_v1.sql").read_text(encoding="utf-8")
+    base_contract = Path("sql/aws_pgvector_contract.sql").read_text(encoding="utf-8")
+    full_setup = Path("sql/aws_pgvector_full_setup.psql.sql").read_text(encoding="utf-8")
+    required = {
+        "post_cluster_runs",
+        "post_cluster_memberships",
+        "post_embedding_tombstones",
+        "user_interest_embeddings",
+        "post_sync_checkpoints",
+        "get_post_feed_features",
+        "deactivate_post_embedding",
+        "validate_post_cluster_run",
+        "fail_post_cluster_run",
+        "get_post_cluster_run",
+        "reset_user_interest_profiles",
+        "reset_post_sync_checkpoint",
+        "activate_post_cluster_run",
+    }
+    assert all(name in migration for name in required)
+    base_required = {
+        "post_cluster_runs",
+        "post_cluster_memberships",
+        "post_embedding_tombstones",
+        "user_interest_embeddings",
+        "post_sync_checkpoints",
+    }
+    assert all(name in base_contract for name in base_required)
+    assert "\\ir migrate_post_feed_v1.sql" in full_setup
+    assert "\\ir migrate_post_feed_v2.sql" in full_setup
+    assert Path("sql/verify_post_feed_v1.sql").exists()
+    assert Path("sql/rollback_post_feed_v1.sql").exists()
+
+
+def test_post_feed_v2_and_convergent_schema_are_present() -> None:
+    migration = Path("sql/migrate_post_feed_v2.sql").read_text(encoding="utf-8")
+    verifier = Path("sql/verify_post_feed_v2.sql").read_text(encoding="utf-8")
+    convergent = Path("sql/new_pgvector_schema.sql").read_text(encoding="utf-8")
+
+    assert "source_version es obligatorio" in migration
+    assert "EXCLUDED.source_version > post_embeddings.source_version" in migration
+    assert "cluster_count <> expected_k" in migration
+    assert "post_embedding_dimension_ok" in verifier
+    assert "aws_pgvector_contract" not in convergent  # contenido inline, sin includes
+    assert "CREATE TABLE IF NOT EXISTS post_embeddings" in convergent
+    assert "CREATE OR REPLACE FUNCTION public.get_post_feed_features" in convergent
+    assert "migrate_post_feed_v2.sql" not in convergent  # contenido inline, sin includes
