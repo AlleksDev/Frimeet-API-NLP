@@ -13,7 +13,7 @@ from app.modules.search.domain.filters import (
     SearchLocation,
 )
 from app.modules.search.domain.models import SearchAllResult, SearchHit, SearchResourceType
-from app.shared.nlp.preprocessing.text import prepare_for_embedding
+from app.modules.search.domain.query import normalize_search_query
 
 
 class SearchLocationSchema(BaseModel):
@@ -121,7 +121,11 @@ class GlobalSearchRequest(BaseModel):
             nearby_boost=nearby_boost,
         )
 
-    def cursor_context_payload(self, nearby_boost: float = 0.12) -> dict[str, Any]:
+    def cursor_context_payload(
+        self,
+        nearby_boost: float = 0.12,
+        policy_version: str = "global-search-relevance-v1",
+    ) -> dict[str, Any]:
         filters = self.filters.model_dump(mode="json")
         for key in ("categories", "price_ranges", "tags", "user_roles"):
             filters[key] = sorted(
@@ -140,7 +144,7 @@ class GlobalSearchRequest(BaseModel):
                 value.astimezone(UTC).isoformat() if value is not None else None
             )
         return {
-            "query": prepare_for_embedding(self.query),
+            "query": normalize_search_query(self.query),
             "per_type_limit": self.per_type_limit,
             "requester_id": str(self.requester_id) if self.requester_id else None,
             "location": (
@@ -148,6 +152,7 @@ class GlobalSearchRequest(BaseModel):
             ),
             "filters": filters,
             "nearby_boost": nearby_boost,
+            "policy_version": policy_version,
         }
 
 

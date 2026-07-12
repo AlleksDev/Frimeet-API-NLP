@@ -7,6 +7,7 @@ from app.modules.posts.infrastructure.mock_post_repository import SAMPLE_POSTS
 from app.modules.search.application.ports.search_provider import SearchProvider
 from app.modules.search.domain.filters import SearchCriteria, filter_and_rank_hits
 from app.modules.search.domain.models import SearchHit, SearchResourceType
+from app.modules.search.domain.relevance import SearchRelevancePolicy
 from app.shared.nlp.embeddings.base import EmbeddingProvider
 from app.shared.nlp.preprocessing.text import prepare_for_embedding
 
@@ -25,8 +26,10 @@ class MockHybridSearchProvider(SearchProvider):
         resource_type: SearchResourceType,
         embedding_provider: EmbeddingProvider,
         documents: list[MockSearchDocument],
+        relevance_policy: SearchRelevancePolicy | None = None,
     ) -> None:
         self.resource_type = resource_type
+        self._relevance_policy = relevance_policy or SearchRelevancePolicy.uniform()
         self._records = [
             (document, embedding_provider.embed_text(document.document))
             for document in documents
@@ -70,7 +73,8 @@ class MockHybridSearchProvider(SearchProvider):
                     metadata=metadata,
                 )
             )
-        ranked = filter_and_rank_hits(self.resource_type, hits, criteria)
+        relevant_hits = [hit for hit in hits if self._relevance_policy.accepts(hit)]
+        ranked = filter_and_rank_hits(self.resource_type, relevant_hits, criteria)
         return ranked[offset : offset + limit]
 
 
@@ -134,7 +138,11 @@ def get_mock_search_documents() -> dict[SearchResourceType, list[MockSearchDocum
                 id="event_birthday",
                 title="Fiesta de Cumpleanos",
                 document="fiesta cumpleanos evento independiente",
-                metadata={"is_public": True, "duration_minutes": 300},
+                metadata={
+                    "is_public": True,
+                    "start_time": "2099-07-12T20:00:00Z",
+                    "duration_minutes": 300,
+                },
             )
         ],
     }

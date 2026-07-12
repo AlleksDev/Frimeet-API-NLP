@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any, Sequence
 
@@ -62,9 +62,13 @@ class SearchCriteria:
     location: SearchLocation | None = None
     nearby_place_ids: frozenset[str] = frozenset()
     nearby_boost: float = 0.12
+    event_active_at: datetime | None = None
 
     def with_nearby_place_ids(self, place_ids: set[str]) -> "SearchCriteria":
         return replace(self, nearby_place_ids=frozenset(place_ids))
+
+    def with_event_active_at(self, value: datetime) -> "SearchCriteria":
+        return replace(self, event_active_at=value)
 
     def requires_extended_candidates(self, resource_type: SearchResourceType) -> bool:
         if not self.filters.is_empty():
@@ -85,6 +89,12 @@ def filter_and_rank_hits(
     accepted: list[SearchHit] = []
     for hit in hits:
         if not _matches_filters(resource_type, hit.metadata, criteria.filters):
+            continue
+        if (
+            resource_type == SearchResourceType.EVENTS
+            and criteria.event_active_at is not None
+            and not _event_is_active(hit.metadata, criteria.event_active_at)
+        ):
             continue
         is_nearby = _is_nearby(resource_type, hit, criteria.nearby_place_ids)
         location_applicable = resource_type in _LOCATION_AWARE_RESOURCES
@@ -176,6 +186,22 @@ def _matches_filters(
             return False
 
     return True
+
+
+def _event_is_active(metadata: dict[str, Any], active_at: datetime) -> bool:
+    start_time = _parse_datetime(metadata.get("start_time"))
+    if start_time is None:
+        return False
+    raw_duration = metadata.get("duration_minutes")
+    if isinstance(raw_duration, bool):
+        return False
+    try:
+        duration_minutes = int(raw_duration)
+    except (TypeError, ValueError):
+        return False
+    if duration_minutes <= 0:
+        return False
+    return start_time + timedelta(minutes=duration_minutes) > _normalized_datetime(active_at)
 
 
 def _is_nearby(

@@ -13,7 +13,7 @@ class MainApiGroupsClient(PagedMainApiSearchClient):
     def __init__(self, settings: Settings) -> None:
         super().__init__(
             settings=settings,
-            path=settings.main_api_groups_search_path,
+            path=settings.main_api_groups_snapshot_path,
             collection_keys=("groups",),
             mapper=group_to_source_record,
             page_limit=settings.main_api_search_page_limit,

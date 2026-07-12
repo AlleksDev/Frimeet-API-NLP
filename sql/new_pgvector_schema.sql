@@ -424,6 +424,37 @@ AS $$
     WHERE p.external_id = ANY(p_external_ids);
 $$;
 
+CREATE OR REPLACE FUNCTION try_parse_timestamptz(p_value TEXT)
+RETURNS TIMESTAMPTZ
+LANGUAGE plpgsql
+IMMUTABLE
+PARALLEL SAFE
+SET search_path = pg_catalog
+AS $$
+BEGIN
+    RETURN NULLIF(btrim(p_value), '')::timestamptz;
+EXCEPTION WHEN OTHERS THEN
+    RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION try_parse_positive_integer(p_value TEXT)
+RETURNS INTEGER
+LANGUAGE plpgsql
+IMMUTABLE
+PARALLEL SAFE
+SET search_path = pg_catalog
+AS $$
+DECLARE
+    parsed INTEGER;
+BEGIN
+    parsed := NULLIF(btrim(p_value), '')::integer;
+    RETURN CASE WHEN parsed > 0 THEN parsed ELSE NULL END;
+EXCEPTION WHEN OTHERS THEN
+    RETURN NULL;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION search_resource_embeddings(
     p_resource_type TEXT,
     p_query_text TEXT,
@@ -493,23 +524,39 @@ BEGIN
               )
               AND (
                     ($4 ? 'published_from') IS FALSE
-                    OR NULLIF(e.metadata->>'published_at', '')::timestamptz
+                    OR public.try_parse_timestamptz(e.metadata->>'published_at')
                        >= ($4->>'published_from')::timestamptz
               )
               AND (
                     ($4 ? 'published_to') IS FALSE
-                    OR NULLIF(e.metadata->>'published_at', '')::timestamptz
+                    OR public.try_parse_timestamptz(e.metadata->>'published_at')
                        <= ($4->>'published_to')::timestamptz
               )
               AND (
                     ($4 ? 'event_from') IS FALSE
-                    OR NULLIF(e.metadata->>'start_time', '')::timestamptz
+                    OR public.try_parse_timestamptz(e.metadata->>'start_time')
                        >= ($4->>'event_from')::timestamptz
               )
               AND (
                     ($4 ? 'event_to') IS FALSE
-                    OR NULLIF(e.metadata->>'start_time', '')::timestamptz
+                    OR public.try_parse_timestamptz(e.metadata->>'start_time')
                        <= ($4->>'event_to')::timestamptz
+              )
+              AND (
+                    ($4 ? 'event_active_at') IS FALSE
+                    OR (
+                        public.try_parse_timestamptz(e.metadata->>'start_time') IS NOT NULL
+                        AND public.try_parse_positive_integer(
+                            e.metadata->>'duration_minutes'
+                        ) IS NOT NULL
+                        AND public.try_parse_timestamptz(e.metadata->>'start_time')
+                            + make_interval(
+                                mins => public.try_parse_positive_integer(
+                                    e.metadata->>'duration_minutes'
+                                )
+                              )
+                            > ($4->>'event_active_at')::timestamptz
+                    )
               )
               AND (
                     ($4 ? 'is_online') IS FALSE
@@ -601,12 +648,37 @@ BEGIN
             f.lexical_score::double precision
         FROM fused f
         JOIN eligible e USING (external_id)
+        WHERE (
+            (
+                ($4 ? 'min_semantic_score') IS FALSE
+                AND ($4 ? 'min_lexical_score') IS FALSE
+            )
+            OR (
+                ($4 ? 'min_semantic_score')
+                AND COALESCE(
+                    f.semantic_score >= ($4->>'min_semantic_score')::double precision,
+                    FALSE
+                )
+            )
+            OR (
+                ($4 ? 'min_lexical_score')
+                AND COALESCE(
+                    f.lexical_score >= ($4->>'min_lexical_score')::double precision,
+                    FALSE
+                )
+            )
+        )
         ORDER BY score DESC, f.semantic_score DESC NULLS LAST, e.external_id ASC
         LIMIT GREATEST($3, 1)
     $query$, target_table)
     USING p_query_embedding, p_query_text, p_match_count, p_filters;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.try_parse_timestamptz(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.try_parse_positive_integer(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.try_parse_timestamptz(text) TO nlp_reader;
+GRANT EXECUTE ON FUNCTION public.try_parse_positive_integer(text) TO nlp_reader;
 
 CREATE OR REPLACE FUNCTION get_resource_content_hashes(
     p_resource_type TEXT,

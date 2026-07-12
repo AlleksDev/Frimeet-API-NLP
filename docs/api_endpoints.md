@@ -42,6 +42,7 @@ Todas las peticiones y respuestas con body utilizan `application/json`.
 | `GET` | `/internal/posts/clusters/runs/{id}` | Detalle de un run de clusters | Servicio |
 | `POST` | `/internal/posts/clusters/runs/{id}/activate` | Activar/rollback de run | Servicio |
 | `POST` | `/search` | Busqueda global sobre todos los recursos | Condicional |
+| `POST` | `/internal/search/candidates` | Candidatos tecnicos para la API principal | Servicio |
 
 La autenticacion de `/search` solo es obligatoria cuando el body contiene
 `requester_id`. En ese caso se envia:
@@ -96,6 +97,7 @@ Comprueba que el servicio puede utilizar su almacenamiento vectorial. Cuando
 - existencia y permiso de ejecucion de `match_places(...)`;
 - existencia y permiso de ejecucion de `match_posts(...)`;
 - existencia y permiso de ejecucion de `search_resource_embeddings(...)`.
+- presencia de los filtros V2 (`event_active_at`, umbrales y parseo temporal seguro).
 
 Respuesta correcta: `200 OK` con `status: "ready"`.
 
@@ -759,19 +761,72 @@ Ejemplo de error de validacion `422`:
 }
 ```
 
-## 6. Variables relacionadas
+## 6. Candidatos internos de busqueda
+
+### `POST /internal/search/candidates`
+
+Endpoint de servicio consumido exclusivamente por la API principal. La app movil no
+debe llamarlo directamente.
+
+```http
+Authorization: Bearer <NLP_SERVICE_TOKEN>
+Content-Type: application/json
+```
+
+Ejemplo minimo:
+
+```json
+{
+  "query": "club universitario de ajedrez",
+  "resource_types": ["clubs", "groups", "events", "posts"],
+  "candidate_limit_per_type": 50,
+  "top_limit": 100,
+  "as_of": "2026-07-12T14:00:00Z"
+}
+```
+
+La respuesta contiene secciones independientes con `id`, `resource_type`, `score`,
+`semantic_score` y `lexical_score`. No incluye metadata de UI ni registros hidratados.
+La API principal aplica permisos y reglas de negocio, carga los recursos vigentes y
+conserva el orden del ranking.
+
+NLP aplica antes del `LIMIT` los umbrales configurados. Un candidato se acepta cuando
+supera el umbral semantico **o** el lexical; si ninguno lo supera se descarta y no se
+rellena la respuesta. Para eventos tambien exige que
+`start_time + duration_minutes > as_of`, evitando calcular ranking sobre eventos ya
+finalizados. Los cursores quedan ligados a query, recursos, filtros, ubicacion,
+`as_of` y version de la politica de umbrales.
+
+## 7. Variables relacionadas
 
 | Variable | Uso |
 | --- | --- |
 | `SEARCH_INTERNAL_TOKEN` | Valida `Authorization: Bearer ...` cuando `/search` recibe `requester_id` |
-| `NLP_SERVICE_TOKEN` | Autentica todos los endpoints `/internal/posts/*`; debe coincidir con Go |
+| `NLP_SERVICE_TOKEN` | Autentica `/internal/posts/*` y `/internal/search/candidates`; debe coincidir con `NLP_SERVICE_TOKEN` en Go |
 | `MAIN_API_INTERNAL_TOKEN` | Autentica los jobs NLP al leer endpoints internos de Go |
 | `MAX_REQUEST_BODY_BYTES` | Debe ser al menos `131072`; valor recomendado `262144` para 500 candidatos |
+| `REQUEST_TIMEOUT_SECONDS` | Presupuesto maximo para search interno y timeout de conexion/consulta pgvector |
+| `RATE_LIMIT_REQUESTS_PER_WINDOW` | Limite local por IP/ruta para endpoints publicos |
+| `INTERNAL_RATE_LIMIT_REQUESTS_PER_WINDOW` | Limite local por IP/ruta para endpoints internos |
+| `RATE_LIMIT_WINDOW_SECONDS` | Ventana del limitador local; el gateway puede agregar un limite distribuido |
 | `VECTOR_STORE_PROVIDER` | Selecciona `aws_pgvector` o el proveedor mock |
 | `PGVECTOR_*` | Conexion y roles de PostgreSQL/pgvector |
 | `EMBEDDING_PROVIDER` | Proveedor de embeddings; produccion utiliza `fasttext` |
 | `EMBEDDING_DIMENSION` | Dimension vectorial; FastText utiliza `300` |
 | `GROQ_API_KEY` | Habilita Groq/Llama para redactar respuestas conversacionales |
 | `MAIN_API_BASE_URL` | API principal usada para fuentes y filtros geograficos |
+| `MAIN_API_USERS_SNAPSHOT_PATH` | Snapshot interno paginado de usuarios para search |
+| `MAIN_API_CLUBS_SNAPSHOT_PATH` | Snapshot interno paginado de clubs para search |
+| `MAIN_API_GROUPS_SNAPSHOT_PATH` | Snapshot interno paginado de grupos para search |
+| `MAIN_API_EVENTS_SNAPSHOT_PATH` | Snapshot interno paginado de eventos para search |
 | `MAIN_API_PLACES_NEARBY_PATH` | Endpoint que resuelve los IDs dentro del radio solicitado |
 | `GLOBAL_SEARCH_NEARBY_BOOST` | Peso de priorizacion geografica; default `0.12` |
+| `PUBLIC_GLOBAL_SEARCH_ENABLED` | Mantiene o deshabilita el endpoint publico heredado `POST /search` |
+| `GLOBAL_SEARCH_MIN_SEMANTIC_SCORE` | Umbral semantico global; default `0.30` |
+| `GLOBAL_SEARCH_MIN_LEXICAL_SCORE` | Umbral lexical global; default `0.05` |
+| `GLOBAL_SEARCH_RESOURCE_THRESHOLDS_JSON` | Overrides opcionales por recurso con `semantic_min` y `lexical_min` |
+| `GLOBAL_SEARCH_THRESHOLD_POLICY_VERSION` | Version estable incluida en cursores para invalidarlos al cambiar la politica |
+
+`top_limit` se conserva en el request y en la huella del cursor para mantener el
+contexto coordinado con Go. NLP devuelve candidatos por seccion; la composicion final de
+`top_results` pertenece a la API principal.
