@@ -1,4 +1,5 @@
 from functools import lru_cache
+import math
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -39,17 +40,21 @@ class Settings(BaseSettings):
         default="/api/v1/internal/feed/interactions/changes",
         alias="MAIN_API_FEED_INTERACTIONS_PATH",
     )
-    main_api_users_search_path: str = Field(
-        default="/api/v1/users/search", alias="MAIN_API_USERS_SEARCH_PATH"
+    main_api_users_snapshot_path: str = Field(
+        default="/api/v1/internal/search/users/snapshot",
+        alias="MAIN_API_USERS_SNAPSHOT_PATH",
     )
-    main_api_clubs_search_path: str = Field(
-        default="/api/v1/clubs/search", alias="MAIN_API_CLUBS_SEARCH_PATH"
+    main_api_clubs_snapshot_path: str = Field(
+        default="/api/v1/internal/search/clubs/snapshot",
+        alias="MAIN_API_CLUBS_SNAPSHOT_PATH",
     )
-    main_api_groups_search_path: str = Field(
-        default="/api/v1/groups/search", alias="MAIN_API_GROUPS_SEARCH_PATH"
+    main_api_groups_snapshot_path: str = Field(
+        default="/api/v1/internal/search/groups/snapshot",
+        alias="MAIN_API_GROUPS_SNAPSHOT_PATH",
     )
-    main_api_events_search_path: str = Field(
-        default="/api/v1/events/search", alias="MAIN_API_EVENTS_SEARCH_PATH"
+    main_api_events_snapshot_path: str = Field(
+        default="/api/v1/internal/search/events/snapshot",
+        alias="MAIN_API_EVENTS_SNAPSHOT_PATH",
     )
     main_api_internal_token: str | None = Field(
         default=None,
@@ -84,6 +89,31 @@ class Settings(BaseSettings):
         ge=0.0,
         le=1.0,
         alias="GLOBAL_SEARCH_NEARBY_BOOST",
+    )
+    public_global_search_enabled: bool = Field(
+        default=True,
+        alias="PUBLIC_GLOBAL_SEARCH_ENABLED",
+    )
+    global_search_min_semantic_score: float = Field(
+        default=0.30,
+        ge=-1.0,
+        le=1.0,
+        alias="GLOBAL_SEARCH_MIN_SEMANTIC_SCORE",
+    )
+    global_search_min_lexical_score: float = Field(
+        default=0.05,
+        ge=0.0,
+        alias="GLOBAL_SEARCH_MIN_LEXICAL_SCORE",
+    )
+    global_search_resource_thresholds: dict[str, dict[str, float]] = Field(
+        default_factory=dict,
+        alias="GLOBAL_SEARCH_RESOURCE_THRESHOLDS_JSON",
+    )
+    global_search_threshold_policy_version: str = Field(
+        default="global-search-relevance-v1",
+        min_length=1,
+        max_length=64,
+        alias="GLOBAL_SEARCH_THRESHOLD_POLICY_VERSION",
     )
 
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
@@ -154,7 +184,26 @@ class Settings(BaseSettings):
     )
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
-    request_timeout_seconds: int = Field(default=10, alias="REQUEST_TIMEOUT_SECONDS")
+    request_timeout_seconds: int = Field(
+        default=10,
+        gt=0,
+        alias="REQUEST_TIMEOUT_SECONDS",
+    )
+    rate_limit_requests_per_window: int = Field(
+        default=600,
+        ge=1,
+        alias="RATE_LIMIT_REQUESTS_PER_WINDOW",
+    )
+    internal_rate_limit_requests_per_window: int = Field(
+        default=120,
+        ge=1,
+        alias="INTERNAL_RATE_LIMIT_REQUESTS_PER_WINDOW",
+    )
+    rate_limit_window_seconds: int = Field(
+        default=60,
+        ge=1,
+        alias="RATE_LIMIT_WINDOW_SECONDS",
+    )
     llm_timeout_seconds: int = Field(default=12, alias="LLM_TIMEOUT_SECONDS")
     max_llm_concurrent_requests: int = Field(
         default=4,
@@ -194,6 +243,30 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_post_feed_security(self) -> "Settings":
         self.vector_store_provider = self.vector_store_provider.strip().lower()
+        allowed_resources = {"places", "posts", "users", "clubs", "groups", "events"}
+        for resource_type, thresholds in self.global_search_resource_thresholds.items():
+            if resource_type not in allowed_resources:
+                raise ValueError(
+                    f"GLOBAL_SEARCH_RESOURCE_THRESHOLDS_JSON contiene un recurso invalido: {resource_type}"
+                )
+            if set(thresholds) != {"semantic_min", "lexical_min"}:
+                raise ValueError(
+                    "cada override de GLOBAL_SEARCH_RESOURCE_THRESHOLDS_JSON debe "
+                    "contener semantic_min y lexical_min"
+                )
+            semantic_min = float(thresholds["semantic_min"])
+            lexical_min = float(thresholds["lexical_min"])
+            if not math.isfinite(semantic_min) or not -1.0 <= semantic_min <= 1.0:
+                raise ValueError("semantic_min debe ser finito y estar entre -1 y 1")
+            if not math.isfinite(lexical_min) or lexical_min < 0.0:
+                raise ValueError("lexical_min debe ser finito y no negativo")
+        if not math.isfinite(self.global_search_min_semantic_score):
+            raise ValueError("GLOBAL_SEARCH_MIN_SEMANTIC_SCORE debe ser finito")
+        if not math.isfinite(self.global_search_min_lexical_score):
+            raise ValueError("GLOBAL_SEARCH_MIN_LEXICAL_SCORE debe ser finito")
+        self.global_search_threshold_policy_version = (
+            self.global_search_threshold_policy_version.strip()
+        )
         if self.env.lower() != "local":
             missing: list[str] = []
             if not self.post_feed_internal_token:

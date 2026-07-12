@@ -1,18 +1,18 @@
 import asyncio
 import logging
-import math
-from datetime import UTC, datetime
+from datetime import datetime
 
-from app.modules.search.application.ports.search_provider import SearchProvider
-from app.modules.search.application.ports.nearby_place_provider import NearbyPlaceProvider
+from app.modules.search.application.ports.nearby_place_provider import (
+    NearbyPlaceProvider,
+)
 from app.modules.search.application.ports.query_embedding_provider import (
     QueryEmbeddingProvider,
 )
+from app.modules.search.application.ports.search_provider import SearchProvider
 from app.modules.search.domain.filters import SearchCriteria
 from app.modules.search.domain.models import (
-    ALL_SEARCH_RESOURCE_TYPES,
-    SearchAllResult,
-    SearchHit,
+    SearchCandidate,
+    SearchCandidatesResult,
     SearchResourceType,
     SearchSectionPagination,
 )
@@ -21,36 +21,33 @@ from app.modules.search.domain.query import normalize_search_query
 logger = logging.getLogger(__name__)
 
 
-class SearchAllUseCase:
+class SearchCandidatesUseCase:
     def __init__(
         self,
         embedding_provider: QueryEmbeddingProvider,
         providers: list[SearchProvider],
+        policy_version: str,
         nearby_place_provider: NearbyPlaceProvider | None = None,
     ) -> None:
         self._embedding_provider = embedding_provider
         self._providers = {provider.resource_type: provider for provider in providers}
         self._nearby_place_provider = nearby_place_provider
+        self._policy_version = policy_version
 
     async def execute(
         self,
         query: str,
-        resource_types: tuple[SearchResourceType, ...] = ALL_SEARCH_RESOURCE_TYPES,
-        per_type_limit: int = 5,
-        top_limit: int = 10,
-        requester_id: str | None = None,
+        resource_types: tuple[SearchResourceType, ...],
+        candidate_limit_per_type: int,
+        as_of: datetime,
         offsets: dict[SearchResourceType, int] | None = None,
         criteria: SearchCriteria | None = None,
         cursor_context: str = "",
-    ) -> SearchAllResult:
+    ) -> SearchCandidatesResult:
         normalized_query = normalize_search_query(query)
         embedding = self._embedding_provider.embed_text(normalized_query)
         effective_offsets = offsets or {}
-        effective_criteria = criteria or SearchCriteria()
-        if effective_criteria.event_active_at is None:
-            effective_criteria = effective_criteria.with_event_active_at(
-                datetime.now(UTC)
-            )
+        effective_criteria = (criteria or SearchCriteria()).with_event_active_at(as_of)
         if effective_criteria.location is not None:
             if self._nearby_place_provider is None:
                 raise RuntimeError("nearby place provider is not configured")
@@ -60,6 +57,7 @@ class SearchAllUseCase:
                 radius_meters=effective_criteria.location.radius_meters,
             )
             effective_criteria = effective_criteria.with_nearby_place_ids(nearby_ids)
+
         providers = [
             self._providers[resource_type]
             for resource_type in resource_types
@@ -70,9 +68,9 @@ class SearchAllUseCase:
                 provider.search(
                     query=normalized_query,
                     embedding=embedding,
-                    limit=per_type_limit + 1,
+                    limit=candidate_limit_per_type + 1,
                     offset=effective_offsets.get(provider.resource_type, 0),
-                    requester_id=requester_id,
+                    requester_id=None,
                     criteria=effective_criteria,
                 )
                 for provider in providers
@@ -80,7 +78,7 @@ class SearchAllUseCase:
             return_exceptions=True,
         )
 
-        sections: dict[SearchResourceType, list[SearchHit]] = {
+        sections: dict[SearchResourceType, list[SearchCandidate]] = {
             resource_type: [] for resource_type in resource_types
         }
         pagination: dict[SearchResourceType, SearchSectionPagination] = {}
@@ -88,63 +86,53 @@ class SearchAllUseCase:
         for provider, outcome in zip(providers, outcomes):
             if isinstance(outcome, BaseException):
                 logger.error(
-                    "Search provider failed resource=%s error=%s",
+                    "Internal search provider failed resource=%s error=%s",
                     provider.resource_type,
                     type(outcome).__name__,
                 )
                 failures[provider.resource_type] = type(outcome).__name__
                 pagination[provider.resource_type] = SearchSectionPagination(
-                    page_size=per_type_limit,
+                    page_size=candidate_limit_per_type,
                     returned_count=0,
                     has_more=False,
                 )
                 continue
             ranked = list(outcome)
-            page_hits = ranked[:per_type_limit]
-            has_more = len(ranked) > per_type_limit
+            page_hits = ranked[:candidate_limit_per_type]
+            has_more = len(ranked) > candidate_limit_per_type
             current_offset = effective_offsets.get(provider.resource_type, 0)
-            sections[provider.resource_type] = page_hits
+            sections[provider.resource_type] = [
+                SearchCandidate(
+                    id=hit.id,
+                    resource_type=hit.resource_type,
+                    score=hit.score,
+                    semantic_score=hit.semantic_score,
+                    lexical_score=hit.lexical_score,
+                )
+                for hit in page_hits
+            ]
             pagination[provider.resource_type] = SearchSectionPagination(
-                page_size=per_type_limit,
+                page_size=candidate_limit_per_type,
                 returned_count=len(page_hits),
                 has_more=has_more,
                 next_offset=(current_offset + len(page_hits) if has_more else None),
             )
 
-        top_results = _diversified_top_results(sections, top_limit)
-        return SearchAllResult(
+        for resource_type in resource_types:
+            pagination.setdefault(
+                resource_type,
+                SearchSectionPagination(
+                    page_size=candidate_limit_per_type,
+                    returned_count=0,
+                    has_more=False,
+                ),
+            )
+        return SearchCandidatesResult(
             query=query,
             normalized_query=normalized_query,
-            top_results=top_results,
             sections=sections,
             pagination=pagination,
             failed_resources=failures,
             cursor_context=cursor_context,
+            policy_version=self._policy_version,
         )
-
-
-def _diversified_top_results(
-    sections: dict[SearchResourceType, list[SearchHit]],
-    limit: int,
-) -> list[SearchHit]:
-    if limit <= 0:
-        return []
-    candidates = sorted(
-        (hit for hits in sections.values() for hit in hits),
-        key=lambda hit: (
-            -(hit.ranking_score if hit.ranking_score is not None else hit.score),
-            -hit.score,
-            hit.id,
-        ),
-    )
-    max_per_type = max(2, math.ceil(limit / 3))
-    counts: dict[SearchResourceType, int] = {}
-    selected: list[SearchHit] = []
-    for hit in candidates:
-        if counts.get(hit.resource_type, 0) >= max_per_type:
-            continue
-        selected.append(hit)
-        counts[hit.resource_type] = counts.get(hit.resource_type, 0) + 1
-        if len(selected) >= limit:
-            break
-    return selected

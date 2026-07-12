@@ -7,6 +7,7 @@ from app.modules.search.domain.filters import (
     filter_and_rank_hits,
 )
 from app.modules.search.domain.models import SearchHit, SearchResourceType
+from app.modules.search.domain.relevance import SearchRelevancePolicy
 from app.shared.vector_store.aws_pgvector import AwsPgvectorClient
 from app.shared.vector_store.models import VectorMatch
 
@@ -18,8 +19,13 @@ class PgvectorPlaceSearchProvider(SearchProvider):
 
     resource_type = SearchResourceType.PLACES
 
-    def __init__(self, vector_client: AwsPgvectorClient) -> None:
+    def __init__(
+        self,
+        vector_client: AwsPgvectorClient,
+        relevance_policy: SearchRelevancePolicy | None = None,
+    ) -> None:
         self._vector_client = vector_client
+        self._relevance_policy = relevance_policy or SearchRelevancePolicy.uniform()
 
     async def search(
         self,
@@ -48,7 +54,8 @@ class PgvectorPlaceSearchProvider(SearchProvider):
             _to_search_hit(self.resource_type, match)
             for match in matches
         ]
-        ranked = filter_and_rank_hits(self.resource_type, hits, criteria)
+        relevant_hits = [hit for hit in hits if self._relevance_policy.accepts(hit)]
+        ranked = filter_and_rank_hits(self.resource_type, relevant_hits, criteria)
         return ranked[offset : offset + limit]
 
 
@@ -57,9 +64,11 @@ class PgvectorHybridSearchProvider(SearchProvider):
         self,
         resource_type: SearchResourceType,
         vector_client: AwsPgvectorClient,
+        relevance_policy: SearchRelevancePolicy | None = None,
     ) -> None:
         self.resource_type = resource_type
         self._vector_client = vector_client
+        self._relevance_policy = relevance_policy or SearchRelevancePolicy.uniform()
 
     async def search(
         self,
@@ -78,6 +87,14 @@ class PgvectorHybridSearchProvider(SearchProvider):
         ):
             return []
         filters = {"is_active": True}
+        threshold = self._relevance_policy.threshold_for(self.resource_type)
+        filters["min_semantic_score"] = threshold.semantic_min
+        filters["min_lexical_score"] = threshold.lexical_min
+        if (
+            self.resource_type == SearchResourceType.EVENTS
+            and criteria.event_active_at is not None
+        ):
+            filters["event_active_at"] = criteria.event_active_at.isoformat()
         if requester_id:
             filters["requester_id"] = requester_id
         filters.update(_hybrid_metadata_filters(criteria, self.resource_type))
@@ -93,7 +110,8 @@ class PgvectorHybridSearchProvider(SearchProvider):
             _to_search_hit(self.resource_type, match)
             for match in matches
         ]
-        ranked = filter_and_rank_hits(self.resource_type, hits, criteria)
+        relevant_hits = [hit for hit in hits if self._relevance_policy.accepts(hit)]
+        ranked = filter_and_rank_hits(self.resource_type, relevant_hits, criteria)
         return ranked[offset : offset + limit]
 
 

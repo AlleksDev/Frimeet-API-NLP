@@ -13,7 +13,7 @@ class MainApiClubsClient(PagedMainApiSearchClient):
     def __init__(self, settings: Settings) -> None:
         super().__init__(
             settings=settings,
-            path=settings.main_api_clubs_search_path,
+            path=settings.main_api_clubs_snapshot_path,
             collection_keys=("clubs",),
             mapper=club_to_source_record,
             page_limit=settings.main_api_search_page_limit,

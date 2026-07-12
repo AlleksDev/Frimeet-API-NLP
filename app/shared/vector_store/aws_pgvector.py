@@ -21,6 +21,13 @@ READ_CONTRACT_SIGNATURES = {
     "get_post_feed_features": "get_post_feed_features(text, text[])",
 }
 
+SEARCH_CANDIDATE_V2_MARKERS = (
+    "event_active_at",
+    "min_semantic_score",
+    "min_lexical_score",
+    "try_parse_timestamptz",
+)
+
 SEARCH_RESOURCE_TYPES = frozenset({"places", "posts", "users", "clubs", "groups", "events"})
 
 
@@ -134,6 +141,20 @@ class AwsPgvectorClient:
                                 "executable": bool(row["executable"]) if row else False,
                             }
                         )
+                        if function_name == "search_resource_embeddings":
+                            definition_row = await connection.fetchrow(
+                                "SELECT pg_get_functiondef(to_regprocedure($1)) AS body",
+                                signature,
+                            )
+                            definition = (
+                                str(definition_row["body"] or "")
+                                if definition_row
+                                else ""
+                            )
+                            functions[function_name]["candidate_filters_v2"] = all(
+                                marker in definition
+                                for marker in SEARCH_CANDIDATE_V2_MARKERS
+                            )
         except Exception as exc:
             return {
                 "ready": False,
@@ -141,10 +162,7 @@ class AwsPgvectorClient:
                 "message": str(exc),
             }
 
-        ready = vector_available and all(
-            details["exists"] and details["executable"]
-            for details in functions.values()
-        )
+        ready = _read_contract_is_ready(vector_available, functions)
         return {
             "ready": ready,
             "vector_extension": vector_available,
@@ -387,7 +405,24 @@ def _build_connection_kwargs(settings: Settings, role: str) -> dict[str, Any]:
         "database": settings.pgvector_database,
         "user": user,
         "password": password,
+        "timeout": settings.request_timeout_seconds,
+        "command_timeout": settings.request_timeout_seconds,
     }
+
+
+def _read_contract_is_ready(
+    vector_available: bool,
+    functions: dict[str, dict[str, Any]],
+) -> bool:
+    return vector_available and all(
+        details.get("exists") is True
+        and details.get("executable") is True
+        and (
+            function_name != "search_resource_embeddings"
+            or details.get("candidate_filters_v2") is True
+        )
+        for function_name, details in functions.items()
+    )
 
 
 def _credentials_for_role(settings: Settings, role: str) -> tuple[str | None, str | None]:
