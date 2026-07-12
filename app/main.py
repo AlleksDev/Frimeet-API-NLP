@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from app.modules.places.api.router import router as places_router
-from app.modules.posts.api.router import router as posts_router
+from app.modules.posts.infrastructure.api.router import router as posts_router
 from app.modules.search.api.router import router as search_router
 from app.shared.config.settings import get_settings
 from app.shared.errors.exceptions import AppError

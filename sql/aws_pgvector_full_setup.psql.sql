@@ -34,6 +34,10 @@ ALTER ROLE nlp_writer SET search_path = public;
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- Instala también búsqueda global y todos los tipos de recursos. El resto del
+-- archivo conserva la reconciliación explícita de roles y permisos.
+\ir aws_pgvector_contract.sql
+
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO nlp_owner, nlp_reader, nlp_writer;
 
@@ -58,6 +62,11 @@ CREATE TABLE IF NOT EXISTS public.post_embeddings (
     embedding_model TEXT NOT NULL,
     embedding_version TEXT NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
+    author_type TEXT,
+    author_id TEXT,
+    published_at TIMESTAMPTZ,
+    source_version BIGINT,
+    indexed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -220,34 +229,38 @@ CREATE OR REPLACE FUNCTION public.upsert_post_embedding(
     p_content_hash TEXT,
     p_embedding_model TEXT,
     p_embedding_version TEXT,
-    p_is_active BOOLEAN
+    p_is_active BOOLEAN,
+    p_author_type TEXT,
+    p_author_id TEXT,
+    p_published_at TIMESTAMPTZ,
+    p_source_version BIGINT
 )
 RETURNS VOID
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM public.post_embedding_tombstones tombstone
+        WHERE tombstone.post_id = p_external_id
+          AND (p_source_version IS NULL OR tombstone.source_version >= p_source_version)
+    ) THEN
+        RETURN;
+    END IF;
+    IF p_source_version IS NOT NULL THEN
+        DELETE FROM public.post_embedding_tombstones
+        WHERE post_id = p_external_id AND source_version < p_source_version;
+    END IF;
     INSERT INTO public.post_embeddings (
-        external_id,
-        document,
-        metadata,
-        embedding,
-        content_hash,
-        embedding_model,
-        embedding_version,
-        is_active,
-        updated_at
+        external_id, document, metadata, embedding, content_hash,
+        embedding_model, embedding_version, is_active, author_type,
+        author_id, published_at, source_version, indexed_at, updated_at
     )
     VALUES (
-        p_external_id,
-        p_document,
-        p_metadata,
-        p_embedding,
-        p_content_hash,
-        p_embedding_model,
-        p_embedding_version,
-        p_is_active,
-        now()
+        p_external_id, p_document, p_metadata, p_embedding, p_content_hash,
+        p_embedding_model, p_embedding_version, p_is_active, p_author_type,
+        p_author_id, p_published_at, p_source_version, now(), now()
     )
     ON CONFLICT (external_id) DO UPDATE SET
         document = EXCLUDED.document,
@@ -257,7 +270,16 @@ AS $$
         embedding_model = EXCLUDED.embedding_model,
         embedding_version = EXCLUDED.embedding_version,
         is_active = EXCLUDED.is_active,
-        updated_at = now();
+        author_type = EXCLUDED.author_type,
+        author_id = EXCLUDED.author_id,
+        published_at = EXCLUDED.published_at,
+        source_version = EXCLUDED.source_version,
+        indexed_at = now(),
+        updated_at = now()
+    WHERE EXCLUDED.source_version IS NULL
+       OR post_embeddings.source_version IS NULL
+       OR EXCLUDED.source_version >= post_embeddings.source_version;
+END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.get_place_content_hashes(p_external_ids TEXT[])
@@ -290,32 +312,52 @@ AS $$
     WHERE p.external_id = ANY(p_external_ids);
 $$;
 
+-- Install the complete post-feed extension (tables, controlled functions,
+-- checkpoints, clustering artifacts, profiles, revokes and grants).
+\ir migrate_post_feed_v1.sql
+\ir migrate_post_feed_v2.sql
+
 ALTER TABLE public.place_embeddings OWNER TO nlp_owner;
 ALTER TABLE public.post_embeddings OWNER TO nlp_owner;
+ALTER TABLE public.post_cluster_runs OWNER TO nlp_owner;
+ALTER TABLE public.post_clusters OWNER TO nlp_owner;
+ALTER TABLE public.post_cluster_memberships OWNER TO nlp_owner;
+ALTER TABLE public.user_interest_embeddings OWNER TO nlp_owner;
+ALTER TABLE public.post_sync_checkpoints OWNER TO nlp_owner;
+ALTER TABLE public.post_embedding_tombstones OWNER TO nlp_owner;
 
 ALTER FUNCTION public.match_places(vector, integer, jsonb) OWNER TO nlp_owner;
 ALTER FUNCTION public.match_posts(vector, integer, jsonb) OWNER TO nlp_owner;
 ALTER FUNCTION public.upsert_place_embedding(text, text, jsonb, vector, text, text, text, boolean) OWNER TO nlp_owner;
-ALTER FUNCTION public.upsert_post_embedding(text, text, jsonb, vector, text, text, text, boolean) OWNER TO nlp_owner;
+ALTER FUNCTION public.upsert_post_embedding(text, text, jsonb, vector, text, text, text, boolean, text, text, timestamptz, bigint) OWNER TO nlp_owner;
 ALTER FUNCTION public.get_place_content_hashes(text[]) OWNER TO nlp_owner;
 ALTER FUNCTION public.get_post_content_hashes(text[]) OWNER TO nlp_owner;
+ALTER FUNCTION public.search_resource_embeddings(text, text, vector, integer, jsonb) OWNER TO nlp_owner;
+ALTER FUNCTION public.get_resource_content_hashes(text, text[]) OWNER TO nlp_owner;
+ALTER FUNCTION public.upsert_resource_embedding(text, text, text, jsonb, vector, text, text, text, boolean) OWNER TO nlp_owner;
 
 REVOKE ALL ON public.place_embeddings FROM PUBLIC;
 REVOKE ALL ON public.post_embeddings FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.match_places(vector, integer, jsonb) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.match_posts(vector, integer, jsonb) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.upsert_place_embedding(text, text, jsonb, vector, text, text, text, boolean) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.upsert_post_embedding(text, text, jsonb, vector, text, text, text, boolean) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.upsert_post_embedding(text, text, jsonb, vector, text, text, text, boolean, text, text, timestamptz, bigint) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.get_place_content_hashes(text[]) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.get_post_content_hashes(text[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.search_resource_embeddings(text, text, vector, integer, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_resource_content_hashes(text, text[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.upsert_resource_embedding(text, text, text, jsonb, vector, text, text, text, boolean) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.match_places(vector, integer, jsonb) TO nlp_reader;
 GRANT EXECUTE ON FUNCTION public.match_posts(vector, integer, jsonb) TO nlp_reader;
+GRANT EXECUTE ON FUNCTION public.search_resource_embeddings(text, text, vector, integer, jsonb) TO nlp_reader;
 
 GRANT EXECUTE ON FUNCTION public.upsert_place_embedding(text, text, jsonb, vector, text, text, text, boolean) TO nlp_writer;
-GRANT EXECUTE ON FUNCTION public.upsert_post_embedding(text, text, jsonb, vector, text, text, text, boolean) TO nlp_writer;
+GRANT EXECUTE ON FUNCTION public.upsert_post_embedding(text, text, jsonb, vector, text, text, text, boolean, text, text, timestamptz, bigint) TO nlp_writer;
 GRANT EXECUTE ON FUNCTION public.get_place_content_hashes(text[]) TO nlp_writer;
 GRANT EXECUTE ON FUNCTION public.get_post_content_hashes(text[]) TO nlp_writer;
+GRANT EXECUTE ON FUNCTION public.get_resource_content_hashes(text, text[]) TO nlp_writer;
+GRANT EXECUTE ON FUNCTION public.upsert_resource_embedding(text, text, text, jsonb, vector, text, text, text, boolean) TO nlp_writer;
 
 SELECT to_regprocedure('public.match_places(vector, integer, jsonb)') AS match_places_signature;
 SELECT to_regprocedure('public.match_posts(vector, integer, jsonb)') AS match_posts_signature;

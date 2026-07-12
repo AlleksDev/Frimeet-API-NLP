@@ -20,6 +20,12 @@ CREATE TABLE IF NOT EXISTS post_embeddings (
     is_active BOOLEAN NOT NULL DEFAULT true,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS post_embedding_tombstones (
+    post_id TEXT PRIMARY KEY,
+    source_version BIGINT,
+    deleted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 ```
 
 `VECTOR(300)` corresponde al modelo preentrenado
@@ -38,6 +44,9 @@ CREATE TABLE IF NOT EXISTS post_embeddings (
 | `embedding_version` | `TEXT` | Version logica del embedding. |
 | `is_active` | `BOOLEAN` | Estado derivado desde la API principal. |
 | `updated_at` | `TIMESTAMPTZ` | Fecha de ultima sincronizacion. |
+
+`post_embedding_tombstones` evita resurrecciones cuando llega primero un delete/archive
+de la API principal y despues llega tarde un upsert con `source_version` menor o igual.
 
 ## Metadata JSONB
 
@@ -84,6 +93,19 @@ Plan de cafe Tuxtla Gutierrez Chiapas internal cafe amigos Una publicacion para 
 Si el hash no cambia, el job omite regenerar embedding.
 
 ## Funciones Requeridas
+
+El feed añade contratos controlados para sincronización incremental, perfiles y
+clustering. La migración que se copia a DataGrid es:
+
+```text
+sql/migrate_post_feed_v1.sql
+sql/migrate_post_feed_v2.sql
+```
+
+Después se ejecutan `sql/verify_post_feed_v1.sql` y
+`sql/verify_post_feed_v2.sql`. Los rollbacks están separados; el rollback V1 es
+destructivo y solo debe usarse en emergencia. Para inicialización completa usa
+`sql/new_pgvector_schema.sql` dentro de la BD `nlp_vectors`.
 
 La API NLP usa:
 

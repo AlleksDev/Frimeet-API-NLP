@@ -27,6 +27,75 @@ CREATE TABLE IF NOT EXISTS post_embeddings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Post-feed derived storage. The versioned companion migration defines the
+-- controlled functions, revokes and grants used by the adapters.
+CREATE TABLE IF NOT EXISTS post_cluster_runs (
+    id UUID PRIMARY KEY,
+    algorithm TEXT NOT NULL CHECK (algorithm = 'kmeans'),
+    algorithm_version TEXT NOT NULL,
+    embedding_model TEXT NOT NULL,
+    embedding_version TEXT NOT NULL,
+    embedding_dimension INTEGER NOT NULL CHECK (embedding_dimension = 300),
+    k INTEGER NOT NULL CHECK (k > 1),
+    sample_size INTEGER NOT NULL CHECK (sample_size >= k),
+    inertia DOUBLE PRECISION,
+    silhouette_score DOUBLE PRECISION,
+    status TEXT NOT NULL CHECK (status IN ('running', 'validated', 'active', 'failed', 'superseded')),
+    parameters JSONB NOT NULL DEFAULT '{}'::jsonb,
+    started_at TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ,
+    activated_at TIMESTAMPTZ,
+    error_message TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS post_cluster_runs_one_active_idx
+ON post_cluster_runs ((status)) WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS post_clusters (
+    run_id UUID NOT NULL REFERENCES post_cluster_runs(id) ON DELETE CASCADE,
+    cluster_id INTEGER NOT NULL,
+    centroid VECTOR(300) NOT NULL,
+    label TEXT,
+    size INTEGER NOT NULL CHECK (size >= 0),
+    representative_post_ids TEXT[] NOT NULL DEFAULT '{}',
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    PRIMARY KEY (run_id, cluster_id)
+);
+
+CREATE TABLE IF NOT EXISTS post_cluster_memberships (
+    run_id UUID NOT NULL,
+    post_id TEXT NOT NULL REFERENCES post_embeddings(external_id) ON DELETE CASCADE,
+    cluster_id INTEGER NOT NULL,
+    distance_to_centroid DOUBLE PRECISION NOT NULL CHECK (distance_to_centroid >= 0),
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (run_id, post_id),
+    FOREIGN KEY (run_id, cluster_id) REFERENCES post_clusters(run_id, cluster_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS user_interest_embeddings (
+    user_id TEXT PRIMARY KEY,
+    embedding VECTOR(300) NOT NULL,
+    weighted_sum VECTOR(300) NOT NULL,
+    total_weight DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (total_weight >= 0),
+    source_hash TEXT NOT NULL,
+    profile_version TEXT NOT NULL,
+    interaction_count INTEGER NOT NULL DEFAULT 0 CHECK (interaction_count >= 0),
+    last_event_id BIGINT NOT NULL DEFAULT 0 CHECK (last_event_id >= 0),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS post_sync_checkpoints (
+    consumer TEXT PRIMARY KEY,
+    last_event_id BIGINT NOT NULL DEFAULT 0 CHECK (last_event_id >= 0),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS post_embedding_tombstones (
+    post_id TEXT PRIMARY KEY,
+    source_version BIGINT NOT NULL CHECK (source_version >= 0),
+    deleted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS user_embeddings (
     external_id TEXT PRIMARY KEY,
     document TEXT NOT NULL,
@@ -36,6 +105,11 @@ CREATE TABLE IF NOT EXISTS user_embeddings (
     embedding_model TEXT NOT NULL,
     embedding_version TEXT NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
+    author_type TEXT,
+    author_id TEXT,
+    published_at TIMESTAMPTZ,
+    source_version BIGINT,
+    indexed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -236,34 +310,38 @@ CREATE OR REPLACE FUNCTION upsert_post_embedding(
     p_content_hash TEXT,
     p_embedding_model TEXT,
     p_embedding_version TEXT,
-    p_is_active BOOLEAN
+    p_is_active BOOLEAN,
+    p_author_type TEXT,
+    p_author_id TEXT,
+    p_published_at TIMESTAMPTZ,
+    p_source_version BIGINT
 )
 RETURNS VOID
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM public.post_embedding_tombstones tombstone
+        WHERE tombstone.post_id = p_external_id
+          AND (p_source_version IS NULL OR tombstone.source_version >= p_source_version)
+    ) THEN
+        RETURN;
+    END IF;
+    IF p_source_version IS NOT NULL THEN
+        DELETE FROM public.post_embedding_tombstones
+        WHERE post_id = p_external_id AND source_version < p_source_version;
+    END IF;
     INSERT INTO public.post_embeddings (
-        external_id,
-        document,
-        metadata,
-        embedding,
-        content_hash,
-        embedding_model,
-        embedding_version,
-        is_active,
-        updated_at
+        external_id, document, metadata, embedding, content_hash,
+        embedding_model, embedding_version, is_active, author_type,
+        author_id, published_at, source_version, indexed_at, updated_at
     )
     VALUES (
-        p_external_id,
-        p_document,
-        p_metadata,
-        p_embedding,
-        p_content_hash,
-        p_embedding_model,
-        p_embedding_version,
-        p_is_active,
-        now()
+        p_external_id, p_document, p_metadata, p_embedding, p_content_hash,
+        p_embedding_model, p_embedding_version, p_is_active, p_author_type,
+        p_author_id, p_published_at, p_source_version, now(), now()
     )
     ON CONFLICT (external_id) DO UPDATE SET
         document = EXCLUDED.document,
@@ -273,7 +351,16 @@ AS $$
         embedding_model = EXCLUDED.embedding_model,
         embedding_version = EXCLUDED.embedding_version,
         is_active = EXCLUDED.is_active,
-        updated_at = now();
+        author_type = EXCLUDED.author_type,
+        author_id = EXCLUDED.author_id,
+        published_at = EXCLUDED.published_at,
+        source_version = EXCLUDED.source_version,
+        indexed_at = now(),
+        updated_at = now()
+    WHERE EXCLUDED.source_version IS NULL
+       OR post_embeddings.source_version IS NULL
+       OR EXCLUDED.source_version >= post_embeddings.source_version;
+END;
 $$;
 
 CREATE OR REPLACE FUNCTION get_place_content_hashes(p_external_ids TEXT[])
@@ -576,7 +663,13 @@ $$;
 -- GRANT EXECUTE ON FUNCTION get_place_content_hashes(TEXT[]) TO nlp_writer;
 -- GRANT EXECUTE ON FUNCTION get_post_content_hashes(TEXT[]) TO nlp_writer;
 -- GRANT EXECUTE ON FUNCTION upsert_place_embedding(TEXT, TEXT, JSONB, VECTOR, TEXT, TEXT, TEXT, BOOLEAN) TO nlp_writer;
--- GRANT EXECUTE ON FUNCTION upsert_post_embedding(TEXT, TEXT, JSONB, VECTOR, TEXT, TEXT, TEXT, BOOLEAN) TO nlp_writer;
+-- GRANT EXECUTE ON FUNCTION upsert_post_embedding(TEXT, TEXT, JSONB, VECTOR, TEXT, TEXT, TEXT, BOOLEAN, TEXT, TEXT, TIMESTAMPTZ, BIGINT) TO nlp_writer;
 -- GRANT EXECUTE ON FUNCTION search_resource_embeddings(TEXT, TEXT, VECTOR, INTEGER, JSONB) TO nlp_reader;
 -- GRANT EXECUTE ON FUNCTION get_resource_content_hashes(TEXT, TEXT[]) TO nlp_writer;
 -- GRANT EXECUTE ON FUNCTION upsert_resource_embedding(TEXT, TEXT, TEXT, JSONB, VECTOR, TEXT, TEXT, TEXT, BOOLEAN) TO nlp_writer;
+
+-- The feed-specific tables and controlled functions are versioned in
+-- sql/migrate_post_feed_v1.sql. Apply that companion contract immediately
+-- after this base contract. Keeping the feed extension versioned prevents a
+-- fresh setup and an upgraded database from drifting apart; the full psql
+-- setup includes it automatically with \ir.
