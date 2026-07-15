@@ -115,6 +115,54 @@ def test_missing_category_requires_clarification() -> None:
     assert intent.unresolved == ("target_category",)
 
 
+def test_food_activity_defaults_to_restaurant_without_clarification() -> None:
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message="quiero comer algo",
+        state=ConversationState(),
+        has_user_location=True,
+    )
+
+    assert intent.action == "recommendations"
+    assert intent.target_category == "restaurant"
+    assert intent.category_values == ("restaurant", "restaurante")
+    assert intent.semantic_query == "restaurant"
+    assert intent.state_patch.target_category == "restaurant"
+    assert intent.confidence == 0.88
+
+
+def test_explicit_category_wins_over_an_activity_default() -> None:
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message="quiero comer algo en una cafeteria",
+        state=ConversationState(),
+        has_user_location=True,
+    )
+
+    assert intent.action == "recommendations"
+    assert intent.target_category == "cafe"
+    assert intent.category_values == ("cafe", "cafeteria", "coffee_shop")
+    assert intent.state_patch.target_category == "cafe"
+
+
+def test_other_high_confidence_activities_use_helpful_defaults() -> None:
+    parser = DeterministicPlaceChatIntentParser()
+    examples = {
+        "quiero hacer ejercicio": "sports",
+        "quiero ver una pelicula": "cinema",
+        "quiero comprar algo": "shopping",
+        "necesito un lugar donde dormir": "lodging",
+    }
+
+    for message, expected_category in examples.items():
+        intent = parser.parse(
+            message=message,
+            state=ConversationState(),
+            has_user_location=True,
+        )
+
+        assert intent.action == "recommendations"
+        assert intent.target_category == expected_category
+
+
 def test_common_category_typo_is_normalized_by_the_taxonomy() -> None:
     intent = DeterministicPlaceChatIntentParser().parse(
         message="recomiendame una cafetria tranquila",
