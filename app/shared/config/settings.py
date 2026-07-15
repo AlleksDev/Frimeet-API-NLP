@@ -28,6 +28,10 @@ class Settings(BaseSettings):
         default="/api/v1/places/nearby",
         alias="MAIN_API_PLACES_NEARBY_PATH",
     )
+    main_api_place_anchor_resolve_path: str = Field(
+        default="/api/v1/internal/places/resolve-anchor",
+        alias="MAIN_API_PLACE_ANCHOR_RESOLVE_PATH",
+    )
     main_api_posts_snapshot_path: str = Field(
         default="/api/v1/internal/posts/snapshot",
         alias="MAIN_API_POSTS_SNAPSHOT_PATH",
@@ -181,6 +185,50 @@ class Settings(BaseSettings):
         ge=-1,
         le=1,
         alias="SEMANTIC_RELEVANCE_THRESHOLD",
+    )
+    places_chat_v2_enabled: bool = Field(
+        default=False,
+        alias="PLACES_CHAT_V2_ENABLED",
+    )
+    places_chat_llm_enabled: bool = Field(
+        default=True,
+        alias="PLACES_CHAT_LLM_ENABLED",
+    )
+    places_chat_candidate_limit: int = Field(
+        default=30,
+        ge=1,
+        le=40,
+        alias="PLACES_CHAT_CANDIDATE_LIMIT",
+    )
+    places_chat_min_content_score: float = Field(
+        default=0.20,
+        ge=0.0,
+        le=1.0,
+        alias="PLACES_CHAT_MIN_CONTENT_SCORE",
+    )
+    places_chat_intent_min_confidence: float = Field(
+        default=0.70,
+        ge=0.0,
+        le=1.0,
+        alias="PLACES_CHAT_INTENT_MIN_CONFIDENCE",
+    )
+    places_chat_ambiguity_delta: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=1.0,
+        alias="PLACES_CHAT_AMBIGUITY_DELTA",
+    )
+    places_chat_ranking_version: str = Field(
+        default="places-chat-v2",
+        min_length=1,
+        max_length=64,
+        alias="PLACES_CHAT_RANKING_VERSION",
+    )
+    places_chat_taxonomy_version: str = Field(
+        default="places-taxonomy-v1",
+        min_length=1,
+        max_length=64,
+        alias="PLACES_CHAT_TAXONOMY_VERSION",
     )
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")

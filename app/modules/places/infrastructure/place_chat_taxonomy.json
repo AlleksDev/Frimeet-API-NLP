@@ -1,0 +1,151 @@
+{
+  "version": "places-taxonomy-v1",
+  "categories": [
+    {
+      "canonical": "cafe",
+      "aliases": ["cafe", "cafes", "cafeteria", "cafeterias", "cafetria", "coffee shop", "coffee shops", "casa de cafe"],
+      "storage_values": ["cafe", "cafeteria", "coffee_shop"]
+    },
+    {
+      "canonical": "restaurant",
+      "aliases": ["restaurante", "restaurantes", "restaurant", "resturante", "comedor", "lugar para comer"],
+      "storage_values": ["restaurant", "restaurante"]
+    },
+    {
+      "canonical": "park",
+      "aliases": ["parque", "parques", "parqe", "jardin publico", "area verde"],
+      "storage_values": ["park", "parque"]
+    },
+    {
+      "canonical": "bar",
+      "aliases": ["bar", "bares", "cantina", "cerveceria"],
+      "storage_values": ["bar", "pub", "cerveceria"]
+    },
+    {
+      "canonical": "nightlife",
+      "aliases": ["antro", "discoteca", "club nocturno", "vida nocturna"],
+      "storage_values": ["nightlife", "night_club", "discoteca"]
+    },
+    {
+      "canonical": "culture",
+      "aliases": ["museo", "galeria", "centro cultural", "lugar cultural"],
+      "storage_values": ["culture", "cultural", "museum", "gallery"]
+    },
+    {
+      "canonical": "shopping",
+      "aliases": ["plaza comercial", "centro comercial", "tienda", "compras"],
+      "storage_values": ["shopping", "mall", "store"]
+    },
+    {
+      "canonical": "sports",
+      "aliases": ["gimnasio", "centro deportivo", "cancha", "deporte"],
+      "storage_values": ["sports", "gym", "fitness_centre"]
+    },
+    {
+      "canonical": "bakery",
+      "aliases": ["panaderia", "pasteleria", "reposteria"],
+      "storage_values": ["bakery", "panaderia", "pastry_shop"]
+    },
+    {
+      "canonical": "ice_cream",
+      "aliases": ["heladeria", "helado", "postres"],
+      "storage_values": ["ice_cream", "ice_cream_shop", "dessert"]
+    },
+    {
+      "canonical": "cinema",
+      "aliases": ["cine", "cinema", "sala de cine"],
+      "storage_values": ["cinema", "movie_theater"]
+    },
+    {
+      "canonical": "library",
+      "aliases": ["biblioteca", "bibliotecas", "sala de lectura"],
+      "storage_values": ["library", "biblioteca"]
+    },
+    {
+      "canonical": "market",
+      "aliases": ["mercado", "mercados", "tianguis"],
+      "storage_values": ["market", "marketplace", "mercado"]
+    },
+    {
+      "canonical": "outdoors",
+      "aliases": ["mirador", "sendero", "paraje natural", "lugar al aire libre"],
+      "storage_values": ["outdoors", "viewpoint", "trail", "nature"]
+    },
+    {
+      "canonical": "lodging",
+      "aliases": ["hotel", "hoteles", "hostal", "alojamiento"],
+      "storage_values": ["lodging", "hotel", "hostel"]
+    }
+  ],
+  "preferences": [
+    {
+      "canonical": "tematica",
+      "aliases": ["tematica", "tematico", "con tema"]
+    },
+    {
+      "canonical": "caricaturas",
+      "aliases": ["caricaturas", "personajes", "dibujos animados", "anime"]
+    },
+    {
+      "canonical": "hello_kitty",
+      "aliases": ["hello kitty"],
+      "implies": ["tematica", "caricaturas"]
+    },
+    {
+      "canonical": "tranquilo",
+      "aliases": ["tranquilo", "tranquila", "relajado", "silencioso"]
+    },
+    {
+      "canonical": "musica",
+      "aliases": ["musica", "musica en vivo", "concierto"]
+    },
+    {
+      "canonical": "romantico",
+      "aliases": ["romantico", "romantica", "para una cita", "en pareja"]
+    },
+    {
+      "canonical": "familiar",
+      "aliases": ["familiar", "para ninos", "con ninos", "en familia"]
+    },
+    {
+      "canonical": "economico",
+      "aliases": ["economico", "economica", "barato", "barata", "bajo costo"]
+    },
+    {
+      "canonical": "naturaleza",
+      "aliases": ["naturaleza", "plantas", "verde", "natural"]
+    },
+    {
+      "canonical": "tecnologia",
+      "aliases": ["tecnologia", "tecnologico", "tecnologica", "gaming", "videojuegos"]
+    },
+    {
+      "canonical": "aire_libre",
+      "aliases": ["aire libre", "al exterior", "terraza"]
+    },
+    {
+      "canonical": "mascotas",
+      "aliases": ["pet friendly", "acepta mascotas", "con mascotas", "para mascotas"]
+    },
+    {
+      "canonical": "wifi",
+      "aliases": ["wifi", "internet", "para trabajar", "trabajar con laptop"]
+    },
+    {
+      "canonical": "vegano",
+      "aliases": ["vegano", "vegana", "comida vegana"]
+    },
+    {
+      "canonical": "vegetariano",
+      "aliases": ["vegetariano", "vegetariana", "comida vegetariana"]
+    },
+    {
+      "canonical": "sin_gluten",
+      "aliases": ["sin gluten", "libre de gluten"]
+    },
+    {
+      "canonical": "accesible",
+      "aliases": ["accesible", "silla de ruedas", "acceso para silla de ruedas"]
+    }
+  ]
+}

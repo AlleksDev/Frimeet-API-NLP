@@ -225,6 +225,11 @@ class MockPlaceVectorRepository(PlaceVectorRepository):
                 if str(place.get("id")) not in {str(item) for item in expected}:
                     return False
                 continue
+            if key == "categories":
+                allowed = {_normalize(str(item)) for item in expected}
+                if _normalize(str(place.get("category"))) not in allowed:
+                    return False
+                continue
             if key == "occasion":
                 if _normalize(str(expected)) not in _normalize(str(actual)):
                     return False

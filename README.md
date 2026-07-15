@@ -99,6 +99,7 @@ GET  /places/search/metrics?k=5
 POST /places/search/metrics?k=5
 POST /places/recommendations
 POST /places/chat
+POST /internal/places/chat
 POST /posts/recommendations
 POST /internal/posts/feed/rank
 POST /internal/posts/clusters/runs
@@ -188,6 +189,24 @@ La API principal obtiene la identidad desde el token de login; la app no debe en
 El indice de usuarios excluye correo, fecha de nacimiento, genero y ubicacion actual. Los
 IDs de tags de eventos se conservan como metadatos; para aportar significado semantico la
 API principal debe enviar tambien sus nombres.
+
+## Chat interno de recomendaciones de lugares
+
+La app movil no debe consumir la API NLP directamente. Debe enviar mensaje, conversacion
+y ubicacion actual a la API principal; Go llama `POST /internal/places/chat`, hidrata los
+IDs devueltos, calcula distancias con PostGIS y aplica el orden geografico final.
+
+NLP separa categoria, preferencias, exclusiones, referencia y alcance geografico antes
+de buscar. La categoria y `is_active=true` son filtros inviolables. Por eso una consulta
+de cafeterias no puede devolver parques aunque el texto incluya "cerca del parque".
+Las ambiguedades que cambiarian los resultados devuelven `action=clarification` y un
+`state_patch` con `pending_clarification`; el siguiente turno puede resolverlo con frases
+como "la primera opcion" o "la segunda, cerca de mi".
+
+La recuperacion combina FastText/pgvector, BM25 y coincidencias de facetas. NLP devuelve
+solo candidatos tecnicos y `content_score`; no incorpora GPS al score. El flag inicial es
+`PLACES_CHAT_V2_ENABLED=false` y debe activarse despues de desplegar en Go tanto el proxy
+de chat como `/api/v1/internal/places/resolve-anchor`.
 
 ## SQL RDS
 
@@ -346,7 +365,10 @@ Para actualizar funciones o permisos sin cambiar nuevamente la dimension, vuelve
 ejecutar `sql/aws_pgvector_contract.sql`. No repitas la migracion destructiva una vez
 que las columnas ya sean `VECTOR(300)`.
 
-Groq/Llama se usa en `/places/recommendations` y `/places/chat` para redactar una respuesta conversacional. No decide que lugares recomendar, no hace busqueda y no inventa lugares.
+Groq/Llama se usa en `/places/recommendations`, `/places/chat` y, opcionalmente, en
+`/internal/places/chat` para redactar una respuesta conversacional. No decide que lugares
+recomendar, no hace busqueda y no inventa lugares. Desactivar
+`PLACES_CHAT_LLM_ENABLED` no cambia la accion ni los candidatos del chat interno.
 
 El arreglo estructurado `places` viene desde RDS/pgvector mediante embeddings, filtros y ranking. La app debe renderizar cards desde ese arreglo, no parseando texto libre del LLM.
 

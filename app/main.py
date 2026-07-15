@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from app.modules.places.api.router import router as places_router
+from app.modules.places.api.internal_chat_router import router as internal_places_router
 from app.modules.posts.infrastructure.api.router import router as posts_router
 from app.modules.search.api.router import router as search_router
 from app.shared.config.settings import get_settings
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
         return payload
 
     app.include_router(places_router)
+    app.include_router(internal_places_router)
     app.include_router(posts_router)
     app.include_router(search_router)
     return app

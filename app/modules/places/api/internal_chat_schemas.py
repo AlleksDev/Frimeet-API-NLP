@@ -1,0 +1,205 @@
+from typing import Any, Literal
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.modules.places.application.use_cases.chat_place_recommendations import (
+    ChatPlaceRecommendationsResult,
+)
+from app.modules.places.domain.chat_intent import (
+    ConversationState,
+    ExplicitTargetLocation,
+    PendingClarification,
+    PlaceReference,
+)
+
+
+class UserLocationSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    lat: float = Field(..., ge=-90, le=90)
+    lng: float = Field(..., ge=-180, le=180)
+
+
+class PlaceReferenceStateSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entity: str | None = Field(default=None, max_length=160)
+    place_id: str | None = Field(default=None, max_length=100)
+    attributes: list[str] = Field(default_factory=list, max_length=30)
+    location_hint_text: str | None = Field(default=None, max_length=160)
+
+    def to_domain(self) -> PlaceReference:
+        return PlaceReference(
+            entity=self.entity,
+            place_id=self.place_id,
+            attributes=tuple(self.attributes),
+            location_hint_text=self.location_hint_text,
+        )
+
+
+class ExplicitTargetLocationStateSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    anchor_text: str = Field(..., min_length=1, max_length=160)
+    place_id: str | None = Field(default=None, max_length=100)
+    label: str | None = Field(default=None, max_length=160)
+    radius_meters: int | None = Field(default=None, ge=1, le=50_000)
+    strict_radius: bool = False
+
+    def to_domain(self) -> ExplicitTargetLocation:
+        return ExplicitTargetLocation(
+            anchor_text=self.anchor_text,
+            place_id=self.place_id,
+            label=self.label,
+            radius_meters=self.radius_meters,
+            strict_radius=self.strict_radius,
+        )
+
+
+class PendingClarificationStateSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["location_scope"]
+    location_anchor_text: str = Field(..., min_length=1, max_length=160)
+    radius_meters: int | None = Field(default=None, ge=1, le=50_000)
+    strict_radius: bool = False
+
+    def to_domain(self) -> PendingClarification:
+        return PendingClarification(
+            kind=self.kind,
+            location_anchor_text=self.location_anchor_text,
+            radius_meters=self.radius_meters,
+            strict_radius=self.strict_radius,
+        )
+
+
+class ConversationStateSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_category: str | None = Field(default=None, max_length=80)
+    hard_filters: dict[str, Any] = Field(default_factory=dict)
+    soft_preferences: list[str] = Field(default_factory=list, max_length=30)
+    exclusions: list[str] = Field(default_factory=list, max_length=30)
+    reference: PlaceReferenceStateSchema | None = None
+    explicit_target_location: ExplicitTargetLocationStateSchema | None = None
+    pending_clarification: PendingClarificationStateSchema | None = None
+    city: str | None = Field(default=None, max_length=80)
+    state: str | None = Field(default=None, max_length=80)
+    taxonomy_version: str | None = Field(default=None, max_length=64)
+
+    def to_domain(self) -> ConversationState:
+        return ConversationState(
+            target_category=self.target_category,
+            hard_filters=dict(self.hard_filters),
+            soft_preferences=tuple(self.soft_preferences),
+            exclusions=tuple(self.exclusions),
+            reference=self.reference.to_domain() if self.reference else None,
+            explicit_target_location=(
+                self.explicit_target_location.to_domain()
+                if self.explicit_target_location
+                else None
+            ),
+            pending_clarification=(
+                self.pending_clarification.to_domain()
+                if self.pending_clarification
+                else None
+            ),
+            city=self.city,
+            state=self.state,
+            taxonomy_version=self.taxonomy_version,
+        )
+
+
+class InternalPlaceChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    conversation_id: UUID
+    turn: int = Field(..., ge=1)
+    message: str = Field(..., min_length=1, max_length=1000)
+    state: ConversationStateSchema = Field(default_factory=ConversationStateSchema)
+    user_location: UserLocationSchema
+    candidate_limit: int = Field(default=30, ge=1, le=40)
+    result_limit: int = Field(default=5, ge=1, le=8)
+
+    @model_validator(mode="after")
+    def validate_limits(self) -> "InternalPlaceChatRequest":
+        if self.result_limit > self.candidate_limit:
+            raise ValueError("result_limit cannot exceed candidate_limit")
+        return self
+
+
+class PlaceChatLocationDirectiveSchema(BaseModel):
+    source: Literal["user_current", "explicit_anchor", "state_anchor", "unresolved"]
+    scope: Literal[
+        "target_results",
+        "reference_entity",
+        "user_current_location",
+        "unresolved",
+    ]
+    anchor_place_id: str | None = None
+    anchor_text: str | None = None
+    radius_meters: int | None = None
+    strict_radius: bool = False
+
+
+class PlaceChatCandidateSchema(BaseModel):
+    place_id: str
+    content_score: float = Field(..., ge=0, le=1)
+    semantic_score: float = Field(..., ge=0, le=1)
+    lexical_score: float = Field(..., ge=0, le=1)
+    match_level: Literal["exact", "family", "broad"]
+    matched_reasons: list[str]
+
+
+class InternalPlaceChatResponse(BaseModel):
+    action: Literal["recommendations", "clarification", "no_match"]
+    message: str
+    state_patch: dict[str, Any]
+    location_directive: PlaceChatLocationDirectiveSchema
+    candidates: list[PlaceChatCandidateSchema]
+    unresolved: list[str]
+    intent_confidence: float = Field(..., ge=0, le=1)
+    ranking_version: str
+    taxonomy_version: str
+    trace_id: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+def internal_chat_result_to_schema(
+    result: ChatPlaceRecommendationsResult,
+) -> InternalPlaceChatResponse:
+    directive = result.location_directive
+    return InternalPlaceChatResponse(
+        action=result.action,
+        message=result.message,
+        state_patch=result.state_patch,
+        location_directive=PlaceChatLocationDirectiveSchema(
+            source=directive.source,
+            scope=directive.scope,
+            anchor_place_id=directive.anchor_place_id,
+            anchor_text=directive.anchor_text,
+            radius_meters=directive.radius_meters,
+            strict_radius=directive.strict_radius,
+        ),
+        candidates=[
+            PlaceChatCandidateSchema(
+                place_id=candidate.place_id,
+                content_score=round(candidate.content_score, 6),
+                semantic_score=round(candidate.semantic_score, 6),
+                lexical_score=round(candidate.lexical_score, 6),
+                match_level=candidate.match_level,
+                matched_reasons=list(candidate.matched_reasons),
+            )
+            for candidate in result.candidates
+        ],
+        unresolved=list(result.unresolved),
+        intent_confidence=round(result.intent_confidence, 6),
+        ranking_version=result.ranking_version,
+        taxonomy_version=result.taxonomy_version,
+        trace_id=result.trace_id,
+        metadata={
+            "used_llm": result.used_llm,
+            "guard_reason": result.guard_reason,
+        },
+    )
