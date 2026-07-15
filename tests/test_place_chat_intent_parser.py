@@ -2,6 +2,7 @@ from app.modules.places.domain.chat_intent import (
     ConversationState,
     ExplicitTargetLocation,
     PendingClarification,
+    PlaceCategoryInference,
     PlaceReference,
 )
 from app.modules.places.infrastructure.deterministic_intent_parser import (
@@ -125,7 +126,7 @@ def test_food_activity_defaults_to_restaurant_without_clarification() -> None:
     assert intent.action == "recommendations"
     assert intent.target_category == "restaurant"
     assert intent.category_values == ("restaurant", "restaurante")
-    assert intent.semantic_query == "restaurant"
+    assert intent.semantic_query == "restaurant comer"
     assert intent.state_patch.target_category == "restaurant"
     assert intent.confidence == 0.88
 
@@ -161,6 +162,55 @@ def test_other_high_confidence_activities_use_helpful_defaults() -> None:
 
         assert intent.action == "recommendations"
         assert intent.target_category == expected_category
+
+
+def test_semantic_activity_inference_handles_non_literal_food_request() -> None:
+    class FoodActivityClassifier:
+        def classify(self, text: str) -> PlaceCategoryInference | None:
+            if "apetecen" in text and "tacos" in text:
+                return PlaceCategoryInference(
+                    category="restaurant",
+                    confidence=0.82,
+                    source="semantic_activity",
+                )
+            return None
+
+    intent = DeterministicPlaceChatIntentParser(
+        activity_classifier=FoodActivityClassifier(),
+    ).parse(
+        message="Después de todo el día se me apetecen unos buenos tacos",
+        state=ConversationState(),
+        has_user_location=True,
+    )
+
+    assert intent.action == "recommendations"
+    assert intent.target_category == "restaurant"
+    assert intent.confidence == 0.82
+
+
+def test_new_clear_intent_cancels_a_stale_pending_clarification() -> None:
+    state = ConversationState(
+        target_category="cafe",
+        soft_preferences=("tematica",),
+        reference=PlaceReference(entity="hello kitty"),
+        pending_clarification=PendingClarification(
+            kind="location_scope",
+            location_anchor_text="parque central",
+        ),
+    )
+
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message="mejor quiero comer algo",
+        state=state,
+        has_user_location=True,
+    )
+
+    assert intent.action == "recommendations"
+    assert intent.target_category == "restaurant"
+    assert intent.reference is None
+    assert intent.state_patch.clear_reference is True
+    assert intent.state_patch.clear_pending_clarification is True
+    assert intent.state_patch.as_dict()["pending_clarification"] is None
 
 
 def test_common_category_typo_is_normalized_by_the_taxonomy() -> None:
