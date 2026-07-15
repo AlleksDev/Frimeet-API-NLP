@@ -38,6 +38,73 @@ _EXCLUSION_PATTERN = re.compile(
 )
 _CURRENT_LOCATION_VALUES = {"mi", "aqui", "donde estoy", "mi ubicacion"}
 
+# High-precision activity intents that imply a useful place category even when
+# the user does not name it. These defaults keep the chat action-oriented while
+# remaining deterministic and auditable; explicit category aliases always win.
+_ACTIVITY_CATEGORY_DEFAULTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "restaurant",
+        (
+            "quiero comer",
+            "quisiera comer",
+            "me gustaria comer",
+            "necesito comer",
+            "tengo hambre",
+            "algo para comer",
+            "algo de comer",
+            "comer algo",
+            "donde comer",
+            "ir a comer",
+            "salir a comer",
+            "quiero desayunar",
+            "quisiera desayunar",
+            "quiero almorzar",
+            "quisiera almorzar",
+            "quiero cenar",
+            "quisiera cenar",
+            "comida vegana",
+            "comida vegetariana",
+            "algo vegano",
+            "algo vegetariano",
+            "algo sin gluten",
+        ),
+    ),
+    (
+        "sports",
+        (
+            "hacer ejercicio",
+            "quiero entrenar",
+            "quisiera entrenar",
+            "donde entrenar",
+        ),
+    ),
+    (
+        "cinema",
+        (
+            "ver una pelicula",
+            "ver peliculas",
+        ),
+    ),
+    (
+        "shopping",
+        (
+            "quiero comprar algo",
+            "ir de compras",
+            "salir de compras",
+        ),
+    ),
+    (
+        "lodging",
+        (
+            "donde dormir",
+            "donde hospedarme",
+            "quiero hospedarme",
+            "necesito alojamiento",
+            "pasar la noche",
+        ),
+    ),
+)
+
 
 @dataclass(frozen=True)
 class CategoryDefinition:
@@ -122,11 +189,17 @@ class DeterministicPlaceChatIntentParser:
             )
 
         explicit_category = categories[0] if categories else None
-        target_category = explicit_category or state.target_category
+        inferred_category = (
+            self._inferred_activity_category(target_clause)
+            if explicit_category is None
+            else None
+        )
+        requested_category = explicit_category or inferred_category
+        target_category = requested_category or state.target_category
         category_changed = bool(
-            explicit_category
+            requested_category
             and state.target_category
-            and explicit_category != state.target_category
+            and requested_category != state.target_category
         )
 
         if location_text:
@@ -206,7 +279,7 @@ class DeterministicPlaceChatIntentParser:
             return self._location_scope_clarification(
                 target_category=target_category,
                 category_values=category_values,
-                explicit_category=explicit_category,
+                explicit_category=requested_category,
                 hard_filters=hard_filters,
                 preferences=merged_preferences,
                 exclusions=merged_exclusions,
@@ -230,7 +303,7 @@ class DeterministicPlaceChatIntentParser:
         semantic_query = " ".join(_ordered_unique(semantic_parts)).strip()
 
         patch = ConversationStatePatch(
-            target_category=explicit_category,
+            target_category=requested_category,
             hard_filters=hard_filters if hard_filters != state.hard_filters else None,
             soft_preferences=(
                 merged_preferences
@@ -245,7 +318,12 @@ class DeterministicPlaceChatIntentParser:
             clear_reference=category_changed and reference_text is None,
             taxonomy_version=self._taxonomy.version,
         )
-        confidence = 0.96 if explicit_category else 0.84
+        if explicit_category:
+            confidence = 0.96
+        elif inferred_category:
+            confidence = 0.88
+        else:
+            confidence = 0.84
         if reference_text:
             confidence -= 0.05
         return ParsedPlaceChatIntent(
@@ -504,6 +582,13 @@ class DeterministicPlaceChatIntentParser:
                 for alias in category.aliases
             )
         )
+
+    @staticmethod
+    def _inferred_activity_category(normalized: str) -> str | None:
+        for category, patterns in _ACTIVITY_CATEGORY_DEFAULTS:
+            if _contains_any(normalized, patterns):
+                return category
+        return None
 
     def _matched_preferences(self, normalized: str) -> tuple[str, ...]:
         matched: list[str] = []
