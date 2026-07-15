@@ -41,6 +41,7 @@ class ChatPlaceRecommendationsResult:
     ranking_version: str
     taxonomy_version: str
     trace_id: str
+    category_source: str = "unresolved"
     used_llm: bool = False
     guard_reason: str | None = None
 
@@ -479,6 +480,7 @@ class ChatPlaceRecommendationsUseCase:
             ranking_version=self._ranking_version,
             taxonomy_version=self._taxonomy_version,
             trace_id=trace_id,
+            category_source=intent.category_source,
             used_llm=used_llm,
             guard_reason=guard_reason,
         )
@@ -492,13 +494,15 @@ class ChatPlaceRecommendationsUseCase:
         intent: ParsedPlaceChatIntent,
     ) -> None:
         logger.info(
-            "places_chat trace_id=%s action=%s category=%s confidence=%.3f "
+            "places_chat trace_id=%s action=%s category=%s category_source=%s "
+            "confidence=%.3f "
             "location_source=%s location_scope=%s candidates=%d "
             "preferences=%d exclusions=%d hard_filter_keys=%s "
             "ranking_version=%s taxonomy_version=%s used_llm=%s guard=%s",
             result.trace_id,
             result.action,
             intent.target_category,
+            result.category_source,
             result.intent_confidence,
             result.location_directive.source,
             result.location_directive.scope,
