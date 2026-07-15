@@ -7,6 +7,7 @@ class PlaceFilters:
     city: str | None = None
     state: str | None = None
     category: str | None = None
+    categories: tuple[str, ...] | None = None
     price_range: str | None = None
     is_active: bool | None = True
     occasion: str | None = None
@@ -19,6 +20,7 @@ class PlaceFilters:
                 "city": self.city,
                 "state": self.state,
                 "category": self.category,
+                "categories": self.categories,
                 "price_range": self.price_range,
                 "is_active": self.is_active,
                 "occasion": self.occasion,
