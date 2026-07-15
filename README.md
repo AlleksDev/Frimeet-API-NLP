@@ -203,6 +203,13 @@ Las ambiguedades que cambiarian los resultados devuelven `action=clarification` 
 `state_patch` con `pending_clarification`; el siguiente turno puede resolverlo con frases
 como "la primera opcion" o "la segunda, cerca de mi".
 
+El chat no exige que el usuario nombre siempre una categoria. Intenciones de actividad
+de alta certeza usan defaults deterministas: por ejemplo, "quiero comer algo" busca
+restaurantes, "quiero hacer ejercicio" busca opciones deportivas y "donde dormir"
+busca hospedaje. Una categoria explicita siempre prevalece sobre estos defaults. Solo se
+pide aclaracion cuando las interpretaciones plausibles cambiarian materialmente los
+resultados; las preferencias faltantes no bloquean una primera recomendacion.
+
 La recuperacion combina FastText/pgvector, BM25 y coincidencias de facetas. NLP devuelve
 solo candidatos tecnicos y `content_score`; no incorpora GPS al score. El flag inicial es
 `PLACES_CHAT_V2_ENABLED=false` y debe activarse despues de desplegar en Go tanto el proxy
