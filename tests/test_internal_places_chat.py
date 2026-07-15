@@ -63,7 +63,27 @@ def test_internal_chat_returns_only_technical_candidates() -> None:
         "matched_reasons",
     }
     assert payload["metadata"]["used_llm"] is False
+    assert payload["metadata"]["category_source"] == "explicit"
     assert payload["trace_id"].startswith("trace_")
+
+
+def test_internal_chat_recommends_restaurants_for_implicit_food_intent() -> None:
+    client = TestClient(create_app())
+    request = {**BASE_REQUEST, "message": "quiero comer algo"}
+
+    response = client.post(
+        "/internal/places/chat",
+        json=request,
+        headers=AUTHORIZATION,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["action"] == "recommendations"
+    assert payload["state_patch"]["target_category"] == "restaurant"
+    assert payload["metadata"]["category_source"] == "lexical_activity"
+    assert payload["unresolved"] == []
+    assert payload["candidates"]
 
 
 def test_internal_chat_never_returns_parks_for_a_cafe_query() -> None:

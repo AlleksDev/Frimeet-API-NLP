@@ -410,11 +410,13 @@ silencio entre usar el parque como zona de resultados o como ayuda para identifi
 referencia: devuelve `action=clarification`, `unresolved=["location_scope"]` y conserva
 el contexto no ambiguo en `state_patch`.
 
-No es obligatorio escribir una categoria literal. El parser aplica defaults de alta
-precision para actividades inequívocas: `quiero comer algo` se interpreta como
-`target_category=restaurant`, mientras que una frase abierta como `quiero salir` aun
-solicita aclaracion. Si el mensaje tambien contiene una categoria explicita, esta tiene
-prioridad sobre el default inferido.
+No es obligatorio escribir una categoria literal. El parser combina defaults de alta
+precision con un clasificador local de prototipos FastText: `quiero comer algo` se
+interpreta como `target_category=restaurant`, y formulaciones semanticamente cercanas
+pueden obtener la misma categoria aunque no coincidan palabra por palabra. El
+clasificador exige similitud minima y separacion frente a la segunda categoria; una
+frase abierta como `quiero salir` aun solicita aclaracion. Una categoria explicita tiene
+prioridad y una nueva intencion clara elimina un `pending_clarification` obsoleto.
 
 ## 3. Publicaciones
 

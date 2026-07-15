@@ -16,6 +16,13 @@ LocationSource = Literal[
     "none",
 ]
 MatchLevel = Literal["exact", "family", "broad"]
+CategoryInferenceSource = Literal[
+    "explicit",
+    "lexical_activity",
+    "semantic_activity",
+    "conversation_state",
+    "unresolved",
+]
 ClarificationKind = Literal["location_scope"]
 
 
@@ -73,6 +80,13 @@ class IntentAlternative:
     key: str
     description: str
     confidence: float
+
+
+@dataclass(frozen=True)
+class PlaceCategoryInference:
+    category: str
+    confidence: float
+    source: Literal["lexical_activity", "semantic_activity"]
 
 
 @dataclass(frozen=True)
@@ -147,6 +161,7 @@ class ParsedPlaceChatIntent:
     semantic_query: str
     confidence: float
     state_patch: ConversationStatePatch
+    category_source: CategoryInferenceSource = "unresolved"
     alternatives: tuple[IntentAlternative, ...] = ()
     unresolved: tuple[str, ...] = ()
     clarification_message: str | None = None

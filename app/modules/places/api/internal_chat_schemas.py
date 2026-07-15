@@ -201,5 +201,6 @@ def internal_chat_result_to_schema(
         metadata={
             "used_llm": result.used_llm,
             "guard_reason": result.guard_reason,
+            "category_source": result.category_source,
         },
     )

@@ -34,6 +34,9 @@ from app.modules.places.infrastructure.place_search_benchmark import (
     get_default_place_search_benchmark,
 )
 from app.modules.places.infrastructure.semantic_place_ranker import SemanticPlaceRanker
+from app.modules.places.infrastructure.semantic_activity_classifier import (
+    SemanticPlaceActivityClassifier,
+)
 from app.shared.cache.memory import SimpleTTLCache
 from app.shared.config.settings import get_settings
 from app.shared.dependencies import get_embedding_provider, get_llm_provider
@@ -130,7 +133,15 @@ def get_place_chat_intent_parser() -> DeterministicPlaceChatIntentParser:
         raise RuntimeError(
             "PLACES_CHAT_TAXONOMY_VERSION does not match the bundled taxonomy"
         )
-    return DeterministicPlaceChatIntentParser(taxonomy=taxonomy)
+    activity_classifier = (
+        SemanticPlaceActivityClassifier(get_embedding_provider())
+        if settings.embedding_provider.casefold() != "mock"
+        else None
+    )
+    return DeterministicPlaceChatIntentParser(
+        taxonomy=taxonomy,
+        activity_classifier=activity_classifier,
+    )
 
 
 @lru_cache
