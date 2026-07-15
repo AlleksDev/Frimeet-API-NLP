@@ -35,6 +35,7 @@ Todas las peticiones y respuestas con body utilizan `application/json`.
 | `POST` | `/places/search` | Buscar lugares semanticamente | No |
 | `POST` | `/places/recommendations` | Recomendar lugares y redactar una respuesta | No |
 | `POST` | `/places/chat` | Conversacion orientada a lugares | No |
+| `POST` | `/internal/places/chat` | Interpretar chat y devolver candidatos tecnicos | Servicio |
 | `POST` | `/posts/recommendations` | Recomendar publicaciones | No |
 | `POST` | `/internal/posts/feed/rank` | Ordenar allowlist de posts | Servicio |
 | `POST` | `/internal/posts/clusters/runs` | Agendar entrenamiento de clusters | Servicio |
@@ -356,6 +357,58 @@ La respuesta incluye:
 - metricas individuales de cada consulta del benchmark;
 - definiciones de las metricas;
 - `recommended_metric`, actualmente nDCG@k.
+
+### `POST /internal/places/chat`
+
+Endpoint V2 consumido exclusivamente por la API principal. La app movil nunca debe
+llamarlo directamente.
+
+```http
+Authorization: Bearer <NLP_SERVICE_TOKEN>
+Content-Type: application/json
+```
+
+Request minimo:
+
+```json
+{
+  "conversation_id": "cb3456ef-598e-49d9-9bf9-b2ba99055ad7",
+  "turn": 1,
+  "message": "recomiendame una cafeteria cerca del Parque Central",
+  "state": {},
+  "user_location": {"lat": 16.7531, "lng": -93.1156},
+  "candidate_limit": 30,
+  "result_limit": 5
+}
+```
+
+La respuesta devuelve `action`, mensaje, `state_patch`, `location_directive`, IDs y
+scores tecnicos. No devuelve cards, coordenadas ni metadata privada. `clarification` y
+`no_match` siempre tienen `candidates=[]`. Go debe fusionar el patch de forma atomica,
+hidratar los IDs, revalidar el anchor y aplicar distancia/PostGIS antes de responder a
+la app.
+
+`state` puede incluir `target_category`, `hard_filters`, `soft_preferences`,
+`exclusions`, `reference`, `explicit_target_location` y `pending_clarification`. Si
+`taxonomy_version` no coincide con la version desplegada, el endpoint responde `409`.
+
+Ejemplo de directiva sin ubicacion explicita:
+
+```json
+{
+  "source": "user_current",
+  "scope": "user_current_location",
+  "anchor_place_id": null,
+  "anchor_text": null,
+  "radius_meters": null,
+  "strict_radius": false
+}
+```
+
+Para `cafeterias como la de Hello Kitty cerca del Parque Central`, NLP no elige en
+silencio entre usar el parque como zona de resultados o como ayuda para identificar la
+referencia: devuelve `action=clarification`, `unresolved=["location_scope"]` y conserva
+el contexto no ambiguo en `state_patch`.
 
 ## 3. Publicaciones
 
@@ -802,8 +855,17 @@ finalizados. Los cursores quedan ligados a query, recursos, filtros, ubicacion,
 | Variable | Uso |
 | --- | --- |
 | `SEARCH_INTERNAL_TOKEN` | Valida `Authorization: Bearer ...` cuando `/search` recibe `requester_id` |
-| `NLP_SERVICE_TOKEN` | Autentica `/internal/posts/*` y `/internal/search/candidates`; debe coincidir con `NLP_SERVICE_TOKEN` en Go |
-| `MAIN_API_INTERNAL_TOKEN` | Autentica los jobs NLP al leer endpoints internos de Go |
+| `NLP_SERVICE_TOKEN` | Autentica `/internal/posts/*`, `/internal/search/candidates` y `/internal/places/chat`; debe coincidir con Go |
+| `MAIN_API_INTERNAL_TOKEN` | Autentica jobs y resolucion de anchors al consumir endpoints internos de Go |
+| `MAIN_API_PLACE_ANCHOR_RESOLVE_PATH` | Ruta interna Go para resolver nombres de lugares usados como anchors o referencias |
+| `PLACES_CHAT_V2_ENABLED` | Feature flag del chat interno; debe iniciar en `false` |
+| `PLACES_CHAT_LLM_ENABLED` | Habilita solo la redaccion opcional; no cambia candidatos ni accion |
+| `PLACES_CHAT_CANDIDATE_LIMIT` | Maximo tecnico de candidatos de contenido, entre 1 y 40 |
+| `PLACES_CHAT_MIN_CONTENT_SCORE` | Umbral minimo antes de devolver candidatos |
+| `PLACES_CHAT_INTENT_MIN_CONFIDENCE` | Confianza minima; por debajo se solicita aclaracion |
+| `PLACES_CHAT_AMBIGUITY_DELTA` | Diferencia maxima para considerar ambiguos dos anchors |
+| `PLACES_CHAT_RANKING_VERSION` | Version observable de la politica de ranking |
+| `PLACES_CHAT_TAXONOMY_VERSION` | Version del parser y del estado conversacional |
 | `MAX_REQUEST_BODY_BYTES` | Debe ser al menos `131072`; valor recomendado `262144` para 500 candidatos |
 | `REQUEST_TIMEOUT_SECONDS` | Presupuesto maximo para search interno y timeout de conexion/consulta pgvector |
 | `RATE_LIMIT_REQUESTS_PER_WINDOW` | Limite local por IP/ruta para endpoints publicos |
