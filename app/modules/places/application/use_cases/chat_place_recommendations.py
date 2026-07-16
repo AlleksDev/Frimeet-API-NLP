@@ -10,12 +10,20 @@ from app.modules.places.application.ports.intent_parser import PlaceChatIntentPa
 from app.modules.places.application.ports.place_anchor_resolver import (
     PlaceAnchorResolver,
 )
+from app.modules.places.domain.clarifications import (
+    new_anchor_clarification,
+    new_category_clarification,
+    to_public_clarification,
+)
 from app.modules.places.domain.chat_intent import (
     ChatAction,
+    Clarification,
+    ClarificationChoice,
     ConversationState,
     ExplicitTargetLocation,
     LocationIntent,
     ParsedPlaceChatIntent,
+    PendingClarification,
     PlaceChatCandidate,
     PlaceChatLocationDirective,
     PlaceReference,
@@ -41,6 +49,7 @@ class ChatPlaceRecommendationsResult:
     ranking_version: str
     taxonomy_version: str
     trace_id: str
+    clarification: Clarification | None = None
     category_source: str = "unresolved"
     used_llm: bool = False
     guard_reason: str | None = None
@@ -79,6 +88,7 @@ class ChatPlaceRecommendationsUseCase:
         user_longitude: float,
         candidate_limit: int,
         result_limit: int,
+        clarification_choice: ClarificationChoice | None = None,
     ) -> ChatPlaceRecommendationsResult:
         del user_latitude, user_longitude
         trace_id = new_trace_id()
@@ -86,19 +96,27 @@ class ChatPlaceRecommendationsUseCase:
             message=message,
             state=state,
             has_user_location=True,
+            clarification_choice=clarification_choice,
         )
         if intent.action == "clarification":
             return self._clarification_result(intent, trace_id)
         if intent.confidence < self._minimum_intent_confidence:
-            return self._result(
-                action="clarification",
-                message="No estoy seguro de haber entendido el tipo de lugar. ¿Puedes describirlo de otra forma?",
-                intent=intent,
-                directive=self._location_directive(intent),
-                candidates=(),
-                unresolved=("intent_confidence",),
-                trace_id=trace_id,
+            categories = tuple(
+                dict.fromkeys(
+                    (
+                        intent.target_category or "restaurant",
+                        "restaurant",
+                        "cafe",
+                        "park",
+                    )
+                )
             )
+            clarified = self._with_pending_clarification(
+                intent,
+                new_category_clarification(categories, kind="intent_category"),
+                unresolved=("intent_confidence",),
+            )
+            return self._clarification_result(clarified, trace_id)
 
         resolved = await self._resolve_entities(intent, state)
         if isinstance(resolved, ChatPlaceRecommendationsResult):
@@ -110,12 +128,12 @@ class ChatPlaceRecommendationsUseCase:
         directive = self._location_directive(intent)
         if directive.source == "unresolved":
             return self._result(
-                action="clarification",
-                message="No pude identificar la ubicacion. ¿Puedes indicar el lugar o la zona con mas detalle?",
+                action="no_match",
+                message="No pude identificar una ubicacion util para esta busqueda.",
                 intent=intent,
                 directive=directive,
                 candidates=(),
-                unresolved=("location",),
+                unresolved=(),
                 trace_id=trace_id,
             )
 
@@ -171,10 +189,10 @@ class ChatPlaceRecommendationsUseCase:
             )
             if not anchors:
                 return self._result(
-                    action="clarification",
+                    action="no_match",
                     message=(
                         f"No pude ubicar {location.anchor_text.title()}. "
-                        "¿Puedes indicar la ciudad o elegir otro punto de referencia?"
+                        "Intenta con otro punto de referencia."
                     ),
                     intent=replace(
                         intent,
@@ -189,24 +207,20 @@ class ChatPlaceRecommendationsUseCase:
                         anchor_text=location.anchor_text,
                     ),
                     candidates=(),
-                    unresolved=("location_anchor",),
+                    unresolved=(),
                     trace_id="",
                 )
             if self._anchors_are_ambiguous(anchors):
-                names = ", ".join(anchor.name for anchor in anchors[:3])
-                return self._result(
-                    action="clarification",
-                    message=f"Encontre varios lugares posibles: {names}. ¿A cual te refieres?",
-                    intent=intent,
-                    directive=PlaceChatLocationDirective(
-                        source="unresolved",
-                        scope="unresolved",
-                        anchor_text=location.anchor_text,
+                clarified = self._with_pending_clarification(
+                    intent,
+                    new_anchor_clarification(
+                        "location_anchor",
+                        location.anchor_text,
+                        anchors,
                     ),
-                    candidates=(),
                     unresolved=("location_anchor",),
-                    trace_id="",
                 )
+                return self._clarification_result(clarified, "")
             anchor = anchors[0]
             resolved_location = replace(location, resolved_place_id=anchor.place_id)
             explicit = ExplicitTargetLocation(
@@ -239,34 +253,54 @@ class ChatPlaceRecommendationsUseCase:
                 )
                 if not location_anchors:
                     return self._result(
-                        action="clarification",
+                        action="no_match",
                         message=(
                             "No pude ubicar el lugar que identifica tu referencia. "
-                            "¿Puedes darme otro nombre o la ciudad?"
+                            "Intenta con otra referencia."
                         ),
                         intent=resolved_intent,
                         directive=self._location_directive(resolved_intent),
                         candidates=(),
-                        unresolved=("reference_location_anchor",),
+                        unresolved=(),
                         trace_id="",
                     )
-                if self._anchors_are_ambiguous(location_anchors):
-                    names = ", ".join(
-                        anchor.name for anchor in location_anchors[:3]
+                selected_location = (
+                    next(
+                        (
+                            anchor
+                            for anchor in location_anchors
+                            if anchor.place_id == reference.location_hint_place_id
+                        ),
+                        None,
                     )
+                    if reference.location_hint_place_id
+                    else None
+                )
+                if reference.location_hint_place_id and selected_location is None:
                     return self._result(
-                        action="clarification",
-                        message=(
-                            f"Encontre varios lugares para ubicar la referencia: "
-                            f"{names}. ¿A cual te refieres?"
-                        ),
+                        action="no_match",
+                        message="La ubicacion seleccionada ya no esta disponible.",
                         intent=resolved_intent,
                         directive=self._location_directive(resolved_intent),
                         candidates=(),
-                        unresolved=("reference_location_anchor",),
+                        unresolved=(),
                         trace_id="",
                     )
-                reference_location = location_anchors[0]
+                if selected_location is not None:
+                    reference_location = selected_location
+                elif self._anchors_are_ambiguous(location_anchors):
+                    clarified = self._with_pending_clarification(
+                        resolved_intent,
+                        new_anchor_clarification(
+                            "reference_location_anchor",
+                            reference.location_hint_text,
+                            location_anchors,
+                        ),
+                        unresolved=("reference_location_anchor",),
+                    )
+                    return self._clarification_result(clarified, "")
+                else:
+                    reference_location = location_anchors[0]
 
             anchors = list(
                 await self._anchor_resolver.resolve(
@@ -281,16 +315,16 @@ class ChatPlaceRecommendationsUseCase:
                 reference_location,
             )
             if is_ambiguous:
-                names = ", ".join(anchor.name for anchor in anchors[:3])
-                return self._result(
-                    action="clarification",
-                    message=f"Encontre varias referencias posibles: {names}. ¿Cual quieres usar como ejemplo?",
-                    intent=resolved_intent,
-                    directive=self._location_directive(resolved_intent),
-                    candidates=(),
+                clarified = self._with_pending_clarification(
+                    resolved_intent,
+                    new_anchor_clarification(
+                        "reference_entity",
+                        reference.entity,
+                        anchors,
+                    ),
                     unresolved=("reference_entity",),
-                    trace_id="",
                 )
+                return self._clarification_result(clarified, "")
             if anchor:
                 resolved_reference = PlaceReference(
                     entity=reference.entity,
@@ -299,6 +333,7 @@ class ChatPlaceRecommendationsUseCase:
                         dict.fromkeys((*reference.attributes, *anchor.attributes))
                     ),
                     location_hint_text=reference.location_hint_text,
+                    location_hint_place_id=reference.location_hint_place_id,
                 )
                 resolved_intent = replace(
                     resolved_intent,
@@ -447,14 +482,38 @@ class ChatPlaceRecommendationsUseCase:
         intent: ParsedPlaceChatIntent,
         trace_id: str,
     ) -> ChatPlaceRecommendationsResult:
+        if intent.clarification is None:
+            raise RuntimeError("clarification action requires structured options")
         return self._result(
             action="clarification",
-            message=intent.clarification_message or "Necesito un poco mas de informacion.",
+            message=intent.clarification.prompt,
             intent=intent,
             directive=self._location_directive(intent),
             candidates=(),
             unresolved=intent.unresolved,
             trace_id=trace_id,
+        )
+
+    @staticmethod
+    def _with_pending_clarification(
+        intent: ParsedPlaceChatIntent,
+        pending: PendingClarification,
+        unresolved: tuple[str, ...],
+    ) -> ParsedPlaceChatIntent:
+        clarification = to_public_clarification(pending)
+        return replace(
+            intent,
+            action="clarification",
+            semantic_query="",
+            confidence=min(intent.confidence, 0.75),
+            state_patch=replace(
+                intent.state_patch,
+                pending_clarification=pending,
+            ),
+            clarification=clarification,
+            alternatives=(),
+            unresolved=unresolved,
+            clarification_message=clarification.prompt,
         )
 
     def _result(
@@ -480,6 +539,9 @@ class ChatPlaceRecommendationsUseCase:
             ranking_version=self._ranking_version,
             taxonomy_version=self._taxonomy_version,
             trace_id=trace_id,
+            clarification=(
+                intent.clarification if action == "clarification" else None
+            ),
             category_source=intent.category_source,
             used_llm=used_llm,
             guard_reason=guard_reason,

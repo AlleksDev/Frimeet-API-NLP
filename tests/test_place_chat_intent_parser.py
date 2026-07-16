@@ -1,10 +1,14 @@
+import pytest
+
 from app.modules.places.domain.chat_intent import (
+    ClarificationChoice,
     ConversationState,
     ExplicitTargetLocation,
     PendingClarification,
     PlaceCategoryInference,
     PlaceReference,
 )
+from app.modules.places.domain.errors import ClarificationStateMismatchError
 from app.modules.places.infrastructure.deterministic_intent_parser import (
     DeterministicPlaceChatIntentParser,
 )
@@ -41,10 +45,17 @@ def test_reference_and_location_scope_ambiguity_requires_clarification() -> None
     assert intent.semantic_query == ""
     assert intent.state_patch.target_category == "cafe"
     assert intent.state_patch.reference is not None
-    assert intent.state_patch.pending_clarification == PendingClarification(
-        kind="location_scope",
-        location_anchor_text="parque central",
-    )
+    pending = intent.state_patch.pending_clarification
+    assert pending is not None
+    assert pending.kind == "location_scope"
+    assert pending.location_anchor_text == "parque central"
+    assert pending.clarification_id
+    assert [option.option_id for option in pending.options] == [
+        "target_results",
+        "reference_entity",
+    ]
+    assert intent.clarification is not None
+    assert intent.clarification.clarification_id == pending.clarification_id
 
 
 def test_continuation_inherits_category_and_adds_price_filter() -> None:
@@ -264,6 +275,87 @@ def test_pending_scope_can_be_resolved_on_the_following_turn() -> None:
     assert similar_near_user.reference.location_hint_text == "parque central"
     assert "hello kitty" in similar_near_user.semantic_query
     assert similar_near_user.state_patch.clear_pending_clarification is True
+
+
+def test_pending_scope_is_resolved_by_structured_choice_without_repeating() -> None:
+    parser = DeterministicPlaceChatIntentParser()
+    first = parser.parse(
+        message="cafeterias como la de Hello Kitty cerca del Parque Central",
+        state=ConversationState(),
+        has_user_location=True,
+    )
+    pending = first.state_patch.pending_clarification
+    assert pending is not None
+    state = ConversationState(
+        target_category=first.target_category,
+        soft_preferences=first.soft_preferences,
+        exclusions=first.exclusions,
+        reference=first.reference,
+        pending_clarification=pending,
+    )
+
+    resolved = parser.parse(
+        message="Buscar cerca del Parque Central",
+        state=state,
+        has_user_location=True,
+        clarification_choice=ClarificationChoice(
+            clarification_id=pending.clarification_id,
+            option_id="target_results",
+        ),
+    )
+
+    assert resolved.action == "recommendations"
+    assert resolved.clarification is None
+    assert resolved.state_patch.clear_pending_clarification is True
+    assert resolved.location.anchor_text == "parque central"
+
+
+def test_structured_choice_rejects_a_stale_clarification_id() -> None:
+    parser = DeterministicPlaceChatIntentParser()
+    first = parser.parse(
+        message="quiero un lugar bonito para salir",
+        state=ConversationState(),
+        has_user_location=True,
+    )
+    pending = first.state_patch.pending_clarification
+    assert pending is not None
+
+    with pytest.raises(ClarificationStateMismatchError):
+        parser.parse(
+            message="Restaurantes",
+            state=ConversationState(pending_clarification=pending),
+            has_user_location=True,
+            clarification_choice=ClarificationChoice(
+                clarification_id="00000000-0000-4000-8000-000000000000",
+                option_id="restaurant",
+            ),
+        )
+
+
+def test_unrecognized_legacy_reply_keeps_the_same_structured_options() -> None:
+    parser = DeterministicPlaceChatIntentParser()
+    first = parser.parse(
+        message="cafeterias como la de Hello Kitty cerca del Parque Central",
+        state=ConversationState(),
+        has_user_location=True,
+    )
+    pending = first.state_patch.pending_clarification
+    assert pending is not None
+
+    repeated = parser.parse(
+        message="no se",
+        state=ConversationState(
+            target_category=first.target_category,
+            reference=first.reference,
+            pending_clarification=pending,
+        ),
+        has_user_location=True,
+    )
+
+    assert repeated.action == "clarification"
+    assert repeated.clarification is not None
+    assert repeated.clarification.clarification_id == pending.clarification_id
+    assert len(repeated.clarification.options) == 2
 
 
 def test_exclusion_is_kept_out_of_positive_preferences() -> None:

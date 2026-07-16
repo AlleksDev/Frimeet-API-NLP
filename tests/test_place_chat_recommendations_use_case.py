@@ -3,8 +3,15 @@ import pytest
 from app.modules.places.application.use_cases.chat_place_recommendations import (
     ChatPlaceRecommendationsUseCase,
 )
+from app.modules.places.domain.clarifications import (
+    new_anchor_clarification,
+    to_public_clarification,
+)
 from app.modules.places.domain.chat_intent import (
+    ClarificationChoice,
     ConversationState,
+    PendingClarification,
+    PendingClarificationOption,
     PlaceReference,
     ResolvedPlaceAnchor,
 )
@@ -42,6 +49,23 @@ def build_use_case(*, llm_enabled: bool, anchor_resolver=None):
         taxonomy_version="places-taxonomy-v1",
         llm_enabled=llm_enabled,
     )
+
+
+def test_public_anchor_buttons_are_bounded_for_the_main_api_contract() -> None:
+    long_name = "Centro Historico " + ("muy grande " * 20)
+    pending = new_anchor_clarification(
+        "location_anchor",
+        "centro",
+        (
+            ResolvedPlaceAnchor(place_id="anchor_1", name=long_name),
+            ResolvedPlaceAnchor(place_id="anchor_2", name="Centro Dos"),
+        ),
+    )
+
+    clarification = to_public_clarification(pending)
+
+    assert len(clarification.options[0].label) <= 80
+    assert len(clarification.options[0].message) <= 200
 
 
 @pytest.mark.asyncio
@@ -105,6 +129,64 @@ async def test_ambiguous_anchor_stops_before_retrieval() -> None:
     assert result.action == "clarification"
     assert result.candidates == ()
     assert result.unresolved == ("location_anchor",)
+    assert result.clarification is not None
+    assert [option.label for option in result.clarification.options] == [
+        "Centro Uno",
+        "Centro Dos",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_anchor_button_resolves_exactly_once() -> None:
+    use_case = build_use_case(
+        llm_enabled=False,
+        anchor_resolver=AmbiguousAnchorResolver(),
+    )
+    first = await use_case.execute(
+        message="recomiendame una cafeteria cerca del centro",
+        state=ConversationState(),
+        user_latitude=16.7531,
+        user_longitude=-93.1156,
+        candidate_limit=5,
+        result_limit=3,
+    )
+    payload = first.state_patch["pending_clarification"]
+    pending = PendingClarification(
+        clarification_id=payload["id"],
+        kind=payload["kind"],
+        location_anchor_text=payload["location_anchor_text"],
+        options=tuple(
+            PendingClarificationOption(
+                option_id=option["id"],
+                value=option["value"],
+                label=option["label"],
+                place_id=option["place_id"],
+                attributes=tuple(option["attributes"]),
+            )
+            for option in payload["options"]
+        ),
+    )
+
+    second = await use_case.execute(
+        message="Centro Dos",
+        state=ConversationState(
+            target_category=first.state_patch["target_category"],
+            pending_clarification=pending,
+        ),
+        user_latitude=16.7531,
+        user_longitude=-93.1156,
+        candidate_limit=5,
+        result_limit=3,
+        clarification_choice=ClarificationChoice(
+            clarification_id=pending.clarification_id,
+            option_id="option_2",
+        ),
+    )
+
+    assert second.action == "recommendations"
+    assert second.clarification is None
+    assert second.state_patch["pending_clarification"] is None
+    assert second.location_directive.anchor_place_id == "anchor_2"
 
 
 class MissingAnchorResolver:
@@ -127,9 +209,9 @@ async def test_missing_required_anchor_stops_before_retrieval() -> None:
         result_limit=3,
     )
 
-    assert result.action == "clarification"
+    assert result.action == "no_match"
     assert result.candidates == ()
-    assert result.unresolved == ("location_anchor",)
+    assert result.unresolved == ()
 
 
 class UnfilteredThemeRepository:

@@ -14,6 +14,7 @@ from app.modules.places.api.internal_chat_schemas import (
 from app.modules.places.application.use_cases.chat_place_recommendations import (
     ChatPlaceRecommendationsUseCase,
 )
+from app.modules.places.domain.errors import ClarificationStateMismatchError
 from app.shared.config.settings import get_settings
 from app.shared.security.rate_limit import rate_limit_placeholder
 
@@ -66,7 +67,17 @@ async def chat_place_recommendations(
                 user_longitude=payload.user_location.lng,
                 candidate_limit=payload.candidate_limit,
                 result_limit=payload.result_limit,
+                clarification_choice=(
+                    payload.clarification_choice.to_domain()
+                    if payload.clarification_choice
+                    else None
+                ),
             )
+    except ClarificationStateMismatchError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="Clarification choice does not match the current state",
+        ) from exc
     except TimeoutError as exc:
         raise HTTPException(
             status_code=503,

@@ -392,6 +392,108 @@ la app.
 `exclusions`, `reference`, `explicit_target_location` y `pending_clarification`. Si
 `taxonomy_version` no coincide con la version desplegada, el endpoint responde `409`.
 
+Cuando `action="clarification"`, la respuesta incluye entre 2 y 5 botones y persiste
+la allowlist correspondiente en `state_patch.pending_clarification`:
+
+```json
+{
+  "action": "clarification",
+  "message": "¿Como quieres usar Parque Central?",
+  "state_patch": {
+    "target_category": "cafe",
+    "pending_clarification": {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "kind": "location_scope",
+      "options": [
+        {
+          "id": "target_results",
+          "value": "target_results",
+          "label": "Buscar cerca de Parque Central",
+          "place_id": null,
+          "attributes": []
+        },
+        {
+          "id": "reference_entity",
+          "value": "reference_entity",
+          "label": "Usarlo solo para identificar la referencia",
+          "place_id": null,
+          "attributes": []
+        }
+      ],
+      "location_anchor_text": "parque central",
+      "radius_meters": null,
+      "strict_radius": false
+    }
+  },
+  "candidates": [],
+  "clarification": {
+    "id": "22222222-2222-4222-8222-222222222222",
+    "kind": "location_scope",
+    "prompt": "¿Como quieres usar Parque Central?",
+    "options": [
+      {
+        "id": "target_results",
+        "label": "Buscar cerca de Parque Central",
+        "message": "Buscar cerca de Parque Central"
+      },
+      {
+        "id": "reference_entity",
+        "label": "Usarlo solo para identificar la referencia",
+        "message": "Usarlo solo para identificar la referencia"
+      }
+    ]
+  }
+}
+```
+
+Para resolverla, Go reenvia el estado persistido y una seleccion estructurada:
+
+```json
+{
+  "conversation_id": "cb3456ef-598e-49d9-9bf9-b2ba99055ad7",
+  "turn": 2,
+  "message": "Buscar cerca de Parque Central",
+  "clarification_choice": {
+    "clarification_id": "22222222-2222-4222-8222-222222222222",
+    "option_id": "target_results"
+  },
+  "state": {
+    "target_category": "cafe",
+    "pending_clarification": {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "kind": "location_scope",
+      "options": [
+        {
+          "id": "target_results",
+          "value": "target_results",
+          "label": "Buscar cerca de Parque Central",
+          "place_id": null,
+          "attributes": []
+        },
+        {
+          "id": "reference_entity",
+          "value": "reference_entity",
+          "label": "Usarlo solo para identificar la referencia",
+          "place_id": null,
+          "attributes": []
+        }
+      ],
+      "location_anchor_text": "parque central",
+      "radius_meters": null,
+      "strict_radius": false
+    },
+    "taxonomy_version": "places-taxonomy-v1"
+  },
+  "user_location": {"lat": 16.7531, "lng": -93.1156},
+  "candidate_limit": 30,
+  "result_limit": 5
+}
+```
+
+NLP compara ambos IDs con la allowlist del estado, consume la aclaracion en el mismo
+turno y devuelve `state_patch.pending_clarification=null`. Una seleccion inexistente,
+obsoleta o repetida responde `409`; no se interpreta por similitud con `message`.
+
 Ejemplo de directiva sin ubicacion explicita:
 
 ```json
