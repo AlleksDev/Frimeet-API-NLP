@@ -213,6 +213,8 @@ class ParsedPlaceChatIntent:
     semantic_query: str
     confidence: float
     state_patch: ConversationStatePatch
+    compatible_category_values: tuple[str, ...] = ()
+    category_evidence_terms: tuple[str, ...] = ()
     category_source: CategoryInferenceSource = "unresolved"
     clarification: Clarification | None = None
     alternatives: tuple[IntentAlternative, ...] = ()

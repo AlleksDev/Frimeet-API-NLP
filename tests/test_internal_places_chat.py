@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import create_app
@@ -84,6 +85,33 @@ def test_internal_chat_recommends_restaurants_for_implicit_food_intent() -> None
     assert payload["metadata"]["category_source"] == "lexical_activity"
     assert payload["unresolved"] == []
     assert payload["candidates"]
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_place_id"),
+    (
+        ("parque", "place_6"),
+        ("quiero ir al parque", "place_6"),
+        ("compras", "place_9"),
+    ),
+)
+def test_internal_chat_recommends_for_short_explicit_categories(
+    message: str,
+    expected_place_id: str,
+) -> None:
+    client = TestClient(create_app())
+    response = client.post(
+        "/internal/places/chat",
+        json={**BASE_REQUEST, "message": message},
+        headers=AUTHORIZATION,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["action"] == "recommendations"
+    assert expected_place_id in {
+        candidate["place_id"] for candidate in payload["candidates"]
+    }
 
 
 def test_internal_chat_never_returns_parks_for_a_cafe_query() -> None:

@@ -145,6 +145,8 @@ class CategoryDefinition:
     canonical: str
     aliases: tuple[str, ...]
     storage_values: tuple[str, ...]
+    compatible_storage_values: tuple[str, ...]
+    evidence_terms: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -335,6 +337,10 @@ class DeterministicPlaceChatIntentParser:
 
         category = self._taxonomy.category(target_category)
         category_values = category.storage_values if category else (target_category,)
+        compatible_category_values = (
+            category.compatible_storage_values if category else ()
+        )
+        category_evidence_terms = category.evidence_terms if category else ()
 
         if (
             reference_text
@@ -344,6 +350,8 @@ class DeterministicPlaceChatIntentParser:
             return self._location_scope_clarification(
                 target_category=target_category,
                 category_values=category_values,
+                compatible_category_values=compatible_category_values,
+                category_evidence_terms=category_evidence_terms,
                 explicit_category=requested_category,
                 category_source=category_source,
                 hard_filters=hard_filters,
@@ -373,7 +381,13 @@ class DeterministicPlaceChatIntentParser:
             if token not in _GENERIC_REQUEST_TOKENS
             and token not in category_alias_tokens
         )
-        semantic_parts = [target_category, semantic_target, *merged_preferences]
+        category_query_term = self._category_query_term(target_clause, category)
+        semantic_parts = [
+            target_category,
+            category_query_term,
+            semantic_target,
+            *merged_preferences,
+        ]
         if reference and reference.entity:
             semantic_parts.append(reference.entity)
         semantic_query = " ".join(_ordered_unique(semantic_parts)).strip()
@@ -414,6 +428,8 @@ class DeterministicPlaceChatIntentParser:
             semantic_query=semantic_query,
             confidence=max(0.0, min(1.0, confidence)),
             state_patch=patch,
+            compatible_category_values=compatible_category_values,
+            category_evidence_terms=category_evidence_terms,
             category_source=category_source,
         )
 
@@ -421,6 +437,8 @@ class DeterministicPlaceChatIntentParser:
         self,
         target_category: str,
         category_values: tuple[str, ...],
+        compatible_category_values: tuple[str, ...],
+        category_evidence_terms: tuple[str, ...],
         explicit_category: str | None,
         category_source: CategoryInferenceSource,
         hard_filters: dict[str, Any],
@@ -471,6 +489,8 @@ class DeterministicPlaceChatIntentParser:
                 pending_clarification=pending,
                 taxonomy_version=self._taxonomy.version,
             ),
+            compatible_category_values=compatible_category_values,
+            category_evidence_terms=category_evidence_terms,
             category_source=category_source,
             clarification=clarification,
             alternatives=(
@@ -822,9 +842,24 @@ class DeterministicPlaceChatIntentParser:
             for category in self._taxonomy.categories
             if any(
                 _contains_phrase(normalized, alias)
-                for alias in category.aliases
+                for alias in (category.canonical, *category.aliases)
             )
         )
+
+    @staticmethod
+    def _category_query_term(
+        normalized: str,
+        category: CategoryDefinition | None,
+    ) -> str:
+        if category is None:
+            return ""
+        terms = category.evidence_terms or category.aliases
+        for term in sorted(terms, key=len, reverse=True):
+            if _contains_phrase(normalized, term):
+                return term
+        if terms:
+            return terms[0]
+        return category.canonical
 
     def _inferred_activity_category(
         self,
@@ -959,6 +994,14 @@ def load_place_chat_taxonomy() -> PlaceChatTaxonomy:
                     for alias in item.get("aliases", [])
                 ),
                 storage_values=tuple(str(value) for value in item["storage_values"]),
+                compatible_storage_values=tuple(
+                    str(value)
+                    for value in item.get("compatible_storage_values", [])
+                ),
+                evidence_terms=tuple(
+                    prepare_for_embedding(str(value))
+                    for value in item.get("evidence_terms", item.get("aliases", []))
+                ),
             )
             for item in payload["categories"]
         ),
