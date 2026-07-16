@@ -8,8 +8,15 @@ from typing import Any, Iterable
 from app.modules.places.application.ports.activity_classifier import (
     PlaceActivityClassifier,
 )
+from app.modules.places.domain.clarifications import (
+    ensure_legacy_pending_options,
+    new_category_clarification,
+    new_location_scope_clarification,
+    to_public_clarification,
+)
 from app.modules.places.domain.chat_intent import (
     CategoryInferenceSource,
+    ClarificationChoice,
     ConversationState,
     ConversationStatePatch,
     ExplicitTargetLocation,
@@ -20,6 +27,7 @@ from app.modules.places.domain.chat_intent import (
     ParsedPlaceChatIntent,
     PlaceReference,
 )
+from app.modules.places.domain.errors import ClarificationStateMismatchError
 from app.shared.nlp.preprocessing.text import (
     prepare_for_embedding,
     tokenize_for_embeddings,
@@ -175,10 +183,19 @@ class DeterministicPlaceChatIntentParser:
         message: str,
         state: ConversationState,
         has_user_location: bool,
+        clarification_choice: ClarificationChoice | None = None,
     ) -> ParsedPlaceChatIntent:
         normalized = prepare_for_embedding(message)
         target_clause = self._target_clause(normalized)
+        if clarification_choice is not None:
+            return self._resolve_structured_clarification(
+                choice=clarification_choice,
+                state=state,
+                has_user_location=has_user_location,
+            )
         if state.pending_clarification:
+            pending = ensure_legacy_pending_options(state.pending_clarification)
+            state = replace(state, pending_clarification=pending)
             categories = self._matched_categories(target_clause)
             inferred = (
                 self._inferred_activity_category(target_clause)
@@ -220,20 +237,10 @@ class DeterministicPlaceChatIntentParser:
         # parque", only cafe is a hard category.
         categories = self._matched_categories(target_clause)
         if len(categories) > 1:
+            pending = new_category_clarification(categories)
             return self._clarification(
-                message=(
-                    "Mencionaste varios tipos de lugar. ¿Cual quieres que busque "
-                    "primero: " + ", ".join(categories) + "?"
-                ),
+                pending=pending,
                 unresolved=("target_category",),
-                alternatives=tuple(
-                    IntentAlternative(
-                        key=category,
-                        description=f"Buscar lugares de categoria {category}",
-                        confidence=0.5,
-                    )
-                    for category in categories
-                ),
                 state=state,
                 has_user_location=has_user_location,
             )
@@ -316,13 +323,12 @@ class DeterministicPlaceChatIntentParser:
             hard_filters["price_preference"] = "lower"
 
         if target_category is None:
+            pending = new_category_clarification(
+                ("restaurant", "cafe", "park", "nightlife")
+            )
             return self._clarification(
-                message=(
-                    "¿Que tipo de lugar buscas: una cafeteria, restaurante, "
-                    "parque u otra opcion?"
-                ),
+                pending=pending,
                 unresolved=("target_category",),
-                alternatives=(),
                 state=state,
                 has_user_location=has_user_location,
             )
@@ -427,12 +433,11 @@ class DeterministicPlaceChatIntentParser:
         state: ConversationState,
         has_user_location: bool,
     ) -> ParsedPlaceChatIntent:
-        pending = PendingClarification(
-            kind="location_scope",
-            location_anchor_text=location_text,
+        pending = new_location_scope_clarification(
+            anchor_text=location_text,
             radius_meters=radius_meters,
-            strict_radius=radius_meters is not None,
         )
+        clarification = to_public_clarification(pending)
         return ParsedPlaceChatIntent(
             action="clarification",
             target_category=target_category,
@@ -467,6 +472,7 @@ class DeterministicPlaceChatIntentParser:
                 taxonomy_version=self._taxonomy.version,
             ),
             category_source=category_source,
+            clarification=clarification,
             alternatives=(
                 IntentAlternative(
                     key="target_results",
@@ -482,10 +488,145 @@ class DeterministicPlaceChatIntentParser:
                 ),
             ),
             unresolved=("location_scope",),
-            clarification_message=(
-                f"¿Quieres opciones cerca de {location_text.title()} o lugares "
-                f"parecidos a {reference_text.title()} aunque esten en otra zona?"
+            clarification_message=clarification.prompt,
+        )
+
+    def _resolve_structured_clarification(
+        self,
+        choice: ClarificationChoice,
+        state: ConversationState,
+        has_user_location: bool,
+    ) -> ParsedPlaceChatIntent:
+        pending = state.pending_clarification
+        if pending is None:
+            raise ClarificationStateMismatchError(
+                "there is no pending clarification"
+            )
+        pending = ensure_legacy_pending_options(pending)
+        if choice.clarification_id != pending.clarification_id:
+            raise ClarificationStateMismatchError(
+                "clarification id does not match the pending state"
+            )
+        selected = next(
+            (
+                option
+                for option in pending.options
+                if option.option_id == choice.option_id
             ),
+            None,
+        )
+        if selected is None:
+            raise ClarificationStateMismatchError(
+                "clarification option is not allowed"
+            )
+
+        base_state = replace(state, pending_clarification=None)
+        if pending.kind in ("target_category", "intent_category"):
+            if self._taxonomy.category(selected.value) is None:
+                raise ClarificationStateMismatchError(
+                    "clarification category is not supported"
+                )
+            resolved = self.parse(
+                message=self._category_message(selected.value),
+                state=base_state,
+                has_user_location=has_user_location,
+            )
+            return self._with_cleared_pending(resolved)
+
+        if pending.kind == "location_scope":
+            return self._resolve_location_scope_value(
+                value=selected.value,
+                pending=pending,
+                state=state,
+                has_user_location=has_user_location,
+            )
+
+        if pending.kind == "location_anchor":
+            if not selected.place_id:
+                raise ClarificationStateMismatchError(
+                    "selected location anchor has no place id"
+                )
+            explicit = ExplicitTargetLocation(
+                anchor_text=pending.location_anchor_text or selected.label,
+                place_id=selected.place_id,
+                label=selected.label,
+                radius_meters=pending.radius_meters,
+                strict_radius=pending.strict_radius,
+            )
+            resolved = self.parse(
+                message=self._category_message(state.target_category),
+                state=replace(base_state, explicit_target_location=explicit),
+                has_user_location=has_user_location,
+            )
+            return replace(
+                resolved,
+                location=LocationIntent(
+                    scope="target_results",
+                    source="current_message",
+                    anchor_text=explicit.anchor_text,
+                    resolved_place_id=explicit.place_id,
+                    radius_meters=explicit.radius_meters,
+                    strict_radius=explicit.strict_radius,
+                ),
+                state_patch=replace(
+                    resolved.state_patch,
+                    explicit_target_location=explicit,
+                    clear_pending_clarification=True,
+                ),
+            )
+
+        if pending.kind == "reference_entity":
+            if not selected.place_id or state.reference is None:
+                raise ClarificationStateMismatchError(
+                    "selected reference cannot be applied"
+                )
+            reference = replace(
+                state.reference,
+                place_id=selected.place_id,
+                attributes=tuple(
+                    dict.fromkeys((*state.reference.attributes, *selected.attributes))
+                ),
+            )
+            resolved = self.parse(
+                message=self._category_message(state.target_category),
+                state=replace(base_state, reference=reference),
+                has_user_location=has_user_location,
+            )
+            return replace(
+                resolved,
+                state_patch=replace(
+                    resolved.state_patch,
+                    reference=reference,
+                    clear_pending_clarification=True,
+                ),
+            )
+
+        if pending.kind == "reference_location_anchor":
+            if not selected.place_id or state.reference is None:
+                raise ClarificationStateMismatchError(
+                    "selected reference location cannot be applied"
+                )
+            reference = replace(
+                state.reference,
+                location_hint_text=pending.location_anchor_text or selected.label,
+                location_hint_place_id=selected.place_id,
+            )
+            resolved = self.parse(
+                message=self._category_message(state.target_category),
+                state=replace(base_state, reference=reference),
+                has_user_location=has_user_location,
+            )
+            return replace(
+                resolved,
+                state_patch=replace(
+                    resolved.state_patch,
+                    reference=reference,
+                    clear_pending_clarification=True,
+                ),
+            )
+
+        raise ClarificationStateMismatchError(
+            "unsupported pending clarification kind"
         )
 
     def _resolve_pending_clarification(
@@ -527,18 +668,31 @@ class DeterministicPlaceChatIntentParser:
         )
         if not reference_choice and not target_choice:
             return self._clarification(
-                message=(
-                    "¿Uso ese lugar para ubicar los resultados o solo para "
-                    "identificar la referencia?"
-                ),
-                unresolved=("location_scope",),
-                alternatives=(),
+                pending=pending,
+                unresolved=(pending.kind,),
                 state=state,
                 has_user_location=has_user_location,
             )
+        return self._resolve_location_scope_value(
+            value="reference_entity" if reference_choice else "target_results",
+            pending=pending,
+            state=state,
+            has_user_location=has_user_location,
+        )
 
+    def _resolve_location_scope_value(
+        self,
+        value: str,
+        pending: PendingClarification,
+        state: ConversationState,
+        has_user_location: bool,
+    ) -> ParsedPlaceChatIntent:
+        if not pending.location_anchor_text:
+            raise ClarificationStateMismatchError(
+                "location scope has no anchor text"
+            )
         base_state = replace(state, pending_clarification=None)
-        if reference_choice:
+        if value == "reference_entity":
             reference = (
                 replace(
                     state.reference,
@@ -553,7 +707,7 @@ class DeterministicPlaceChatIntentParser:
                 reference=reference,
             )
             resolved = self.parse(
-                message=state.target_category or "",
+                message=self._category_message(state.target_category),
                 state=base_state,
                 has_user_location=has_user_location,
             )
@@ -568,6 +722,10 @@ class DeterministicPlaceChatIntentParser:
                     reference=reference,
                 ),
             )
+        if value != "target_results":
+            raise ClarificationStateMismatchError(
+                "location scope option is not supported"
+            )
 
         radius = (
             f" a {pending.radius_meters} metros"
@@ -576,19 +734,31 @@ class DeterministicPlaceChatIntentParser:
         )
         resolved = self.parse(
             message=(
-                f"{state.target_category or ''} cerca de "
+                f"{self._category_message(state.target_category)} cerca de "
                 f"{pending.location_anchor_text}{radius}"
             ),
             state=base_state,
             has_user_location=has_user_location,
         )
+        return self._with_cleared_pending(resolved)
+
+    @staticmethod
+    def _with_cleared_pending(
+        intent: ParsedPlaceChatIntent,
+    ) -> ParsedPlaceChatIntent:
         return replace(
-            resolved,
+            intent,
             state_patch=replace(
-                resolved.state_patch,
+                intent.state_patch,
                 clear_pending_clarification=True,
             ),
         )
+
+    def _category_message(self, category: str | None) -> str:
+        definition = self._taxonomy.category(category)
+        if definition and definition.aliases:
+            return definition.aliases[0]
+        return category or ""
 
     def _location_intent(
         self,
@@ -731,12 +901,13 @@ class DeterministicPlaceChatIntentParser:
 
     def _clarification(
         self,
-        message: str,
+        pending: PendingClarification,
         unresolved: tuple[str, ...],
-        alternatives: tuple[IntentAlternative, ...],
         state: ConversationState,
         has_user_location: bool,
     ) -> ParsedPlaceChatIntent:
+        pending = ensure_legacy_pending_options(pending)
+        clarification = to_public_clarification(pending)
         location = (
             LocationIntent(scope="user_current_location", source="user_current")
             if has_user_location
@@ -754,14 +925,23 @@ class DeterministicPlaceChatIntentParser:
             semantic_query="",
             confidence=0.5,
             state_patch=ConversationStatePatch(
+                pending_clarification=pending,
                 taxonomy_version=self._taxonomy.version
             ),
             category_source=(
                 "conversation_state" if state.target_category else "unresolved"
             ),
-            alternatives=alternatives,
+            clarification=clarification,
+            alternatives=tuple(
+                IntentAlternative(
+                    key=option.option_id,
+                    description=option.label,
+                    confidence=0.5,
+                )
+                for option in pending.options
+            ),
             unresolved=unresolved,
-            clarification_message=message,
+            clarification_message=clarification.prompt,
         )
 
 

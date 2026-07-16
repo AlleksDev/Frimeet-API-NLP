@@ -127,6 +127,11 @@ def test_internal_chat_asks_about_ambiguous_reference_scope() -> None:
     assert payload["action"] == "clarification"
     assert payload["candidates"] == []
     assert payload["unresolved"] == ["location_scope"]
+    assert payload["clarification"]["kind"] == "location_scope"
+    assert [option["id"] for option in payload["clarification"]["options"]] == [
+        "target_results",
+        "reference_entity",
+    ]
 
 
 def test_internal_chat_accepts_a_stateful_continuation() -> None:
@@ -205,6 +210,62 @@ def test_internal_chat_resolves_a_pending_scope_choice() -> None:
     assert second_payload["state_patch"]["pending_clarification"] is None
     assert second_payload["location_directive"]["source"] == "explicit_anchor"
     assert second_payload["location_directive"]["anchor_place_id"] == "place_6"
+
+
+def test_internal_chat_resolves_a_structured_scope_choice() -> None:
+    client = TestClient(create_app())
+    first_response = client.post(
+        "/internal/places/chat",
+        json={
+            **BASE_REQUEST,
+            "message": (
+                "cafeterias como la de Hello Kitty cerca del Parque Cana Hueca"
+            ),
+        },
+        headers=AUTHORIZATION,
+    )
+    first_payload = first_response.json()
+    clarification = first_payload["clarification"]
+
+    second_response = client.post(
+        "/internal/places/chat",
+        json={
+            **BASE_REQUEST,
+            "turn": 2,
+            "message": "Buscar cerca del Parque Cana Hueca",
+            "clarification_choice": {
+                "clarification_id": clarification["id"],
+                "option_id": "target_results",
+            },
+            "state": first_payload["state_patch"],
+        },
+        headers=AUTHORIZATION,
+    )
+
+    assert first_payload["action"] == "clarification"
+    assert second_response.status_code == 200
+    second_payload = second_response.json()
+    assert second_payload["action"] == "recommendations"
+    assert second_payload["clarification"] is None
+    assert second_payload["state_patch"]["pending_clarification"] is None
+
+
+def test_internal_chat_rejects_a_stale_structured_choice() -> None:
+    client = TestClient(create_app())
+    response = client.post(
+        "/internal/places/chat",
+        json={
+            **BASE_REQUEST,
+            "message": "Restaurantes",
+            "clarification_choice": {
+                "clarification_id": "00000000-0000-4000-8000-000000000000",
+                "option_id": "restaurant",
+            },
+        },
+        headers=AUTHORIZATION,
+    )
+
+    assert response.status_code == 409
 
 
 def test_internal_chat_applies_content_exclusions_before_ranking() -> None:
