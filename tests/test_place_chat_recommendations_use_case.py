@@ -251,6 +251,83 @@ class UnfilteredThemeRepository:
         ]
 
 
+class MixedCategoryRepository:
+    source_name = "test"
+
+    async def search(self, embedding, filters, limit):
+        del embedding, filters, limit
+        return [
+            PlaceCandidate(
+                id="park_exact",
+                name="Parque Central",
+                category="park",
+                score=0.0,
+                metadata={"tags": "parque aire libre"},
+            ),
+            PlaceCandidate(
+                id="cinema_compatible",
+                name="Cinepolis Centro",
+                category="entertainment",
+                score=0.0,
+                metadata={"tags": "Cine peliculas estrenos"},
+            ),
+            PlaceCandidate(
+                id="entertainment_noise",
+                name="Boliche Centro",
+                category="entertainment",
+                score=1.0,
+                metadata={"tags": "boliche juegos diversion"},
+                document="entertainment entretenimiento diversion cine actividades",
+            ),
+            PlaceCandidate(
+                id="shopping_exact",
+                name="Plaza Central",
+                category="shopping_mall",
+                score=0.0,
+                metadata={"tags": "compras tiendas ropa"},
+            ),
+            PlaceCandidate(
+                id="family_noise",
+                name="Salon de fiestas",
+                category="family",
+                score=1.0,
+                metadata={"tags": "fiestas infantiles salon"},
+            ),
+        ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message", "expected_id"),
+    (
+        ("parque", "park_exact"),
+        ("quiero ir al parque", "park_exact"),
+        ("cine", "cinema_compatible"),
+        ("quiero ir al cine", "cinema_compatible"),
+        ("compras", "shopping_exact"),
+        ("shopping", "shopping_exact"),
+    ),
+)
+async def test_short_category_queries_survive_sparse_scores_without_family_noise(
+    message: str,
+    expected_id: str,
+) -> None:
+    retriever = HybridContentPlaceChatRetriever(
+        embedding_provider=MockEmbeddingProvider(dimension=16),
+        place_repository=MixedCategoryRepository(),
+        minimum_content_score=0.95,
+    )
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message=message,
+        state=ConversationState(),
+        has_user_location=True,
+    )
+
+    candidates = await retriever.retrieve(intent=intent, limit=5)
+
+    assert [candidate.place_id for candidate in candidates] == [expected_id]
+
+
 @pytest.mark.asyncio
 async def test_hard_category_and_controlled_theme_relaxation() -> None:
     embedding = MockEmbeddingProvider(dimension=16)

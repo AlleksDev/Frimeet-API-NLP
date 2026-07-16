@@ -58,6 +58,18 @@ def test_place_to_source_record_resolves_and_weights_numeric_tags() -> None:
     assert "9999" not in record.document
 
 
+def test_semantic_documents_keep_canonical_and_local_category_terms() -> None:
+    park = place_to_source_record(
+        {"id": "park", "name": "Area Uno", "category": "park"}
+    )
+    shopping = place_to_source_record(
+        {"id": "shopping", "name": "Area Dos", "category": "shopping"}
+    )
+
+    assert park is not None and "park parque" in park.document
+    assert shopping is not None and "shopping compras" in shopping.document
+
+
 def test_place_tag_catalog_contains_complete_supplied_mapping() -> None:
     catalog = place_tag_catalog()
 

@@ -4,77 +4,101 @@
     {
       "canonical": "cafe",
       "aliases": ["cafe", "cafes", "cafeteria", "cafeterias", "cafetria", "coffee shop", "coffee shops", "casa de cafe"],
-      "storage_values": ["cafe", "cafeteria", "coffee_shop"]
+      "storage_values": ["cafe", "café", "cafeteria", "coffee_shop", "coffee shop"]
     },
     {
       "canonical": "restaurant",
       "aliases": ["restaurante", "restaurantes", "restaurant", "resturante", "comedor", "lugar para comer"],
-      "storage_values": ["restaurant", "restaurante"]
+      "storage_values": ["restaurant", "restaurante", "comedor"]
     },
     {
       "canonical": "park",
       "aliases": ["parque", "parques", "parqe", "jardin publico", "area verde"],
-      "storage_values": ["park", "parque"]
+      "storage_values": ["park", "parque", "garden", "jardin", "public_park", "public park", "city_park", "city park", "state_park", "state park", "national_park", "national park"],
+      "compatible_storage_values": ["outdoors", "family"],
+      "evidence_terms": ["parque", "park", "jardin", "garden", "area verde", "city park", "state park", "national park"]
     },
     {
       "canonical": "bar",
       "aliases": ["bar", "bares", "cantina", "cerveceria"],
-      "storage_values": ["bar", "pub", "cerveceria"]
+      "storage_values": ["bar", "pub", "cerveceria", "cantina", "biergarten"]
     },
     {
       "canonical": "nightlife",
       "aliases": ["antro", "discoteca", "club nocturno", "vida nocturna"],
-      "storage_values": ["nightlife", "night_club", "discoteca"]
+      "storage_values": ["nightlife", "night_club", "night club", "nightclub", "discoteca", "antro"],
+      "compatible_storage_values": ["entertainment", "bar"],
+      "evidence_terms": ["antro", "discoteca", "club nocturno", "vida nocturna", "nightclub", "baile"]
     },
     {
       "canonical": "culture",
       "aliases": ["museo", "galeria", "centro cultural", "lugar cultural"],
-      "storage_values": ["culture", "cultural", "museum", "gallery"]
+      "storage_values": ["culture", "cultural", "museum", "museo", "gallery", "galeria", "arts_centre", "arts centre", "centro cultural"],
+      "compatible_storage_values": ["tourism", "community", "entertainment"],
+      "evidence_terms": ["museo", "museum", "galeria", "gallery", "centro cultural", "arte", "historia", "exposicion"]
     },
     {
       "canonical": "shopping",
       "aliases": ["plaza comercial", "centro comercial", "tienda", "compras"],
-      "storage_values": ["shopping", "mall", "store"]
+      "storage_values": ["shopping", "shop", "mall", "store", "shopping_mall", "shopping mall", "centro comercial", "plaza comercial", "commercial_plaza", "commercial plaza", "compras", "supermarket"],
+      "compatible_storage_values": ["market"],
+      "evidence_terms": ["compras", "shopping", "tienda", "store", "mall", "centro comercial", "plaza comercial"]
     },
     {
       "canonical": "sports",
       "aliases": ["gimnasio", "centro deportivo", "cancha", "deporte"],
-      "storage_values": ["sports", "gym", "fitness_centre"]
+      "storage_values": ["sports", "sport", "deporte", "gym", "gimnasio", "fitness_centre", "fitness centre", "sports_centre", "sports centre", "stadium", "estadio", "cancha"],
+      "compatible_storage_values": ["outdoors", "family", "park"],
+      "evidence_terms": ["deporte", "sports", "gimnasio", "gym", "cancha", "estadio", "entrenamiento", "ejercicio"]
     },
     {
       "canonical": "bakery",
       "aliases": ["panaderia", "pasteleria", "reposteria"],
-      "storage_values": ["bakery", "panaderia", "pastry_shop"]
+      "storage_values": ["bakery", "panaderia", "pasteleria", "reposteria", "pastry_shop", "pastry shop"],
+      "compatible_storage_values": ["shopping", "restaurant", "cafe"],
+      "evidence_terms": ["panaderia", "bakery", "pasteleria", "reposteria", "pan", "pastel"]
     },
     {
       "canonical": "ice_cream",
       "aliases": ["heladeria", "helado", "postres"],
-      "storage_values": ["ice_cream", "ice_cream_shop", "dessert"]
+      "storage_values": ["ice_cream", "ice cream", "ice_cream_shop", "ice cream shop", "heladeria", "dessert", "postres"],
+      "compatible_storage_values": ["shopping", "restaurant", "cafe"],
+      "evidence_terms": ["heladeria", "helado", "ice cream", "postres", "dessert"]
     },
     {
       "canonical": "cinema",
       "aliases": ["cine", "cinema", "sala de cine"],
-      "storage_values": ["cinema", "movie_theater"]
+      "storage_values": ["cinema", "cine", "movie_theater", "movie theater", "sala de cine"],
+      "compatible_storage_values": ["entertainment"],
+      "evidence_terms": ["cine", "cinema", "movie theater", "sala de cine", "pelicula"]
     },
     {
       "canonical": "library",
       "aliases": ["biblioteca", "bibliotecas", "sala de lectura"],
-      "storage_values": ["library", "biblioteca"]
+      "storage_values": ["library", "biblioteca", "sala de lectura"],
+      "compatible_storage_values": ["culture", "community"],
+      "evidence_terms": ["biblioteca", "library", "sala de lectura", "libros", "lectura"]
     },
     {
       "canonical": "market",
       "aliases": ["mercado", "mercados", "tianguis"],
-      "storage_values": ["market", "marketplace", "mercado"]
+      "storage_values": ["market", "marketplace", "mercado", "tianguis"],
+      "compatible_storage_values": ["shopping"],
+      "evidence_terms": ["mercado", "market", "marketplace", "tianguis"]
     },
     {
       "canonical": "outdoors",
       "aliases": ["mirador", "sendero", "paraje natural", "lugar al aire libre"],
-      "storage_values": ["outdoors", "viewpoint", "trail", "nature"]
+      "storage_values": ["outdoors", "viewpoint", "mirador", "trail", "sendero", "nature", "paraje natural"],
+      "compatible_storage_values": ["tourism", "family", "park"],
+      "evidence_terms": ["mirador", "viewpoint", "sendero", "trail", "paraje natural", "naturaleza", "aventura"]
     },
     {
       "canonical": "lodging",
       "aliases": ["hotel", "hoteles", "hostal", "alojamiento"],
-      "storage_values": ["lodging", "hotel", "hostel"]
+      "storage_values": ["lodging", "hotel", "hostel", "hostal", "alojamiento"],
+      "compatible_storage_values": ["tourism"],
+      "evidence_terms": ["hotel", "hostel", "hostal", "alojamiento", "hospedaje"]
     }
   ],
   "preferences": [

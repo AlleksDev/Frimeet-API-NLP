@@ -23,8 +23,14 @@ def test_category_is_not_polluted_by_the_location_anchor() -> None:
 
     assert intent.action == "recommendations"
     assert intent.target_category == "cafe"
-    assert intent.category_values == ("cafe", "cafeteria", "coffee_shop")
-    assert intent.semantic_query == "cafe"
+    assert intent.category_values == (
+        "cafe",
+        "café",
+        "cafeteria",
+        "coffee_shop",
+        "coffee shop",
+    )
+    assert intent.semantic_query == "cafe cafeteria"
     assert intent.location.scope == "target_results"
     assert intent.location.anchor_text == "parque central"
 
@@ -136,8 +142,8 @@ def test_food_activity_defaults_to_restaurant_without_clarification() -> None:
 
     assert intent.action == "recommendations"
     assert intent.target_category == "restaurant"
-    assert intent.category_values == ("restaurant", "restaurante")
-    assert intent.semantic_query == "restaurant comer"
+    assert intent.category_values == ("restaurant", "restaurante", "comedor")
+    assert intent.semantic_query == "restaurant restaurante comer"
     assert intent.state_patch.target_category == "restaurant"
     assert intent.confidence == 0.88
 
@@ -151,7 +157,13 @@ def test_explicit_category_wins_over_an_activity_default() -> None:
 
     assert intent.action == "recommendations"
     assert intent.target_category == "cafe"
-    assert intent.category_values == ("cafe", "cafeteria", "coffee_shop")
+    assert intent.category_values == (
+        "cafe",
+        "café",
+        "cafeteria",
+        "coffee_shop",
+        "coffee shop",
+    )
     assert intent.state_patch.target_category == "cafe"
 
 
@@ -173,6 +185,34 @@ def test_other_high_confidence_activities_use_helpful_defaults() -> None:
 
         assert intent.action == "recommendations"
         assert intent.target_category == expected_category
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_category", "expected_query_term"),
+    (
+        ("parque", "park", "parque"),
+        ("quiero ir al parque", "park", "parque"),
+        ("cine", "cinema", "cine"),
+        ("quiero ir al cine", "cinema", "cine"),
+        ("compras", "shopping", "compras"),
+        ("shopping", "shopping", "shopping"),
+        ("quiero ir de compras", "shopping", "compras"),
+    ),
+)
+def test_short_category_requests_keep_local_retrieval_vocabulary(
+    message: str,
+    expected_category: str,
+    expected_query_term: str,
+) -> None:
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message=message,
+        state=ConversationState(),
+        has_user_location=True,
+    )
+
+    assert intent.action == "recommendations"
+    assert intent.target_category == expected_category
+    assert expected_query_term in intent.semantic_query.split()
 
 
 def test_semantic_activity_inference_handles_non_literal_food_request() -> None:
