@@ -20,19 +20,25 @@ PLACE_SEMANTIC_DOCUMENT_VERSION = "weighted-tags-v2"
 # Broad categories from the main API are expanded into Spanish intent terms so
 # sparse OSM records still have a useful semantic anchor.
 CATEGORY_SEMANTIC_PROFILES = {
-    "restaurant": "restaurante comida gastronomia comer cena almuerzo desayuno",
+    "restaurant": "restaurant restaurante comida gastronomia comer cena almuerzo desayuno",
     "cafe": "cafe cafeteria bebidas desayuno postres conversar",
     "bar": "bar bebidas cocteles cerveza amigos musica noche",
-    "nightlife": "vida nocturna noche baile musica bar fiesta",
-    "shopping": "compras tiendas ropa calzado productos mercado centro comercial",
-    "lodging": "alojamiento hotel hospedaje hostal dormir turismo viaje",
-    "park": "parque naturaleza caminar paseo aire libre mascotas ejercicio",
-    "culture": "cultura museo arte historia biblioteca exposicion lectura",
-    "tourism": "turismo atraccion visitar explorar paseo historia",
-    "sports": "deporte ejercicio entrenamiento gimnasio actividad fisica",
-    "community": "comunidad convivencia reuniones centro comunitario actividades",
-    "family": "familia ninos juegos convivencia actividades familiares",
-    "entertainment": "entretenimiento diversion juegos cine actividades",
+    "nightlife": "nightlife vida nocturna noche baile musica bar fiesta",
+    "shopping": "shopping compras tiendas ropa calzado productos mercado centro comercial",
+    "lodging": "lodging alojamiento hotel hospedaje hostal dormir turismo viaje",
+    "park": "park parque naturaleza caminar paseo aire libre mascotas ejercicio",
+    "culture": "culture cultura museo arte historia biblioteca exposicion lectura",
+    "tourism": "tourism turismo atraccion visitar explorar paseo historia",
+    "sports": "sports deporte ejercicio entrenamiento gimnasio actividad fisica",
+    "community": "community comunidad convivencia reuniones centro comunitario actividades",
+    "family": "family familia ninos juegos convivencia actividades familiares",
+    "entertainment": "entertainment entretenimiento diversion juegos cine actividades",
+    "cinema": "cinema cine pelicula estreno sala de cine entretenimiento",
+    "library": "library biblioteca libros lectura estudio cultura",
+    "bakery": "bakery panaderia pan pasteleria reposteria",
+    "ice_cream": "ice cream heladeria helado postres dessert",
+    "market": "market mercado tianguis compras productos locales",
+    "outdoors": "outdoors aire libre mirador sendero naturaleza aventura",
 }
 
 

@@ -63,10 +63,18 @@ class HybridContentPlaceChatRetriever:
                 return cached
 
         embedding = self._embedding_provider.embed_text(semantic_query)
+        repository_categories = tuple(
+            dict.fromkeys(
+                (
+                    *intent.category_values,
+                    *intent.compatible_category_values,
+                )
+            )
+        )
         filters = PlaceFilters(
             city=None,
             state=None,
-            categories=intent.category_values,
+            categories=repository_categories,
             price_range=_optional_string(intent.hard_filters.get("price_range")),
             occasion=_optional_string(intent.hard_filters.get("occasion")),
             is_active=True,
@@ -81,7 +89,7 @@ class HybridContentPlaceChatRetriever:
         candidates = [
             candidate
             for candidate in raw_candidates
-            if self._matches_hard_category(candidate, intent.category_values)
+            if self._matches_hard_category(candidate, intent)
             and not self._matches_exclusions(candidate, intent.exclusions)
         ]
         if not candidates:
@@ -114,7 +122,14 @@ class HybridContentPlaceChatRetriever:
                 lexical_score=lexical,
                 theme_or_reference_score=theme_score,
             )
-            if content_score < self._minimum_content_score:
+            requires_content_evidence = bool(
+                intent.soft_preferences
+                or (intent.reference and intent.reference.entity)
+            )
+            if (
+                requires_content_evidence
+                and content_score < self._minimum_content_score
+            ):
                 continue
             ranked.append(
                 PlaceChatCandidate(
@@ -162,6 +177,8 @@ class HybridContentPlaceChatRetriever:
         payload = {
             "query": semantic_query,
             "categories": intent.category_values,
+            "compatible_categories": intent.compatible_category_values,
+            "category_evidence_terms": intent.category_evidence_terms,
             "hard_filters": intent.hard_filters,
             "preferences": intent.soft_preferences,
             "exclusions": intent.exclusions,
@@ -176,16 +193,29 @@ class HybridContentPlaceChatRetriever:
     @staticmethod
     def _matches_hard_category(
         candidate: PlaceCandidate,
-        category_values: tuple[str, ...],
+        intent: ParsedPlaceChatIntent,
     ) -> bool:
         if not candidate.category:
             return False
         actual = prepare_for_embedding(candidate.category).replace(" ", "_")
-        allowed = {
+        exact = {
             prepare_for_embedding(value).replace(" ", "_")
-            for value in category_values
+            for value in intent.category_values
         }
-        return actual in allowed
+        if actual in exact:
+            return True
+        compatible = {
+            prepare_for_embedding(value).replace(" ", "_")
+            for value in intent.compatible_category_values
+        }
+        if actual not in compatible:
+            return False
+        document_tokens = _category_evidence_tokens(candidate)
+        return any(
+            evidence_tokens and evidence_tokens <= document_tokens
+            for term in intent.category_evidence_terms
+            if (evidence_tokens := set(tokenize(term)))
+        )
 
     @staticmethod
     def _matches_exclusions(
@@ -254,6 +284,30 @@ def _optional_string(value: object) -> str | None:
         return None
     normalized = str(value).strip()
     return normalized or None
+
+
+def _category_evidence_tokens(candidate: PlaceCandidate) -> set[str]:
+    # Do not inspect candidate.document here: indexed documents intentionally
+    # contain broad category profiles (for example, all `entertainment` records
+    # mention cinema). Compatibility must be proven by place-specific fields.
+    evidence = " ".join(
+        value
+        for value in (
+            candidate.name,
+            _as_evidence_text(candidate.metadata.get("tags")),
+            _as_evidence_text(candidate.metadata.get("short_description")),
+        )
+        if value
+    )
+    return set(tokenize(evidence))
+
+
+def _as_evidence_text(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple, set)):
+        return " ".join(str(item) for item in value)
+    return str(value)
 
 
 def _unit_score(value: object) -> float:
