@@ -1,5 +1,5 @@
 from typing import Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -7,9 +7,11 @@ from app.modules.places.application.use_cases.chat_place_recommendations import 
     ChatPlaceRecommendationsResult,
 )
 from app.modules.places.domain.chat_intent import (
+    ClarificationChoice,
     ConversationState,
     ExplicitTargetLocation,
     PendingClarification,
+    PendingClarificationOption,
     PlaceReference,
 )
 
@@ -28,6 +30,7 @@ class PlaceReferenceStateSchema(BaseModel):
     place_id: str | None = Field(default=None, max_length=100)
     attributes: list[str] = Field(default_factory=list, max_length=30)
     location_hint_text: str | None = Field(default=None, max_length=160)
+    location_hint_place_id: str | None = Field(default=None, max_length=100)
 
     def to_domain(self) -> PlaceReference:
         return PlaceReference(
@@ -35,6 +38,7 @@ class PlaceReferenceStateSchema(BaseModel):
             place_id=self.place_id,
             attributes=tuple(self.attributes),
             location_hint_text=self.location_hint_text,
+            location_hint_place_id=self.location_hint_place_id,
         )
 
 
@@ -57,17 +61,50 @@ class ExplicitTargetLocationStateSchema(BaseModel):
         )
 
 
+class PendingClarificationOptionStateSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
+    value: str = Field(..., min_length=1, max_length=160)
+    label: str = Field(..., min_length=1, max_length=160)
+    place_id: str | None = Field(default=None, max_length=100)
+    attributes: list[str] = Field(default_factory=list, max_length=30)
+
+    def to_domain(self) -> PendingClarificationOption:
+        return PendingClarificationOption(
+            option_id=self.id,
+            value=self.value,
+            label=self.label,
+            place_id=self.place_id,
+            attributes=tuple(self.attributes),
+        )
+
+
 class PendingClarificationStateSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["location_scope"]
-    location_anchor_text: str = Field(..., min_length=1, max_length=160)
+    id: UUID | None = None
+    kind: Literal[
+        "target_category",
+        "intent_category",
+        "location_scope",
+        "location_anchor",
+        "reference_entity",
+        "reference_location_anchor",
+    ]
+    options: list[PendingClarificationOptionStateSchema] = Field(
+        default_factory=list,
+        max_length=5,
+    )
+    location_anchor_text: str | None = Field(default=None, max_length=160)
     radius_meters: int | None = Field(default=None, ge=1, le=50_000)
     strict_radius: bool = False
 
     def to_domain(self) -> PendingClarification:
         return PendingClarification(
+            clarification_id=str(self.id or uuid4()),
             kind=self.kind,
+            options=tuple(option.to_domain() for option in self.options),
             location_anchor_text=self.location_anchor_text,
             radius_meters=self.radius_meters,
             strict_radius=self.strict_radius,
@@ -111,12 +148,31 @@ class ConversationStateSchema(BaseModel):
         )
 
 
+class ClarificationChoiceSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    clarification_id: UUID
+    option_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        pattern=r"^[a-zA-Z0-9_-]+$",
+    )
+
+    def to_domain(self) -> ClarificationChoice:
+        return ClarificationChoice(
+            clarification_id=str(self.clarification_id),
+            option_id=self.option_id,
+        )
+
+
 class InternalPlaceChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     conversation_id: UUID
     turn: int = Field(..., ge=1)
     message: str = Field(..., min_length=1, max_length=1000)
+    clarification_choice: ClarificationChoiceSchema | None = None
     state: ConversationStateSchema = Field(default_factory=ConversationStateSchema)
     user_location: UserLocationSchema
     candidate_limit: int = Field(default=30, ge=1, le=40)
@@ -152,12 +208,33 @@ class PlaceChatCandidateSchema(BaseModel):
     matched_reasons: list[str]
 
 
+class ClarificationOptionSchema(BaseModel):
+    id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
+    label: str = Field(..., min_length=1, max_length=80)
+    message: str = Field(..., min_length=1, max_length=200)
+
+
+class ClarificationSchema(BaseModel):
+    id: UUID
+    kind: Literal[
+        "target_category",
+        "intent_category",
+        "location_scope",
+        "location_anchor",
+        "reference_entity",
+        "reference_location_anchor",
+    ]
+    prompt: str = Field(..., min_length=1, max_length=500)
+    options: list[ClarificationOptionSchema] = Field(..., min_length=2, max_length=5)
+
+
 class InternalPlaceChatResponse(BaseModel):
     action: Literal["recommendations", "clarification", "no_match"]
     message: str
     state_patch: dict[str, Any]
     location_directive: PlaceChatLocationDirectiveSchema
     candidates: list[PlaceChatCandidateSchema]
+    clarification: ClarificationSchema | None = None
     unresolved: list[str]
     intent_confidence: float = Field(..., ge=0, le=1)
     ranking_version: str
@@ -193,6 +270,23 @@ def internal_chat_result_to_schema(
             )
             for candidate in result.candidates
         ],
+        clarification=(
+            ClarificationSchema(
+                id=UUID(result.clarification.clarification_id),
+                kind=result.clarification.kind,
+                prompt=result.clarification.prompt,
+                options=[
+                    ClarificationOptionSchema(
+                        id=option.option_id,
+                        label=option.label,
+                        message=option.message,
+                    )
+                    for option in result.clarification.options
+                ],
+            )
+            if result.clarification
+            else None
+        ),
         unresolved=list(result.unresolved),
         intent_confidence=round(result.intent_confidence, 6),
         ranking_version=result.ranking_version,

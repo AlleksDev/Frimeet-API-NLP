@@ -23,7 +23,14 @@ CategoryInferenceSource = Literal[
     "conversation_state",
     "unresolved",
 ]
-ClarificationKind = Literal["location_scope"]
+ClarificationKind = Literal[
+    "target_category",
+    "intent_category",
+    "location_scope",
+    "location_anchor",
+    "reference_entity",
+    "reference_location_anchor",
+]
 
 
 @dataclass(frozen=True)
@@ -32,6 +39,7 @@ class PlaceReference:
     place_id: str | None = None
     attributes: tuple[str, ...] = ()
     location_hint_text: str | None = None
+    location_hint_place_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -44,11 +52,43 @@ class ExplicitTargetLocation:
 
 
 @dataclass(frozen=True)
+class PendingClarificationOption:
+    option_id: str
+    value: str
+    label: str
+    place_id: str | None = None
+    attributes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class PendingClarification:
     kind: ClarificationKind
-    location_anchor_text: str
+    clarification_id: str = ""
+    options: tuple[PendingClarificationOption, ...] = ()
+    location_anchor_text: str | None = None
     radius_meters: int | None = None
     strict_radius: bool = False
+
+
+@dataclass(frozen=True)
+class ClarificationOption:
+    option_id: str
+    label: str
+    message: str
+
+
+@dataclass(frozen=True)
+class Clarification:
+    clarification_id: str
+    kind: ClarificationKind
+    prompt: str
+    options: tuple[ClarificationOption, ...]
+
+
+@dataclass(frozen=True)
+class ClarificationChoice:
+    clarification_id: str
+    option_id: str
 
 
 @dataclass(frozen=True)
@@ -119,6 +159,7 @@ class ConversationStatePatch:
                 "place_id": self.reference.place_id,
                 "attributes": list(self.reference.attributes),
                 "location_hint_text": self.reference.location_hint_text,
+                "location_hint_place_id": self.reference.location_hint_place_id,
             }
         if self.explicit_target_location is not None:
             payload["explicit_target_location"] = {
@@ -130,7 +171,18 @@ class ConversationStatePatch:
             }
         if self.pending_clarification is not None:
             payload["pending_clarification"] = {
+                "id": self.pending_clarification.clarification_id,
                 "kind": self.pending_clarification.kind,
+                "options": [
+                    {
+                        "id": option.option_id,
+                        "value": option.value,
+                        "label": option.label,
+                        "place_id": option.place_id,
+                        "attributes": list(option.attributes),
+                    }
+                    for option in self.pending_clarification.options
+                ],
                 "location_anchor_text": (
                     self.pending_clarification.location_anchor_text
                 ),
@@ -162,6 +214,7 @@ class ParsedPlaceChatIntent:
     confidence: float
     state_patch: ConversationStatePatch
     category_source: CategoryInferenceSource = "unresolved"
+    clarification: Clarification | None = None
     alternatives: tuple[IntentAlternative, ...] = ()
     unresolved: tuple[str, ...] = ()
     clarification_message: str | None = None
