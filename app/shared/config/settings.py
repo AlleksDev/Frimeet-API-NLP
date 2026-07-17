@@ -167,6 +167,82 @@ class Settings(BaseSettings):
         alias="FASTTEXT_AUTO_DOWNLOAD",
     )
 
+    # Places can migrate independently from posts, global search and feed
+    # embeddings.  Defaults preserve the current FastText contract; enabling a
+    # Sentence-Transformer is an explicit, reversible deployment choice.
+    places_embedding_provider: str = Field(
+        default="fasttext",
+        alias="PLACES_EMBEDDING_PROVIDER",
+    )
+    places_embedding_dimension: int = Field(
+        default=300,
+        gt=0,
+        alias="PLACES_EMBEDDING_DIMENSION",
+    )
+    places_embedding_model: str = Field(
+        default="facebook/fasttext-es-vectors",
+        min_length=1,
+        alias="PLACES_EMBEDDING_MODEL",
+    )
+    places_embedding_version: str = Field(
+        default="common-crawl-300-v1",
+        min_length=1,
+        alias="PLACES_EMBEDDING_VERSION",
+    )
+    places_embedding_query_prefix: str = Field(
+        default="",
+        alias="PLACES_EMBEDDING_QUERY_PREFIX",
+    )
+    places_embedding_passage_prefix: str = Field(
+        default="",
+        alias="PLACES_EMBEDDING_PASSAGE_PREFIX",
+    )
+    places_embedding_batch_size: int = Field(
+        default=32,
+        ge=1,
+        le=512,
+        alias="PLACES_EMBEDDING_BATCH_SIZE",
+    )
+    places_embedding_device: str | None = Field(
+        default=None,
+        alias="PLACES_EMBEDDING_DEVICE",
+    )
+    places_category_catalog_path: str | None = Field(
+        default=None,
+        alias="PLACES_CATEGORY_CATALOG_PATH",
+    )
+    places_category_min_similarity: float = Field(
+        default=0.44,
+        ge=-1.0,
+        le=1.0,
+        alias="PLACES_CATEGORY_MIN_SIMILARITY",
+    )
+    places_category_min_margin: float = Field(
+        default=0.04,
+        ge=0.0,
+        le=2.0,
+        alias="PLACES_CATEGORY_MIN_MARGIN",
+    )
+    places_pgvector_match_function: str = Field(
+        default="match_places",
+        min_length=1,
+        alias="PLACES_PGVECTOR_MATCH_FUNCTION",
+    )
+    places_pgvector_hybrid_function: str | None = Field(
+        default=None,
+        alias="PLACES_PGVECTOR_HYBRID_FUNCTION",
+    )
+    places_pgvector_upsert_function: str = Field(
+        default="upsert_place_embedding",
+        min_length=1,
+        alias="PLACES_PGVECTOR_UPSERT_FUNCTION",
+    )
+    places_pgvector_hash_function: str = Field(
+        default="get_place_content_hashes",
+        min_length=1,
+        alias="PLACES_PGVECTOR_HASH_FUNCTION",
+    )
+
     bm25_k1: float = Field(default=1.5, gt=0, alias="BM25_K1")
     bm25_b: float = Field(default=0.75, ge=0, le=1, alias="BM25_B")
     bm25_relevance_threshold: float = Field(
@@ -218,6 +294,24 @@ class Settings(BaseSettings):
         le=1.0,
         alias="PLACES_CHAT_AMBIGUITY_DELTA",
     )
+    places_chat_hypothesis_min_confidence: float = Field(
+        default=0.60,
+        ge=0.0,
+        le=1.0,
+        alias="PLACES_CHAT_HYPOTHESIS_MIN_CONFIDENCE",
+    )
+    places_chat_hypothesis_max_gap: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=1.0,
+        alias="PLACES_CHAT_HYPOTHESIS_MAX_GAP",
+    )
+    places_chat_default_radius_meters: int = Field(
+        default=5_000,
+        ge=1,
+        le=50_000,
+        alias="PLACES_CHAT_DEFAULT_RADIUS_METERS",
+    )
     places_chat_ranking_version: str = Field(
         default="places-chat-v2",
         min_length=1,
@@ -229,6 +323,31 @@ class Settings(BaseSettings):
         min_length=1,
         max_length=64,
         alias="PLACES_CHAT_TAXONOMY_VERSION",
+    )
+    # Contextual intent extraction is opt-in.  ``disabled`` is accepted as an
+    # operational alias for the deterministic-only path so deployments can
+    # explicitly turn the optional model off without changing code.
+    places_chat_intent_provider: str = Field(
+        default="deterministic",
+        alias="PLACES_CHAT_INTENT_PROVIDER",
+    )
+    places_chat_bert_model_path: str | None = Field(
+        default=None,
+        alias="PLACES_CHAT_BERT_MODEL_PATH",
+    )
+    places_chat_bert_model_version: str | None = Field(
+        default=None,
+        alias="PLACES_CHAT_BERT_MODEL_VERSION",
+    )
+    places_chat_bert_device: str | None = Field(
+        default=None,
+        alias="PLACES_CHAT_BERT_DEVICE",
+    )
+    places_chat_bert_min_token_confidence: float = Field(
+        default=0.60,
+        ge=0.0,
+        le=1.0,
+        alias="PLACES_CHAT_BERT_MIN_TOKEN_CONFIDENCE",
     )
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
@@ -291,6 +410,61 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_post_feed_security(self) -> "Settings":
         self.vector_store_provider = self.vector_store_provider.strip().lower()
+        self.places_embedding_provider = self.places_embedding_provider.strip().lower()
+        if self.places_embedding_device is not None:
+            self.places_embedding_device = (
+                self.places_embedding_device.strip() or None
+            )
+        if self.places_category_catalog_path is not None:
+            self.places_category_catalog_path = (
+                self.places_category_catalog_path.strip() or None
+            )
+        if self.places_pgvector_hybrid_function is not None:
+            self.places_pgvector_hybrid_function = (
+                self.places_pgvector_hybrid_function.strip() or None
+            )
+        if self.places_embedding_provider not in {
+            "fasttext",
+            "mock",
+            "sentence_transformer",
+            "bert",
+        }:
+            raise ValueError(
+                "PLACES_EMBEDDING_PROVIDER debe ser fasttext, mock, "
+                "sentence_transformer o bert"
+            )
+        self.places_chat_intent_provider = (
+            self.places_chat_intent_provider.strip().lower()
+        )
+        if self.places_chat_intent_provider not in {
+            "disabled",
+            "deterministic",
+            "bert",
+        }:
+            raise ValueError(
+                "PLACES_CHAT_INTENT_PROVIDER debe ser disabled, "
+                "deterministic o bert"
+            )
+        if self.places_chat_bert_model_path is not None:
+            self.places_chat_bert_model_path = (
+                self.places_chat_bert_model_path.strip() or None
+            )
+        if self.places_chat_bert_model_version is not None:
+            self.places_chat_bert_model_version = (
+                self.places_chat_bert_model_version.strip() or None
+            )
+        if self.places_chat_bert_device is not None:
+            self.places_chat_bert_device = (
+                self.places_chat_bert_device.strip() or None
+            )
+        if (
+            self.places_chat_intent_provider == "bert"
+            and self.places_chat_bert_model_path is None
+        ):
+            raise ValueError(
+                "PLACES_CHAT_BERT_MODEL_PATH es obligatorio cuando "
+                "PLACES_CHAT_INTENT_PROVIDER=bert"
+            )
         allowed_resources = {"places", "posts", "users", "clubs", "groups", "events"}
         for resource_type, thresholds in self.global_search_resource_thresholds.items():
             if resource_type not in allowed_resources:

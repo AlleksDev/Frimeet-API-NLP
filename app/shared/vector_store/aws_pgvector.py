@@ -53,13 +53,47 @@ class AwsPgvectorClient:
         embedding: list[float],
         filters: dict[str, Any],
         limit: int,
+        function_name: str = "match_places",
     ) -> list[VectorMatch]:
         return await self._match(
-            function_name="match_places",
+            function_name=function_name,
             embedding=embedding,
             filters=filters,
             limit=limit,
         )
+
+    async def search_places_hybrid(
+        self,
+        query_text: str,
+        embedding: list[float],
+        filters: dict[str, Any],
+        limit: int,
+        function_name: str,
+    ) -> list[VectorMatch]:
+        """Search a versioned Places index using independent dense and lexical pools."""
+
+        query = (
+            f"SELECT * FROM {quote_identifier(function_name)}("
+            "$1::text, $2::vector, $3::integer, $4::jsonb)"
+        )
+        try:
+            async with self.connection() as connection:
+                rows = await connection.fetch(
+                    query,
+                    query_text,
+                    vector_literal(embedding),
+                    limit,
+                    json.dumps(filters, ensure_ascii=False),
+                )
+        except asyncpg.exceptions.UndefinedFunctionError as exc:
+            raise AppError(
+                "Places hybrid SQL contract is missing. Run the versioned "
+                "Places semantic embedding migration and grant EXECUTE to the "
+                "reader role.",
+                code="pgvector_places_hybrid_contract_missing",
+                status_code=503,
+            ) from exc
+        return [_row_to_vector_match(row) for row in rows]
 
     async def match_posts(
         self,
@@ -108,6 +142,7 @@ class AwsPgvectorClient:
 
     async def check_read_contract(self) -> dict[str, Any]:
         """Check that read-only pgvector functions are visible and executable."""
+        signatures = _configured_read_contract_signatures(self._settings)
         try:
             async with self.connection() as connection:
                 vector_row = await connection.fetchrow(
@@ -120,10 +155,10 @@ class AwsPgvectorClient:
                         "exists": False,
                         "executable": False,
                     }
-                    for function_name, signature in READ_CONTRACT_SIGNATURES.items()
+                    for function_name, signature in signatures.items()
                 }
                 if vector_available:
-                    for function_name, signature in READ_CONTRACT_SIGNATURES.items():
+                    for function_name, signature in signatures.items():
                         row = await connection.fetchrow(
                             """
                             SELECT
@@ -169,9 +204,13 @@ class AwsPgvectorClient:
             "functions": functions,
         }
 
-    async def fetch_place_content_hashes(self, ids: Iterable[str]) -> dict[str, str]:
+    async def fetch_place_content_hashes(
+        self,
+        ids: Iterable[str],
+        function_name: str = "get_place_content_hashes",
+    ) -> dict[str, str]:
         return await self._fetch_content_hashes(
-            function_name="get_place_content_hashes",
+            function_name=function_name,
             ids=ids,
         )
 
@@ -205,10 +244,15 @@ class AwsPgvectorClient:
     async def upsert_place_embeddings(
         self,
         records: list[VectorUpsertRecord],
+        function_name: str = "upsert_place_embedding",
+        embedding_model: str | None = None,
+        embedding_version: str | None = None,
     ) -> None:
         await self._upsert_records(
-            function_name="upsert_place_embedding",
+            function_name=function_name,
             records=records,
+            embedding_model=embedding_model,
+            embedding_version=embedding_version,
         )
 
     async def upsert_post_embeddings(
@@ -323,6 +367,8 @@ class AwsPgvectorClient:
         self,
         function_name: str,
         records: list[VectorUpsertRecord],
+        embedding_model: str | None = None,
+        embedding_version: str | None = None,
     ) -> None:
         if not records:
             return
@@ -346,8 +392,8 @@ class AwsPgvectorClient:
                 json.dumps(record.metadata, ensure_ascii=False),
                 vector_literal(record.embedding),
                 record.content_hash,
-                self._settings.embedding_model,
-                self._settings.embedding_version,
+                embedding_model or self._settings.embedding_model,
+                embedding_version or self._settings.embedding_version,
                 record.is_active,
             )
             for record in records
@@ -423,6 +469,18 @@ def _read_contract_is_ready(
         )
         for function_name, details in functions.items()
     )
+
+
+def _configured_read_contract_signatures(
+    settings: Settings,
+) -> dict[str, str]:
+    signatures = dict(READ_CONTRACT_SIGNATURES)
+    match_name = settings.places_pgvector_match_function
+    signatures[match_name] = f"{match_name}(vector, integer, jsonb)"
+    hybrid_name = settings.places_pgvector_hybrid_function
+    if hybrid_name:
+        signatures[hybrid_name] = f"{hybrid_name}(text, vector, integer, jsonb)"
+    return signatures
 
 
 def _credentials_for_role(settings: Settings, role: str) -> tuple[str | None, str | None]:

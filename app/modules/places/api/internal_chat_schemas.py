@@ -65,7 +65,7 @@ class PendingClarificationOptionStateSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
-    value: str = Field(..., min_length=1, max_length=160)
+    value: str = Field(..., min_length=1, max_length=500)
     label: str = Field(..., min_length=1, max_length=160)
     place_id: str | None = Field(default=None, max_length=100)
     attributes: list[str] = Field(default_factory=list, max_length=30)
@@ -114,7 +114,7 @@ class PendingClarificationStateSchema(BaseModel):
 class ConversationStateSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    target_category: str | None = Field(default=None, max_length=80)
+    target_category: str | None = Field(default=None, max_length=500)
     hard_filters: dict[str, Any] = Field(default_factory=dict)
     soft_preferences: list[str] = Field(default_factory=list, max_length=30)
     exclusions: list[str] = Field(default_factory=list, max_length=30)
@@ -240,6 +240,7 @@ class InternalPlaceChatResponse(BaseModel):
     ranking_version: str
     taxonomy_version: str
     trace_id: str
+    uncertainty: dict[str, Any]
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -247,6 +248,16 @@ def internal_chat_result_to_schema(
     result: ChatPlaceRecommendationsResult,
 ) -> InternalPlaceChatResponse:
     directive = result.location_directive
+    hypotheses = list(result.category_hypotheses)
+    margin = (
+        max(
+            0.0,
+            float(hypotheses[0]["probability"])
+            - float(hypotheses[1]["probability"]),
+        )
+        if len(hypotheses) >= 2
+        else None
+    )
     return InternalPlaceChatResponse(
         action=result.action,
         message=result.message,
@@ -292,9 +303,35 @@ def internal_chat_result_to_schema(
         ranking_version=result.ranking_version,
         taxonomy_version=result.taxonomy_version,
         trace_id=result.trace_id,
+        uncertainty={
+            "decision": (
+                "review"
+                if result.action == "recommendations" and result.unresolved
+                else {
+                    "recommendations": "auto",
+                    "clarification": "clarify",
+                    "no_match": "abstain",
+                }[result.action]
+            ),
+            "reason": (
+                result.unresolved[0]
+                if result.unresolved
+                else (
+                    "sufficient_evidence"
+                    if result.action == "recommendations"
+                    else "catalog_exhausted"
+                )
+            ),
+            "top_probability": round(result.intent_confidence, 6),
+            "category_hypotheses": hypotheses,
+            "category_margin": round(margin, 6) if margin is not None else None,
+            "calibration_version": "uncalibrated-shadow-v1",
+        },
         metadata={
             "used_llm": result.used_llm,
             "guard_reason": result.guard_reason,
             "category_source": result.category_source,
+            "raw_category_phrase": result.raw_category_phrase,
+            "intent_model_version": result.intent_model_version,
         },
     )

@@ -9,7 +9,7 @@ from app.modules.places.infrastructure.main_api_place_source import (
 from app.shared.config.settings import Settings, get_settings
 from app.shared.logging.config import configure_logging, get_logger
 from app.shared.nlp.embeddings.base import EmbeddingProvider
-from app.shared.nlp.embeddings.factory import create_embedding_provider
+from app.shared.nlp.embeddings.factory import create_place_embedding_provider
 from app.shared.nlp.embeddings.versioning import versioned_embedding_hash
 from app.shared.vector_store.aws_pgvector import AwsPgvectorClient
 from app.shared.vector_store.models import VectorUpsertRecord
@@ -35,12 +35,17 @@ async def main() -> None:
 
     source = MainApiPlacesClient(settings)
     vector_client = AwsPgvectorClient(settings, role="writer")
-    embedding_provider = create_embedding_provider(settings)
+    embedding_provider = create_place_embedding_provider(settings, text_role="passage")
     counters = SyncCounters()
     batch: list[PlaceSourceRecord] = []
 
     logger.info("Starting place embedding sync")
-    logger.info("Embedding model=%s version=%s", settings.embedding_model, settings.embedding_version)
+    logger.info(
+        "Places embedding model=%s version=%s dimension=%s",
+        settings.places_embedding_model,
+        settings.places_embedding_version,
+        settings.places_embedding_dimension,
+    )
 
     async for place in source.iter_places(
         page_limit=args.page_limit,
@@ -93,14 +98,15 @@ async def _flush_batch(
     counters.processed += len(batch)
     try:
         existing_hashes = await vector_client.fetch_place_content_hashes(
-            [record.id for record in batch]
+            [record.id for record in batch],
+            function_name=settings.places_pgvector_hash_function,
         )
         expected_hashes = {
             record.id: versioned_embedding_hash(
                 source_content_hash=record.content_hash,
-                model=settings.embedding_model,
-                version=settings.embedding_version,
-                dimension=settings.embedding_dimension,
+                model=settings.places_embedding_model,
+                version=settings.places_embedding_version,
+                dimension=settings.places_embedding_dimension,
             )
             for record in batch
         }
@@ -130,7 +136,12 @@ async def _flush_batch(
         if dry_run:
             logger.info("Dry run: prepared %s place upserts", len(upserts))
         else:
-            await vector_client.upsert_place_embeddings(upserts)
+            await vector_client.upsert_place_embeddings(
+                upserts,
+                function_name=settings.places_pgvector_upsert_function,
+                embedding_model=settings.places_embedding_model,
+                embedding_version=settings.places_embedding_version,
+            )
         counters.upserted += len(upserts)
     except Exception:
         counters.errors += len(batch)

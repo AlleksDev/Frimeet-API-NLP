@@ -11,7 +11,10 @@ from app.modules.places.infrastructure.mock_place_repository import MockPlaceVec
 from app.shared.nlp.embeddings.mock import MockEmbeddingProvider
 from app.shared.nlp.llm.base import LLMProvider, LLMResult, PlaceResponseMode
 from app.shared.nlp.llm.mock import MockLLMProvider
-from app.shared.nlp.llm.output_guard import DEFAULT_PLACE_CHAT_FALLBACK, PlaceChatOutputGuard
+from app.shared.nlp.llm.output_guard import (
+    LOW_CONFIDENCE_PLACE_CHAT_FALLBACK,
+    PlaceChatOutputGuard,
+)
 
 
 @pytest.mark.asyncio
@@ -243,9 +246,10 @@ async def test_chat_places_falls_back_when_llm_fails() -> None:
         limit=3,
     )
 
-    assert result.message == DEFAULT_PLACE_CHAT_FALLBACK
+    assert result.message == LOW_CONFIDENCE_PLACE_CHAT_FALLBACK
     assert result.places
     assert result.metadata["used_llm"] is False
+    assert result.metadata["response_mode"] == "low_confidence"
 
 
 class FailingLLMProvider(LLMProvider):

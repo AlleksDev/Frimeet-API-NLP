@@ -113,6 +113,8 @@ class LocationIntent:
     resolved_place_id: str | None = None
     radius_meters: int | None = None
     strict_radius: bool = False
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 @dataclass(frozen=True)
@@ -127,6 +129,8 @@ class PlaceCategoryInference:
     category: str
     confidence: float
     source: Literal["lexical_activity", "semantic_activity"]
+    category_values: tuple[str, ...] = ()
+    label: str | None = None
 
 
 @dataclass(frozen=True)
@@ -220,6 +224,8 @@ class ParsedPlaceChatIntent:
     alternatives: tuple[IntentAlternative, ...] = ()
     unresolved: tuple[str, ...] = ()
     clarification_message: str | None = None
+    raw_category_phrase: str | None = None
+    intent_model_version: str = "deterministic-open-v2"
 
 
 @dataclass(frozen=True)
