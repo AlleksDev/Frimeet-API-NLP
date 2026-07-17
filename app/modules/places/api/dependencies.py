@@ -13,6 +13,9 @@ from app.modules.places.infrastructure.aws_pgvector_place_repository import (
     AwsPgvectorPlaceRepository,
 )
 from app.modules.places.infrastructure.bm25_place_ranker import Bm25PlaceRanker
+from app.modules.places.infrastructure.bert_intent_extractor import (
+    BertPlaceIntentExtractor,
+)
 from app.modules.places.infrastructure.main_api_nearby_place_provider import (
     MainApiNearbyPlaceProvider,
 )
@@ -33,13 +36,21 @@ from app.modules.places.infrastructure.place_search_benchmark import (
     QRELS_SOURCE,
     get_default_place_search_benchmark,
 )
-from app.modules.places.infrastructure.semantic_place_ranker import SemanticPlaceRanker
-from app.modules.places.infrastructure.semantic_activity_classifier import (
-    SemanticPlaceActivityClassifier,
+from app.modules.places.infrastructure.open_vocabulary_category_classifier import (
+    OpenVocabularyPlaceCategoryClassifier,
 )
+from app.modules.places.infrastructure.place_category_catalog import (
+    load_place_category_concepts,
+)
+from app.modules.places.infrastructure.place_semantic_document import place_tag_catalog
+from app.modules.places.infrastructure.semantic_place_ranker import SemanticPlaceRanker
 from app.shared.cache.memory import SimpleTTLCache
 from app.shared.config.settings import get_settings
-from app.shared.dependencies import get_embedding_provider, get_llm_provider
+from app.shared.dependencies import (
+    get_llm_provider,
+    get_place_embedding_provider,
+    get_place_passage_embedding_provider,
+)
 from app.shared.nlp.embeddings.mock import MockEmbeddingProvider
 from app.shared.nlp.llm.output_guard import PlaceChatOutputGuard
 from app.shared.vector_store.aws_pgvector import AwsPgvectorClient
@@ -49,14 +60,21 @@ from app.shared.vector_store.aws_pgvector import AwsPgvectorClient
 def get_place_repository() -> MockPlaceVectorRepository | AwsPgvectorPlaceRepository:
     settings = get_settings()
     if settings.vector_store_provider == "aws_pgvector":
-        return AwsPgvectorPlaceRepository(vector_client=AwsPgvectorClient(settings, role="reader"))
-    return MockPlaceVectorRepository(embedding_provider=get_embedding_provider())
+        return AwsPgvectorPlaceRepository(
+            vector_client=AwsPgvectorClient(settings, role="reader"),
+            match_function=settings.places_pgvector_match_function,
+            hybrid_function=settings.places_pgvector_hybrid_function,
+        )
+    return MockPlaceVectorRepository(embedding_provider=get_place_embedding_provider())
 
 
 @lru_cache
 def get_place_ranker() -> SemanticPlaceRanker:
     settings = get_settings()
-    return SemanticPlaceRanker(dimension=settings.embedding_dimension)
+    return SemanticPlaceRanker(
+        dimension=settings.places_embedding_dimension,
+        model_name=settings.places_embedding_model,
+    )
 
 
 @lru_cache
@@ -79,7 +97,7 @@ def get_nearby_place_provider() -> MainApiNearbyPlaceProvider:
 @lru_cache
 def get_search_places_use_case() -> SearchPlacesUseCase:
     return SearchPlacesUseCase(
-        embedding_provider=get_embedding_provider(),
+        embedding_provider=get_place_embedding_provider(),
         place_repository=get_place_repository(),
         ranker=get_place_ranker(),
         cache=get_place_search_cache(),
@@ -101,7 +119,9 @@ def get_recommend_places_use_case() -> RecommendPlacesUseCase:
 @lru_cache
 def get_evaluate_place_search_use_case() -> EvaluatePlaceSearchUseCase:
     settings = get_settings()
-    embedding_provider = MockEmbeddingProvider(dimension=settings.embedding_dimension)
+    embedding_provider = MockEmbeddingProvider(
+        dimension=settings.places_embedding_dimension
+    )
     benchmark_search = SearchPlacesUseCase(
         embedding_provider=embedding_provider,
         place_repository=MockPlaceVectorRepository(embedding_provider),
@@ -133,14 +153,42 @@ def get_place_chat_intent_parser() -> DeterministicPlaceChatIntentParser:
         raise RuntimeError(
             "PLACES_CHAT_TAXONOMY_VERSION does not match the bundled taxonomy"
         )
+    concepts = load_place_category_concepts(
+        settings.places_category_catalog_path,
+        fallback_tags=place_tag_catalog().values(),
+    )
     activity_classifier = (
-        SemanticPlaceActivityClassifier(get_embedding_provider())
-        if settings.embedding_provider.casefold() != "mock"
+        OpenVocabularyPlaceCategoryClassifier(
+            concepts=concepts,
+            embedding_provider=get_place_embedding_provider(),
+            concept_embedding_provider=(
+                get_place_passage_embedding_provider()
+                if settings.places_embedding_provider
+                in {"sentence_transformer", "bert"}
+                else get_place_embedding_provider()
+            ),
+            minimum_similarity=settings.places_category_min_similarity,
+            minimum_margin=settings.places_category_min_margin,
+        )
+        if settings.places_embedding_provider.casefold() != "mock" and concepts
+        else None
+    )
+    contextual_extractor = (
+        BertPlaceIntentExtractor(
+            settings.places_chat_bert_model_path or "",
+            model_version=settings.places_chat_bert_model_version,
+            device=settings.places_chat_bert_device,
+            minimum_token_confidence=(
+                settings.places_chat_bert_min_token_confidence
+            ),
+        )
+        if settings.places_chat_intent_provider == "bert"
         else None
     )
     return DeterministicPlaceChatIntentParser(
         taxonomy=taxonomy,
         activity_classifier=activity_classifier,
+        contextual_extractor=contextual_extractor,
     )
 
 
@@ -156,7 +204,7 @@ def get_place_anchor_resolver() -> MainApiPlaceAnchorResolver | MockPlaceAnchorR
 def get_hybrid_place_chat_retriever() -> HybridContentPlaceChatRetriever:
     settings = get_settings()
     return HybridContentPlaceChatRetriever(
-        embedding_provider=get_embedding_provider(),
+        embedding_provider=get_place_embedding_provider(),
         place_repository=get_place_repository(),
         minimum_content_score=settings.places_chat_min_content_score,
         k1=settings.bm25_k1,
@@ -179,4 +227,14 @@ def get_chat_place_recommendations_use_case() -> ChatPlaceRecommendationsUseCase
         llm_enabled=settings.places_chat_llm_enabled,
         anchor_ambiguity_delta=settings.places_chat_ambiguity_delta,
         minimum_intent_confidence=settings.places_chat_intent_min_confidence,
+        minimum_hypothesis_confidence=(
+            settings.places_chat_hypothesis_min_confidence
+        ),
+        maximum_hypothesis_gap=settings.places_chat_hypothesis_max_gap,
+        nearby_place_provider=(
+            get_nearby_place_provider()
+            if settings.vector_store_provider != "mock"
+            else None
+        ),
+        default_radius_meters=settings.places_chat_default_radius_meters,
     )

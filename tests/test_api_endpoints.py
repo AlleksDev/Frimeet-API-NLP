@@ -20,14 +20,14 @@ def test_places_search_endpoint() -> None:
     payload = response.json()
     assert payload["query"] == "lugares tranquilos para cenar"
     assert payload["places"]
-    assert payload["metrics"]["engine"] == "fasttext_mean_embeddings"
+    assert payload["metrics"]["engine"] == "mock-place-embedding"
     assert payload["metrics"]["candidate_retrieval"] == "mock_embeddings"
     assert payload["metrics"]["score_metric"] == "cosine_similarity"
     assert payload["metrics"]["ranking_parameters"] == {"dimension": 16.0}
     assert payload["metrics"]["field_weights"] == {
-        "tags": 6,
-        "category": 4,
-        "description": 3,
+        "tags": 1,
+        "category": 1,
+        "description": 1,
         "name": 1,
     }
     assert payload["metrics"]["returned_count"] == len(payload["places"])
@@ -76,7 +76,7 @@ def test_places_chat_endpoint_returns_trace_and_structured_places() -> None:
     response = client.post(
         "/places/chat",
         json={
-            "message": "quiero una cena tranquila con mi pareja",
+            "message": "cafe tranquilo postres platica",
             "city": "Tuxtla Gutierrez",
             "filters": {"occasion": "pareja", "is_active": True},
             "limit": 3,
@@ -90,6 +90,72 @@ def test_places_chat_endpoint_returns_trace_and_structured_places() -> None:
     assert payload["message"]
     assert payload["places"]
     assert payload["metadata"]["places_used_as_context"]
+
+
+def test_places_chat_opt_in_uses_semantic_conversation_contract() -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/places/chat",
+        json={
+            "conversation_id": "3a4723f6-260d-4c11-b9d6-089f07a4f338",
+            "turn": 1,
+            "message": "una cafeteria tranquila",
+            "conversation_state": {
+                "city": "Tuxtla Gutierrez",
+                "taxonomy_version": "places-taxonomy-v1",
+            },
+            "user_location": {"lat": 16.7531, "lng": -93.1156},
+            "filters": {"is_active": True},
+            "candidate_limit": 5,
+            "limit": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["action"] == "recommendations"
+    assert payload["state_patch"]["target_category"] == "cafe"
+    assert payload["location_directive"]["source"] == "user_current"
+    assert payload["uncertainty"]["decision"] == "auto"
+    assert payload["metadata"]["pipeline"] == "places-chat-semantic-v2"
+    assert len(payload["places"]) == 1
+
+
+def test_places_chat_opt_in_rejects_incompatible_conversation_state() -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/places/chat",
+        json={
+            "conversation_id": "3a4723f6-260d-4c11-b9d6-089f07a4f338",
+            "message": "donas",
+            "conversation_state": {"taxonomy_version": "obsolete-v0"},
+            "user_location": {"lat": 16.7531, "lng": -93.1156},
+        },
+    )
+
+    assert response.status_code == 409
+
+
+def test_places_chat_opt_in_maps_stale_clarification_to_conflict() -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/places/chat",
+        json={
+            "conversation_id": "3a4723f6-260d-4c11-b9d6-089f07a4f338",
+            "message": "donas",
+            "conversation_state": {"taxonomy_version": "places-taxonomy-v1"},
+            "clarification_choice": {
+                "clarification_id": "00000000-0000-4000-8000-000000000000",
+                "option_id": "bakery",
+            },
+            "user_location": {"lat": 16.7531, "lng": -93.1156},
+        },
+    )
+
+    assert response.status_code == 409
 
 
 def test_places_recommendations_returns_llm_message_and_semantic_metadata() -> None:
@@ -109,7 +175,7 @@ def test_places_recommendations_returns_llm_message_and_semantic_metadata() -> N
     payload = response.json()
     assert payload["message"]
     assert payload["places"]
-    assert payload["metrics"]["engine"] == "fasttext_mean_embeddings"
+    assert payload["metrics"]["engine"] == "mock-place-embedding"
     assert payload["metrics"]["score_metric"] == "cosine_similarity"
     assert payload["metrics"]["returned_count"] == len(payload["places"])
     assert payload["metrics"]["candidate_retrieval"] == "mock_embeddings"
@@ -118,7 +184,7 @@ def test_places_recommendations_returns_llm_message_and_semantic_metadata() -> N
     assert payload["metrics"]["scope"] == "current_query"
     assert payload["metrics"]["ground_truth_available"] is False
     assert "evaluation_metrics" not in payload
-    assert payload["metadata"]["ranking"] == "fasttext_mean_embeddings"
+    assert payload["metadata"]["ranking"] == "mock-place-embedding"
     assert payload["metadata"]["response_mode"] == "confident"
     assert payload["metadata"]["used_llm"] is True
 

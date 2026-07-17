@@ -1,4 +1,5 @@
 from dataclasses import dataclass, replace
+import asyncio
 import json
 from typing import Sequence
 
@@ -84,7 +85,10 @@ class SearchPlacesUseCase:
                 place_ids=tuple(sorted(nearby_ids)),
             )
 
-        query_embedding = self._embedding_provider.embed_text(normalized_query)
+        query_embedding = await asyncio.to_thread(
+            self._embedding_provider.embed_text,
+            normalized_query,
+        )
         candidates = await self._place_repository.search(
             embedding=query_embedding,
             filters=effective_filters,

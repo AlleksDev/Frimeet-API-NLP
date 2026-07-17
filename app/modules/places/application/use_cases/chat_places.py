@@ -42,7 +42,12 @@ class ChatPlacesUseCase:
             filters=filters,
             limit=limit,
         )
-        places = search_result.places
+        response_mode = search_result.metrics.match_quality
+        places = (
+            []
+            if response_mode == "no_match"
+            else [place for place in search_result.places if place.score > 0]
+        )
         context_places = [place.to_llm_context() for place in places]
 
         llm_provider = self._llm_provider.provider_name
@@ -55,18 +60,23 @@ class ChatPlacesUseCase:
                 user_intent=search_result.normalized_query,
                 region=filters.city or filters.state,
                 places=context_places,
+                response_mode=response_mode,
             )
             llm_provider = llm_result.provider
             llm_model = llm_result.model
             guarded = self._output_guard.validate(
                 message=llm_result.message,
                 allowed_place_names=[place.name for place in places],
+                response_mode=response_mode,
             )
             used_llm = not guarded.used_fallback
             guard_reason = guarded.reason
             final_message = guarded.message
         except Exception as exc:
-            guarded = self._output_guard.fallback(reason=exc.__class__.__name__)
+            guarded = self._output_guard.fallback(
+                reason=exc.__class__.__name__,
+                response_mode=response_mode,
+            )
             final_message = guarded.message
             guard_reason = guarded.reason
 
@@ -80,6 +90,7 @@ class ChatPlacesUseCase:
                 "llm_model": llm_model,
                 "used_llm": used_llm,
                 "guard_reason": guard_reason,
+                "response_mode": response_mode,
                 "places_used_as_context": [place.id for place in places],
                 "timestamp": datetime.now(UTC).isoformat(),
             },

@@ -31,7 +31,7 @@ def test_place_to_source_record_maps_api_place() -> None:
     assert len(record.content_hash) == 64
 
 
-def test_place_to_source_record_resolves_and_weights_numeric_tags() -> None:
+def test_place_to_source_record_resolves_tags_without_token_repetition() -> None:
     record = place_to_source_record(
         {
             "id": "place_weighted",
@@ -48,17 +48,17 @@ def test_place_to_source_record_resolves_and_weights_numeric_tags() -> None:
     assert record.metadata["tags"] == "Compras,Ropa barata"
     assert record.metadata["tag_ids"] == [29, 187, 9999]
     assert record.metadata["unknown_tag_ids"] == [9999]
-    assert record.metadata["semantic_document_version"] == "weighted-tags-v2"
+    assert record.metadata["semantic_document_version"] == "structured-place-v3"
     assert record.document.count("Nombre Ambiguo") == 1
-    assert record.document.count("Venta de prendas y accesorios.") == 3
-    assert record.document.count("Compras Ropa barata") == 6
-    assert record.document.count("compras tiendas ropa") == 4
+    assert record.document.count("Venta de prendas y accesorios") == 1
+    assert record.document.count("Compras Ropa barata") == 1
+    assert "Tipo registrado: shopping." in record.document
     assert "osm" not in record.document
     assert "Direccion que no debe influir" not in record.document
     assert "9999" not in record.document
 
 
-def test_semantic_documents_keep_canonical_and_local_category_terms() -> None:
+def test_semantic_documents_keep_source_category_without_manual_expansion() -> None:
     park = place_to_source_record(
         {"id": "park", "name": "Area Uno", "category": "park"}
     )
@@ -66,8 +66,10 @@ def test_semantic_documents_keep_canonical_and_local_category_terms() -> None:
         {"id": "shopping", "name": "Area Dos", "category": "shopping"}
     )
 
-    assert park is not None and "park parque" in park.document
-    assert shopping is not None and "shopping compras" in shopping.document
+    assert park is not None and "Tipo registrado: park." in park.document
+    assert shopping is not None and "Tipo registrado: shopping." in shopping.document
+    assert "park parque naturaleza" not in park.document
+    assert "shopping compras tiendas" not in shopping.document
 
 
 def test_place_tag_catalog_contains_complete_supplied_mapping() -> None:

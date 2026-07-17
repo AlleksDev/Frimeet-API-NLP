@@ -4,42 +4,16 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.shared.nlp.embeddings.weighted_document import build_weighted_document
 from app.shared.nlp.preprocessing.text import clean_text
 
 
 PLACE_SEMANTIC_FIELD_WEIGHTS = {
-    "tags": 6,
-    "category": 4,
-    "description": 3,
+    "tags": 1,
+    "category": 1,
+    "description": 1,
     "name": 1,
 }
-PLACE_SEMANTIC_DOCUMENT_VERSION = "weighted-tags-v2"
-
-
-# Broad categories from the main API are expanded into Spanish intent terms so
-# sparse OSM records still have a useful semantic anchor.
-CATEGORY_SEMANTIC_PROFILES = {
-    "restaurant": "restaurant restaurante comida gastronomia comer cena almuerzo desayuno",
-    "cafe": "cafe cafeteria bebidas desayuno postres conversar",
-    "bar": "bar bebidas cocteles cerveza amigos musica noche",
-    "nightlife": "nightlife vida nocturna noche baile musica bar fiesta",
-    "shopping": "shopping compras tiendas ropa calzado productos mercado centro comercial",
-    "lodging": "lodging alojamiento hotel hospedaje hostal dormir turismo viaje",
-    "park": "park parque naturaleza caminar paseo aire libre mascotas ejercicio",
-    "culture": "culture cultura museo arte historia biblioteca exposicion lectura",
-    "tourism": "tourism turismo atraccion visitar explorar paseo historia",
-    "sports": "sports deporte ejercicio entrenamiento gimnasio actividad fisica",
-    "community": "community comunidad convivencia reuniones centro comunitario actividades",
-    "family": "family familia ninos juegos convivencia actividades familiares",
-    "entertainment": "entertainment entretenimiento diversion juegos cine actividades",
-    "cinema": "cinema cine pelicula estreno sala de cine entretenimiento",
-    "library": "library biblioteca libros lectura estudio cultura",
-    "bakery": "bakery panaderia pan pasteleria reposteria",
-    "ice_cream": "ice cream heladeria helado postres dessert",
-    "market": "market mercado tianguis compras productos locales",
-    "outdoors": "outdoors aire libre mirador sendero naturaleza aventura",
-}
+PLACE_SEMANTIC_DOCUMENT_VERSION = "structured-place-v3"
 
 
 @dataclass(frozen=True)
@@ -63,26 +37,28 @@ def build_place_semantic_document(
     description: str,
     resolved_tags: ResolvedPlaceTags,
 ) -> str:
-    tags_text = " ".join(resolved_tags.names)
-    return build_weighted_document(
-        [
-            (name, PLACE_SEMANTIC_FIELD_WEIGHTS["name"]),
-            (
-                semantic_category_text(category),
-                PLACE_SEMANTIC_FIELD_WEIGHTS["category"],
-            ),
-            (description, PLACE_SEMANTIC_FIELD_WEIGHTS["description"]),
-            (tags_text, PLACE_SEMANTIC_FIELD_WEIGHTS["tags"]),
-        ]
+    # Transformer encoders use context and sentence structure; repeating tokens
+    # to simulate weights (the old FastText strategy) distorts that context.
+    # Keep every source value once and expose its role explicitly instead.
+    fields = (
+        ("Nombre", clean_text(name)),
+        ("Tipo registrado", semantic_category_text(category)),
+        ("Descripcion", clean_text(description)),
+        ("Etiquetas", " ".join(resolved_tags.names)),
+        ("Familias de etiquetas", " ".join(resolved_tags.categories)),
     )
+    return " ".join(
+        f"{label}: {value}."
+        for label, value in fields
+        if value
+    ).strip()
 
 
 def semantic_category_text(category: Any) -> str:
     raw_category = clean_text(str(category or "")).casefold().replace("_", " ")
     if not raw_category:
         return ""
-    profile_key = raw_category.replace(" ", "_")
-    return CATEGORY_SEMANTIC_PROFILES.get(profile_key, raw_category)
+    return raw_category
 
 
 def resolve_place_tags(value: Any) -> ResolvedPlaceTags:

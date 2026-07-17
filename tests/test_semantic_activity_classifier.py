@@ -1,6 +1,9 @@
 from app.modules.places.infrastructure.semantic_activity_classifier import (
     SemanticPlaceActivityClassifier,
 )
+from app.modules.places.infrastructure.open_vocabulary_category_classifier import (
+    PlaceCategoryConcept,
+)
 from app.shared.nlp.embeddings.base import EmbeddingProvider
 from app.shared.nlp.preprocessing.text import prepare_for_embedding
 
@@ -45,9 +48,26 @@ class ControlledEmbeddingProvider(EmbeddingProvider):
         return [self.embed_text(text) for text in texts]
 
 
+CONCEPTS = (
+    PlaceCategoryConcept(
+        id="restaurant",
+        label="comida restaurante",
+        description="hambre tacos pizza sushi antojo platillo cocina",
+        storage_values=("restaurant",),
+    ),
+    PlaceCategoryConcept(
+        id="sports",
+        label="ejercicio gimnasio deporte",
+        description="entrenar futbol cancha nadar fitness",
+        storage_values=("sports",),
+    ),
+)
+
+
 def test_classifier_finds_activity_inside_a_long_message() -> None:
     classifier = SemanticPlaceActivityClassifier(
         embedding_provider=ControlledEmbeddingProvider(),
+        concepts=CONCEPTS,
     )
 
     result = classifier.classify(
@@ -62,6 +82,7 @@ def test_classifier_finds_activity_inside_a_long_message() -> None:
 def test_classifier_abstains_when_the_best_categories_are_tied() -> None:
     classifier = SemanticPlaceActivityClassifier(
         embedding_provider=ControlledEmbeddingProvider(),
+        concepts=CONCEPTS,
     )
 
     result = classifier.classify("mezcla")
@@ -72,6 +93,7 @@ def test_classifier_abstains_when_the_best_categories_are_tied() -> None:
 def test_classifier_abstains_for_a_generic_single_word_request() -> None:
     classifier = SemanticPlaceActivityClassifier(
         embedding_provider=ControlledEmbeddingProvider(),
+        concepts=CONCEPTS,
     )
 
     assert classifier.classify("salir") is None

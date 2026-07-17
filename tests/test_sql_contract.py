@@ -103,3 +103,29 @@ def test_global_search_sql_does_not_directly_cast_untrusted_event_metadata() -> 
         sql = path.read_text(encoding="utf-8")
         assert "NULLIF(e.metadata->>'start_time', '')::timestamptz" not in sql
         assert "(e.metadata->>'duration_minutes')::integer" not in sql
+
+
+def test_places_semantic_index_is_additive_and_hybrid() -> None:
+    migration = Path(
+        "sql/migrations/20260716_02_places_semantic_v1.sql"
+    ).read_text(encoding="utf-8")
+    upper = migration.upper()
+
+    assert "PLACE_EMBEDDINGS_SEMANTIC_V1" in upper
+    assert "VECTOR(768)" in upper
+    assert "SEARCH_PLACES_SEMANTIC_V1" in upper
+    assert "FULL OUTER JOIN" in upper
+    assert "WEBSEARCH_TO_TSQUERY" in upper
+    assert "USING HNSW" in upper
+    assert "AS MATERIALIZED" not in upper
+    assert "FROM PUBLIC.PLACE_EMBEDDINGS_SEMANTIC_V1 AS PLACE" in upper
+    assert "ALTER TABLE PUBLIC.PLACE_EMBEDDINGS" not in upper
+    assert "DROP TABLE" not in upper
+
+    verifier = Path("sql/verify_places_semantic_v1.sql")
+    assert verifier.exists()
+    verifier_sql = verifier.read_text(encoding="utf-8").upper()
+    assert "SET TRANSACTION READ ONLY" in verifier_sql
+    assert "VECTOR(768)" in verifier_sql
+    assert "USING HNSW" in verifier_sql
+    assert "EXPLAIN (ANALYZE, BUFFERS" in verifier_sql

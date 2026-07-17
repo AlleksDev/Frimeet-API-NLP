@@ -1,9 +1,17 @@
-from typing import Any
+from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.places.application.use_cases.evaluate_place_search import (
     EvaluatePlaceSearchResult,
+)
+from app.modules.places.api.internal_chat_schemas import (
+    ClarificationChoiceSchema,
+    ClarificationSchema,
+    ConversationStateSchema,
+    PlaceChatLocationDirectiveSchema,
+    UserLocationSchema,
 )
 from app.modules.places.domain.models import PlaceCandidate, PlaceFilters
 from app.modules.places.domain.search_metrics import (
@@ -64,6 +72,12 @@ class PlaceChatRequest(BaseModel):
     state: str | None = Field(default=None, max_length=80)
     filters: PlaceFiltersSchema = Field(default_factory=PlaceFiltersSchema)
     limit: int = Field(default=5, ge=1, le=8)
+    conversation_id: UUID | None = None
+    turn: int = Field(default=1, ge=1)
+    conversation_state: ConversationStateSchema | None = None
+    clarification_choice: ClarificationChoiceSchema | None = None
+    user_location: UserLocationSchema | None = None
+    candidate_limit: int | None = Field(default=None, ge=1, le=40)
 
     def to_domain_filters(self) -> PlaceFilters:
         return PlaceFilters(
@@ -168,6 +182,15 @@ class PlaceChatResponse(BaseModel):
     message: str
     places: list[PlaceResultSchema]
     metadata: dict[str, Any]
+    action: Literal["recommendations", "clarification", "no_match"] | None = None
+    state_patch: dict[str, Any] | None = None
+    location_directive: PlaceChatLocationDirectiveSchema | None = None
+    clarification: ClarificationSchema | None = None
+    unresolved: list[str] | None = None
+    intent_confidence: float | None = Field(default=None, ge=0, le=1)
+    ranking_version: str | None = None
+    taxonomy_version: str | None = None
+    uncertainty: dict[str, Any] | None = None
 
 
 def place_to_schema(place: PlaceCandidate) -> PlaceResultSchema:
