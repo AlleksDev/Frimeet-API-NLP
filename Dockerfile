@@ -4,6 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PORT=7860
 ENV FASTTEXT_MODEL_PATH=/opt/models/fasttext-es/model.bin
+ARG DOWNLOAD_FASTTEXT_MODEL=true
 
 WORKDIR /app
 
@@ -15,13 +16,15 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-# Keep the 300-dimensional Spanish FastText model in a cached image layer.
-# Normal source-code changes do not download the multi-GB model again.
+# Keep the rollback FastText model in a cached layer unless a BERT-only image
+# is requested with --build-arg DOWNLOAD_FASTTEXT_MODEL=false.
 COPY app/shared/nlp/embeddings/download_fasttext_model.py /tmp/download_fasttext_model.py
-RUN HF_HOME=/tmp/hf-cache python /tmp/download_fasttext_model.py \
-    --repo-id facebook/fasttext-es-vectors \
-    --filename model.bin \
-    --destination ${FASTTEXT_MODEL_PATH} \
+RUN if [ "${DOWNLOAD_FASTTEXT_MODEL}" = "true" ]; then \
+      HF_HOME=/tmp/hf-cache python /tmp/download_fasttext_model.py \
+        --repo-id facebook/fasttext-es-vectors \
+        --filename model.bin \
+        --destination ${FASTTEXT_MODEL_PATH}; \
+    fi \
     && rm -rf /tmp/hf-cache /tmp/download_fasttext_model.py
 
 COPY app ./app

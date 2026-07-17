@@ -1,6 +1,7 @@
 from dataclasses import dataclass, replace
 from functools import lru_cache
 import json
+import logging
 from pathlib import Path
 import re
 from typing import Any, Iterable
@@ -28,6 +29,12 @@ from app.modules.places.domain.chat_intent import (
     PlaceReference,
 )
 from app.modules.places.domain.errors import ClarificationStateMismatchError
+from app.modules.places.infrastructure.bert_intent_extractor import (
+    BertIntentExtractionError,
+    BertPlaceIntentExtractor,
+    IntentFrame,
+    IntentSpan,
+)
 from app.shared.nlp.preprocessing.text import (
     prepare_for_embedding,
     tokenize_for_embeddings,
@@ -50,9 +57,15 @@ _EXCLUSION_PATTERN = re.compile(
     r"\b(?:sin|excepto|evita(?:r)?|no\s+quiero|que\s+no\s+(?:sea|tenga))\s+"
     r"(?P<value>.+?)(?="
     r"\s+cerca\s+(?:de\s+la|del|de)\b|[,;]|"
-    r"\s+(?:pero|aunque)\b|\s+y\s+(?:con|que|quiero|busco)\b|$)"
+    r"\s+(?:pero|aunque|con)\b|\s+y\s+(?:con|que|quiero|busco)\b|$)"
 )
 _CURRENT_LOCATION_VALUES = {"mi", "aqui", "donde estoy", "mi ubicacion"}
+_DETERMINISTIC_INTENT_VERSION = "deterministic-open-v2"
+_RADIUS_VALUE_PATTERN = re.compile(
+    r"(?P<value>\d+(?:[.,]\d+)?)\s*"
+    r"(?P<unit>km|kilometros?|m|metros?)\b"
+)
+_LOGGER = logging.getLogger(__name__)
 _GENERIC_REQUEST_TOKENS = {
     "dame",
     "favor",
@@ -171,14 +184,29 @@ class PlaceChatTaxonomy:
         )
 
 
+@dataclass(frozen=True)
+class _ContextualSignals:
+    frame: IntentFrame | None
+    category_phrases: tuple[str, ...] = ()
+    preferences: tuple[str, ...] = ()
+    exclusions: tuple[str, ...] = ()
+    location: str | None = None
+    reference: str | None = None
+    radius_meters: int | None = None
+    category_confidence: float | None = None
+    intent_model_version: str = _DETERMINISTIC_INTENT_VERSION
+
+
 class DeterministicPlaceChatIntentParser:
     def __init__(
         self,
         taxonomy: PlaceChatTaxonomy | None = None,
         activity_classifier: PlaceActivityClassifier | None = None,
+        contextual_extractor: BertPlaceIntentExtractor | None = None,
     ) -> None:
         self._taxonomy = taxonomy or load_place_chat_taxonomy()
         self._activity_classifier = activity_classifier
+        self._contextual_extractor = contextual_extractor
 
     def parse(
         self,
@@ -188,19 +216,30 @@ class DeterministicPlaceChatIntentParser:
         clarification_choice: ClarificationChoice | None = None,
     ) -> ParsedPlaceChatIntent:
         normalized = prepare_for_embedding(message)
-        target_clause = self._target_clause(normalized)
         if clarification_choice is not None:
             return self._resolve_structured_clarification(
                 choice=clarification_choice,
                 state=state,
                 has_user_location=has_user_location,
             )
+        contextual = self._contextual_signals(message)
+        # Token classification is multi-label and a valid frame can still be
+        # incomplete.  Strip both model-detected context spans and any remaining
+        # high-precision legacy context before building the retrieval query.  The
+        # category itself stays model/open-vocabulary first; taxonomy aliases are
+        # deliberately not restored for a successful BERT frame.
+        target_clause = self._target_clause(
+            _remove_contextual_spans(normalized, contextual.frame)
+        )
         if state.pending_clarification:
             pending = ensure_legacy_pending_options(state.pending_clarification)
             state = replace(state, pending_clarification=pending)
-            categories = self._matched_categories(target_clause)
+            categories = self._contextual_categories(contextual, target_clause)
             inferred = (
-                self._inferred_activity_category(target_clause)
+                self._inferred_activity_category(
+                    target_clause,
+                    allow_lexical_defaults=contextual.frame is None,
+                )
                 if not categories
                 else None
             )
@@ -220,15 +259,25 @@ class DeterministicPlaceChatIntentParser:
                         clear_pending_clarification=True,
                     ),
                 )
-            return self._resolve_pending_clarification(
-                normalized=normalized,
-                state=state,
-                has_user_location=has_user_location,
+            return replace(
+                self._resolve_pending_clarification(
+                    normalized=normalized,
+                    state=state,
+                    has_user_location=has_user_location,
+                ),
+                intent_model_version=contextual.intent_model_version,
             )
 
-        reference_text = self._extract_reference(normalized)
-        location_text = self._extract_location(normalized)
-        radius_meters = self._extract_radius_meters(normalized)
+        # Fuse slots independently.  A CATEGORY-only frame must not erase a
+        # LOCATION, RADIUS, REFERENCE, preference, or exclusion that the model
+        # omitted.  These narrow extractors are rollout fallbacks, not gates.
+        reference_text = contextual.reference or self._extract_reference(normalized)
+        location_text = contextual.location or self._extract_location(normalized)
+        radius_meters = (
+            contextual.radius_meters
+            if contextual.radius_meters is not None
+            else self._extract_radius_meters(normalized)
+        )
         excluded_texts = tuple(
             match.group("value").strip(" ,.;")
             for match in _EXCLUSION_PATTERN.finditer(normalized)
@@ -237,21 +286,32 @@ class DeterministicPlaceChatIntentParser:
         # Category words inside references, exclusions, or geographic anchors
         # do not describe the requested result type. In "cafeteria cerca del
         # parque", only cafe is a hard category.
-        categories = self._matched_categories(target_clause)
+        categories = self._contextual_categories(contextual, target_clause)
         if len(categories) > 1:
             pending = new_category_clarification(categories)
-            return self._clarification(
-                pending=pending,
-                unresolved=("target_category",),
-                state=state,
-                has_user_location=has_user_location,
+            return replace(
+                self._clarification(
+                    pending=pending,
+                    unresolved=("target_category",),
+                    state=state,
+                    has_user_location=has_user_location,
+                ),
+                intent_model_version=contextual.intent_model_version,
             )
 
         explicit_category = categories[0] if categories else None
         inferred = (
-            self._inferred_activity_category(target_clause)
+            self._inferred_activity_category(
+                target_clause,
+                allow_lexical_defaults=contextual.frame is None,
+            )
             if explicit_category is None
             else None
+        )
+        category_alternatives = (
+            self._ranked_activity_alternatives(target_clause)
+            if explicit_category is None
+            else ()
         )
         inferred_category = inferred.category if inferred else None
         requested_category = explicit_category or inferred_category
@@ -273,11 +333,36 @@ class DeterministicPlaceChatIntentParser:
         if location_text:
             location_text = _RADIUS_PATTERN.sub("", location_text).strip(" ,.;")
 
-        detected_preferences = self._matched_preferences(normalized)
-        explicit_exclusions = _ordered_unique(
-            exclusion
+        legacy_preference_text = normalized if not contextual.preferences else ""
+        detected_preferences = _ordered_unique(
+            (
+                *contextual.preferences,
+                *self._matched_preferences(legacy_preference_text),
+            )
+        )
+        legacy_excluded_texts = tuple(
+            excluded_text
             for excluded_text in excluded_texts
-            for exclusion in self._matched_preferences(excluded_text)
+            if not any(
+                _contains_phrase(
+                    prepare_for_embedding(excluded_text),
+                    prepare_for_embedding(contextual_exclusion),
+                )
+                for contextual_exclusion in contextual.exclusions
+            )
+        )
+        explicit_exclusions = _ordered_unique(
+            (
+                *contextual.exclusions,
+                *(
+                    exclusion
+                    for excluded_text in legacy_excluded_texts
+                    for exclusion in (
+                        self._matched_preferences(excluded_text)
+                        or (prepare_for_embedding(excluded_text),)
+                    )
+                ),
+            )
         )
         positive_preferences = tuple(
             preference
@@ -318,25 +403,45 @@ class DeterministicPlaceChatIntentParser:
             else inherited_reference
         )
         hard_filters = dict(state.hard_filters)
+        if state.city and "city" not in hard_filters:
+            hard_filters["city"] = state.city
+        if state.state and "state" not in hard_filters:
+            hard_filters["state"] = state.state
         if "economico" in merged_preferences or _contains_any(
             target_clause,
             ("mas barato", "economico", "barato"),
         ):
             hard_filters["price_preference"] = "lower"
 
-        if target_category is None:
-            pending = new_category_clarification(
-                ("restaurant", "cafe", "park", "nightlife")
+        # An unresolved category is not a reason to stop retrieval.  Preserve the
+        # user's open-ended concept in ``semantic_query`` and let dense/lexical
+        # retrieval provide evidence.  A downstream decision policy may still ask
+        # a clarification, but its options must come from model hypotheses or real
+        # candidates rather than a fixed menu.
+        category = (
+            self._taxonomy.category(target_category)
+            if target_category is not None
+            else None
+        )
+        inferred_category_values = (
+            tuple(inferred.category_values)
+            if inferred is not None
+            and inferred.category == target_category
+            and inferred.category_values
+            else ()
+        )
+        rehydrated_category_values = self._activity_category_values(
+            target_category
+        )
+        category_values = (
+            category.storage_values
+            if category is not None
+            else (
+                inferred_category_values
+                or rehydrated_category_values
+                or ((target_category,) if target_category else ())
             )
-            return self._clarification(
-                pending=pending,
-                unresolved=("target_category",),
-                state=state,
-                has_user_location=has_user_location,
-            )
-
-        category = self._taxonomy.category(target_category)
-        category_values = category.storage_values if category else (target_category,)
+        )
         compatible_category_values = (
             category.compatible_storage_values if category else ()
         )
@@ -345,24 +450,27 @@ class DeterministicPlaceChatIntentParser:
         if (
             reference_text
             and location_text
-            and location_text not in _CURRENT_LOCATION_VALUES
+            and prepare_for_embedding(location_text) not in _CURRENT_LOCATION_VALUES
         ):
-            return self._location_scope_clarification(
-                target_category=target_category,
-                category_values=category_values,
-                compatible_category_values=compatible_category_values,
-                category_evidence_terms=category_evidence_terms,
-                explicit_category=requested_category,
-                category_source=category_source,
-                hard_filters=hard_filters,
-                preferences=merged_preferences,
-                exclusions=merged_exclusions,
-                reference=reference,
-                reference_text=reference_text,
-                location_text=location_text,
-                radius_meters=radius_meters,
-                state=state,
-                has_user_location=has_user_location,
+            return replace(
+                self._location_scope_clarification(
+                    target_category=target_category,
+                    category_values=category_values,
+                    compatible_category_values=compatible_category_values,
+                    category_evidence_terms=category_evidence_terms,
+                    explicit_category=requested_category,
+                    category_source=category_source,
+                    hard_filters=hard_filters,
+                    preferences=merged_preferences,
+                    exclusions=merged_exclusions,
+                    reference=reference,
+                    reference_text=reference_text,
+                    location_text=location_text,
+                    radius_meters=radius_meters,
+                    state=state,
+                    has_user_location=has_user_location,
+                ),
+                intent_model_version=contextual.intent_model_version,
             )
 
         location, explicit_location = self._location_intent(
@@ -383,14 +491,18 @@ class DeterministicPlaceChatIntentParser:
         )
         category_query_term = self._category_query_term(target_clause, category)
         semantic_parts = [
-            target_category,
+            target_category or "",
             category_query_term,
             semantic_target,
             *merged_preferences,
         ]
         if reference and reference.entity:
             semantic_parts.append(reference.entity)
-        semantic_query = " ".join(_ordered_unique(semantic_parts)).strip()
+        semantic_query = (
+            " ".join(_ordered_unique(semantic_parts)).strip()
+            or target_clause
+            or normalized
+        )
 
         patch = ConversationStatePatch(
             target_category=requested_category,
@@ -408,10 +520,17 @@ class DeterministicPlaceChatIntentParser:
             clear_reference=category_changed and reference_text is None,
             taxonomy_version=self._taxonomy.version,
         )
-        if explicit_category:
+        if explicit_category and contextual.category_phrases:
+            confidence = contextual.category_confidence or contextual.frame.confidence
+        elif explicit_category:
             confidence = 0.96
         elif inferred_category:
             confidence = inferred.confidence if inferred else 0.88
+        elif target_category is None:
+            # This confidence describes category resolution, not whether the
+            # query is searchable.  Keeping it below the automatic-decision band
+            # allows candidate-derived clarification without suppressing recall.
+            confidence = 0.55
         else:
             confidence = 0.84
         if reference_text:
@@ -431,6 +550,18 @@ class DeterministicPlaceChatIntentParser:
             compatible_category_values=compatible_category_values,
             category_evidence_terms=category_evidence_terms,
             category_source=category_source,
+            alternatives=category_alternatives,
+            unresolved=("target_category",) if target_category is None else (),
+            raw_category_phrase=(
+                contextual.category_phrases[0]
+                if contextual.category_phrases
+                else (
+                    semantic_target or target_clause
+                    if explicit_category is None
+                    else explicit_category
+                )
+            ),
+            intent_model_version=contextual.intent_model_version,
         )
 
     def _location_scope_clarification(
@@ -543,8 +674,10 @@ class DeterministicPlaceChatIntentParser:
         base_state = replace(state, pending_clarification=None)
         if pending.kind in ("target_category", "intent_category"):
             if self._taxonomy.category(selected.value) is None:
-                raise ClarificationStateMismatchError(
-                    "clarification category is not supported"
+                return self._resolve_open_category_choice(
+                    value=selected.value,
+                    state=base_state,
+                    has_user_location=has_user_location,
                 )
             resolved = self.parse(
                 message=self._category_message(selected.value),
@@ -780,6 +913,61 @@ class DeterministicPlaceChatIntentParser:
             return definition.aliases[0]
         return category or ""
 
+    def _resolve_open_category_choice(
+        self,
+        value: str,
+        state: ConversationState,
+        has_user_location: bool,
+    ) -> ParsedPlaceChatIntent:
+        category = " ".join(value.split()).strip()
+        if not category:
+            raise ClarificationStateMismatchError(
+                "clarification category must not be empty"
+            )
+        hard_filters = dict(state.hard_filters)
+        if state.city and "city" not in hard_filters:
+            hard_filters["city"] = state.city
+        if state.state and "state" not in hard_filters:
+            hard_filters["state"] = state.state
+        location, _ = self._location_intent(
+            location_text=None,
+            radius_meters=None,
+            state=state,
+            has_user_location=has_user_location,
+        )
+        semantic_parts = [category, *state.soft_preferences]
+        if state.reference and state.reference.entity:
+            semantic_parts.append(state.reference.entity)
+        category_values = _ordered_unique(
+            (category, *self._activity_category_values(category))
+        )
+        return ParsedPlaceChatIntent(
+            action="recommendations",
+            target_category=category,
+            category_values=category_values,
+            hard_filters=hard_filters,
+            soft_preferences=state.soft_preferences,
+            exclusions=state.exclusions,
+            reference=state.reference,
+            location=location,
+            semantic_query=" ".join(_ordered_unique(semantic_parts)).strip(),
+            confidence=1.0,
+            state_patch=ConversationStatePatch(
+                target_category=category,
+                hard_filters=(
+                    hard_filters if hard_filters != state.hard_filters else None
+                ),
+                clear_pending_clarification=True,
+                taxonomy_version=self._taxonomy.version,
+            ),
+            category_evidence_terms=(category,),
+            category_source="explicit",
+            raw_category_phrase=category,
+            intent_model_version=(
+                f"{_DETERMINISTIC_INTENT_VERSION}+dynamic-clarification-v1"
+            ),
+        )
+
     def _location_intent(
         self,
         location_text: str | None,
@@ -787,7 +975,10 @@ class DeterministicPlaceChatIntentParser:
         state: ConversationState,
         has_user_location: bool,
     ) -> tuple[LocationIntent, ExplicitTargetLocation | None]:
-        if location_text and location_text in _CURRENT_LOCATION_VALUES:
+        if (
+            location_text
+            and prepare_for_embedding(location_text) in _CURRENT_LOCATION_VALUES
+        ):
             return (
                 LocationIntent(
                     scope="user_current_location",
@@ -831,10 +1022,122 @@ class DeterministicPlaceChatIntentParser:
                 LocationIntent(
                     scope="user_current_location",
                     source="user_current",
+                    radius_meters=radius_meters,
+                    strict_radius=radius_meters is not None,
                 ),
                 None,
             )
         return (LocationIntent(scope="unresolved", source="none"), None)
+
+    def _contextual_signals(self, message: str) -> _ContextualSignals:
+        extractor = self._contextual_extractor
+        if extractor is None:
+            return _ContextualSignals(frame=None)
+
+        try:
+            frame = extractor.extract(message)
+        except BertIntentExtractionError as exc:
+            configured_version = getattr(
+                extractor,
+                "model_version",
+                "unspecified",
+            )
+            _LOGGER.warning(
+                "BERT place-intent extraction failed; using deterministic "
+                "fallback (model_version=%s): %s",
+                configured_version,
+                exc,
+            )
+            return _ContextualSignals(
+                frame=None,
+                intent_model_version=(
+                    f"{_DETERMINISTIC_INTENT_VERSION}+"
+                    f"bert-fallback:{configured_version}"
+                ),
+            )
+
+        category_spans = tuple(
+            span
+            for span in frame.by_type("CATEGORY")
+            if span.polarity != "negative"
+        )
+        positive_preferences = tuple(
+            span
+            for span in frame.by_type("PREFERENCE")
+            if span.polarity == "positive"
+        )
+        negative_spans = tuple(
+            span
+            for span in frame.spans
+            if span.slot_type == "EXCLUSION" or span.polarity == "negative"
+        )
+        locations = frame.by_type("LOCATION")
+        references = frame.by_type("REFERENCE")
+        radii = frame.by_type("RADIUS")
+        version = (
+            f"bert-token:{frame.model_name}@{frame.model_version}+"
+            f"{_DETERMINISTIC_INTENT_VERSION}"
+        )
+        return _ContextualSignals(
+            frame=frame,
+            category_phrases=_span_values(category_spans),
+            preferences=_span_values(positive_preferences),
+            exclusions=_span_values(negative_spans),
+            location=_first_span_value(locations),
+            reference=_first_span_value(references),
+            radius_meters=(
+                _radius_meters_from_text(radii[0].text) if radii else None
+            ),
+            category_confidence=(
+                max(span.confidence for span in category_spans)
+                if category_spans
+                else None
+            ),
+            intent_model_version=version,
+        )
+
+    def _contextual_categories(
+        self,
+        contextual: _ContextualSignals,
+        target_clause: str,
+    ) -> tuple[str, ...]:
+        if not contextual.category_phrases:
+            return (
+                self._matched_categories(target_clause)
+                if contextual.frame is None
+                else ()
+            )
+
+        categories: list[str] = []
+        for phrase in contextual.category_phrases:
+            aligned = (
+                self._activity_classifier.classify(phrase)
+                if self._activity_classifier is not None
+                else None
+            )
+            # Semantic alignment is optional and abstaining. Unknown values
+            # pass through unchanged; no lexical alias table is consulted once
+            # the contextual model has supplied a category span.
+            categories.append(aligned.category if aligned is not None else phrase)
+        return _ordered_unique(categories)
+
+    def _activity_category_values(
+        self,
+        target_category: str | None,
+    ) -> tuple[str, ...]:
+        """Rehydrate an open catalog concept on conversation continuations."""
+
+        if target_category is None or self._activity_classifier is None:
+            return ()
+        get_concept = getattr(self._activity_classifier, "get_concept", None)
+        if callable(get_concept):
+            concept = get_concept(target_category)
+            if concept is not None:
+                return tuple(getattr(concept, "storage_values", ()) or ())
+        for concept in getattr(self._activity_classifier, "concepts", ()):
+            if getattr(concept, "id", None) == target_category:
+                return tuple(getattr(concept, "storage_values", ()) or ())
+        return ()
 
     def _matched_categories(self, normalized: str) -> tuple[str, ...]:
         return _ordered_unique(
@@ -864,20 +1167,44 @@ class DeterministicPlaceChatIntentParser:
     def _inferred_activity_category(
         self,
         normalized: str,
+        *,
+        allow_lexical_defaults: bool = True,
     ) -> PlaceCategoryInference | None:
-        for category, patterns in _ACTIVITY_CATEGORY_DEFAULTS:
-            if _contains_any(normalized, patterns):
-                return PlaceCategoryInference(
-                    category=category,
-                    confidence=0.88,
-                    source="lexical_activity",
-                )
+        # Prefer the injected semantic/open-vocabulary model.  Lexical activity
+        # rules remain a compatibility fallback during rollout, never a gate.
+        if self._activity_classifier is not None:
+            inferred = self._activity_classifier.classify(normalized)
+            if inferred is not None:
+                return inferred
+        if allow_lexical_defaults:
+            for category, patterns in _ACTIVITY_CATEGORY_DEFAULTS:
+                if _contains_any(normalized, patterns):
+                    return PlaceCategoryInference(
+                        category=category,
+                        confidence=0.88,
+                        source="lexical_activity",
+                    )
+        return None
+
+    def _ranked_activity_alternatives(
+        self,
+        normalized: str,
+    ) -> tuple[IntentAlternative, ...]:
         if self._activity_classifier is None:
-            return None
-        inferred = self._activity_classifier.classify(normalized)
-        if inferred is None or self._taxonomy.category(inferred.category) is None:
-            return None
-        return inferred
+            return ()
+        rank = getattr(self._activity_classifier, "rank", None)
+        if not callable(rank):
+            return ()
+        matches = rank(normalized, limit=5)
+        return tuple(
+            IntentAlternative(
+                key=str(match.concept_id),
+                description=str(match.label),
+                confidence=max(0.0, min(1.0, (float(match.score) + 1.0) / 2.0)),
+            )
+            for match in matches
+            if getattr(match, "concept_id", None)
+        )
 
     @staticmethod
     def _target_clause(normalized: str) -> str:
@@ -1021,6 +1348,50 @@ def load_place_chat_taxonomy() -> PlaceChatTaxonomy:
 
 def _contains_phrase(text: str, phrase: str) -> bool:
     return bool(re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", text))
+
+
+def _remove_contextual_spans(
+    target_clause: str,
+    frame: IntentFrame | None,
+) -> str:
+    if frame is None:
+        return target_clause
+    cleaned = target_clause
+    for span in frame.spans:
+        if (
+            span.slot_type not in {"EXCLUSION", "LOCATION", "REFERENCE", "RADIUS"}
+            and span.polarity != "negative"
+        ):
+            continue
+        normalized_value = prepare_for_embedding(span.text)
+        if normalized_value:
+            cleaned = re.sub(
+                rf"(?<!\w){re.escape(normalized_value)}(?!\w)",
+                " ",
+                cleaned,
+            )
+    return " ".join(cleaned.split())
+
+
+def _span_values(spans: Iterable[IntentSpan]) -> tuple[str, ...]:
+    return _ordered_unique(
+        " ".join(span.text.split()).strip(" ,.;") for span in spans
+    )
+
+
+def _first_span_value(spans: tuple[IntentSpan, ...]) -> str | None:
+    values = _span_values(spans[:1])
+    return values[0] if values else None
+
+
+def _radius_meters_from_text(value: str) -> int | None:
+    match = _RADIUS_VALUE_PATTERN.search(prepare_for_embedding(value))
+    if match is None:
+        return None
+    distance = float(match.group("value").replace(",", "."))
+    if match.group("unit").startswith(("km", "kilometro")):
+        distance *= 1000
+    return max(1, min(50_000, int(round(distance))))
 
 
 def _contains_any(text: str, values: tuple[str, ...]) -> bool:

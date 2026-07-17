@@ -52,8 +52,9 @@ def test_internal_chat_returns_only_technical_candidates() -> None:
         "strict_radius": False,
     }
     assert payload["candidates"]
-    assert {candidate["place_id"] for candidate in payload["candidates"]} == {
-        "place_1"
+    assert payload["candidates"][0]["place_id"] == "place_1"
+    assert "place_1" in {
+        candidate["place_id"] for candidate in payload["candidates"]
     }
     assert set(payload["candidates"][0]) == {
         "place_id",
@@ -114,7 +115,7 @@ def test_internal_chat_recommends_for_short_explicit_categories(
     }
 
 
-def test_internal_chat_never_returns_parks_for_a_cafe_query() -> None:
+def test_internal_chat_soft_category_ranks_cafe_first_near_park_anchor() -> None:
     client = TestClient(create_app())
     request = {
         **BASE_REQUEST,
@@ -130,9 +131,7 @@ def test_internal_chat_never_returns_parks_for_a_cafe_query() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["action"] == "recommendations"
-    assert {candidate["place_id"] for candidate in payload["candidates"]} == {
-        "place_1"
-    }
+    assert payload["candidates"][0]["place_id"] == "place_1"
     assert payload["location_directive"]["source"] == "explicit_anchor"
     assert payload["location_directive"]["anchor_place_id"] == "place_6"
 
@@ -296,7 +295,7 @@ def test_internal_chat_rejects_a_stale_structured_choice() -> None:
     assert response.status_code == 409
 
 
-def test_internal_chat_applies_content_exclusions_before_ranking() -> None:
+def test_internal_chat_applies_content_exclusions_as_negative_ranking_evidence() -> None:
     client = TestClient(create_app())
     request = {
         **BASE_REQUEST,
@@ -311,8 +310,10 @@ def test_internal_chat_applies_content_exclusions_before_ranking() -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["action"] == "no_match"
-    assert payload["candidates"] == []
+    assert payload["action"] == "recommendations"
+    candidate_ids = [candidate["place_id"] for candidate in payload["candidates"]]
+    assert "place_1" in candidate_ids
+    assert candidate_ids[0] != "place_1"
     assert payload["state_patch"]["exclusions"] == ["tranquilo"]
 
 

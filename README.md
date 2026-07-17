@@ -197,25 +197,28 @@ y ubicacion actual a la API principal; Go llama `POST /internal/places/chat`, hi
 IDs devueltos, calcula distancias con PostGIS y aplica el orden geografico final.
 
 NLP separa categoria, preferencias, exclusiones, referencia y alcance geografico antes
-de buscar. La categoria y `is_active=true` son filtros inviolables. Por eso una consulta
-de cafeterias no puede devolver parques aunque el texto incluya "cerca del parque".
+de buscar. `is_active=true`, ciudad/estado confirmados y los IDs obtenidos por un filtro
+geografico explicito son restricciones duras; la categoria es una hipotesis de ranking.
+Esto permite recuperar vocabulario nuevo o categorias distintas entre sistemas sin
+confundir una referencia como "cerca del parque" con el tipo de resultado solicitado.
 Las ambiguedades que cambiarian los resultados devuelven `action=clarification` y un
 `state_patch` con `pending_clarification`; el siguiente turno puede resolverlo con frases
 como "la primera opcion" o "la segunda, cerca de mi".
 
-El chat no exige que el usuario nombre siempre una categoria. Primero aplica defaults
-deterministas y, para expresiones no literales, compara el mensaje con prototipos de
-actividad mediante el mismo FastText local usado por retrieval. Por ejemplo, "quiero
-comer algo" busca restaurantes, "quiero hacer ejercicio" busca opciones deportivas y
-"donde dormir" busca hospedaje. El clasificador se abstiene si la similitud es baja o
-dos categorias quedan demasiado cerca; no consume Llama ni otra API. Una categoria
-explicita siempre prevalece. Una intencion nueva y clara tambien cancela cualquier
-aclaracion pendiente anterior. Solo se pregunta cuando las interpretaciones plausibles
-cambiarian materialmente los resultados; las preferencias faltantes no bloquean una
-primera recomendacion.
+El chat no exige que el usuario nombre siempre una categoria. Puede habilitar un BERT
+fine-tuneado de token classification para extraer valores abiertos de categoria,
+preferencia, exclusion, ubicacion, referencia y radio. Esos textos se alinean despues
+contra un catalogo dinamico mediante embeddings; no se convierten con aliases dentro del
+adaptador BERT. Las reglas lexicas existentes quedan como fallback de despliegue y no
+bloquean retrieval. El clasificador se abstiene si la similitud es baja o dos conceptos
+quedan demasiado cerca. Las aclaraciones usan hipotesis con evidencia o facetas de los
+candidatos recuperados, no un menu fijo.
 
-La recuperacion combina FastText/pgvector, BM25 y coincidencias de facetas. NLP devuelve
-solo candidatos tecnicos y `content_score`; no incorpora GPS al score. El flag inicial es
+La recuperacion combina dense retrieval (FastText de rollback o SentenceTransformer),
+BM25 y coincidencias de facetas. La categoria y las exclusiones aportan señales positivas
+o negativas; no eliminan candidatos por una coincidencia textual aislada. NLP devuelve
+candidatos tecnicos y `content_score`; el GPS se aplica como filtro explicito de IDs antes
+del ranking cuando el proveedor de lugares cercanos esta configurado. El flag inicial es
 `PLACES_CHAT_V2_ENABLED=false` y debe activarse despues de desplegar en Go tanto el proxy
 de chat como `/api/v1/internal/places/resolve-anchor`.
 
@@ -346,23 +349,68 @@ Si el score maximo no supera `SEMANTIC_NO_MATCH_THRESHOLD`, envia a Llama el mod
 `SEMANTIC_RELEVANCE_THRESHOLD` usa `low_confidence`; por encima usa `confident`.
 Llama solo embellece el tono y recibe exclusivamente los lugares seleccionados.
 
-### Documento Semantico Ponderado De Lugares
+### Documento Semantico Estructurado De Lugares
 
 Los IDs numericos de tags devueltos por la API principal se resuelven mediante el
 catalogo versionado en `app/modules/places/infrastructure/place_tag_catalog.json`.
-El documento que se envia a FastText contiene exclusivamente señales semanticas y
-aplica estos pesos mediante repeticion antes del promedio de embeddings:
+El documento de Places contiene cada señal una sola vez y explicita el rol de cada
+campo. Esto evita que la repeticion manual distorsione un encoder BERT:
 
 ```text
-tags x6, category x4, description x3, name x1
+Nombre: ... Tipo registrado: ... Descripcion: ... Etiquetas: ...
 ```
 
-Las categorias generales se expanden con terminos de intencion en espanol. Direccion,
-ciudad, estado, `source`, precio e IDs desconocidos permanecen fuera del embedding;
-siguen disponibles como metadatos o filtros cuando corresponde. La version interna
-`weighted-tags-v2` forma parte del hash del documento, por lo que ejecutar nuevamente
-`initial_load_place_embeddings` actualiza todas las filas por `UPSERT` sin truncar la
-tabla ni cambiar `VECTOR(300)`.
+No se expanden categorias mediante diccionarios de sinonimos. Direccion, ciudad,
+estado, `source`, precio e IDs desconocidos permanecen fuera del embedding; siguen
+disponibles como metadatos o filtros. La version `structured-place-v3` forma parte del
+hash y fuerza un re-embedding seguro cuando cambia el documento.
+
+### Migracion BERT/Sentence-Transformer exclusiva de Places
+
+La migracion es aditiva y no cambia los vectores de posts, perfiles o feed:
+
+1. Ejecuta `sql/migrations/20260716_02_places_semantic_v1.sql` con el rol DBA.
+2. Configura temporalmente el perfil BERT mostrado en `.env.example`.
+3. Ejecuta `python -m app.jobs.sync_place_embeddings` para backfill de la tabla
+   `place_embeddings_semantic_v1`.
+4. Ejecuta `sql/verify_places_semantic_v1.sql` y revisa que el plan use HNSW con
+   un volumen representativo.
+5. Activa `match_places_semantic_v1` y `search_places_semantic_v1` primero en shadow.
+6. Conserva `match_places` y la tabla FastText para rollback.
+
+`/places/chat` ya no requiere una categoria canonica para recuperar candidatos. La
+categoria inferida solo aporta afinidad al ranking; la union SQL obtiene pools dense y
+lexical independientes. Un cliente puede optar al contrato conversacional estructurado
+enviando `conversation_id`, `conversation_state`, `clarification_choice` o
+`user_location` mientras `PLACES_CHAT_V2_ENABLED=true`.
+
+Para fine-tuning, `scripts/train_place_retriever.py` acepta JSONL con `query`,
+`positive` y `hard_negatives`. El artefacto resultante se configura mediante
+`PLACES_EMBEDDING_MODEL`; no se incluye un modelo ficticio preentrenado en el repo.
+
+El extractor de intencion se entrena por separado con
+`scripts/train_place_intent_bert.py`. Su JSONL contiene `text` y spans abiertos
+`{start, end, slot}`; los slots permitidos son `CATEGORY`, `PREFERENCE`,
+`EXCLUSION`, `LOCATION`, `REFERENCE` y `RADIUS`. Los valores concretos (por ejemplo
+"donas artesanales") nunca se convierten en labels del modelo:
+
+```powershell
+python -m pip install -r requirements-training.txt
+python scripts/train_place_intent_bert.py `
+  --train-file data/places-intent-train.jsonl `
+  --validation-file data/places-intent-validation.jsonl `
+  --output-dir .models/places-intent-bert
+```
+
+Para activarlo, configura `PLACES_CHAT_INTENT_PROVIDER=bert`,
+`PLACES_CHAT_BERT_MODEL_PATH=.models/places-intent-bert` y una version inmutable en
+`PLACES_CHAT_BERT_MODEL_VERSION`. El parser determinista queda como fallback si el
+modelo no puede cargarse; cuando BERT responde, no se vuelven a aplicar aliases de
+categoria ni implicaciones manuales sobre sus spans.
+
+Una imagen que ya no necesite el artefacto de rollback FastText puede construirse con
+`docker build --build-arg DOWNLOAD_FASTTEXT_MODEL=false .`. Conserva el valor por
+defecto durante el shadow/canary para permitir rollback inmediato.
 
 `GET` o `POST /places/search/metrics?k=5` conserva un benchmark offline separado llamado `built_in_places_v3_bm25`. Contiene doce lugares controlados, diez consultas y qrels graduados para calcular honestamente `Precision@k`, `Recall@k`, `MRR`, `MAP` y `nDCG@k`. Estas metricas requieren juicios de relevancia y por eso no se presentan como si midieran una consulta arbitraria de produccion.
 

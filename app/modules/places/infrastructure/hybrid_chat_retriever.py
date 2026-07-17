@@ -1,5 +1,7 @@
+import asyncio
 import json
 import math
+import re
 from typing import Sequence
 
 from app.modules.places.application.ports.place_repository import PlaceVectorRepository
@@ -23,7 +25,12 @@ _EXACT_ENTITY_PREFERENCES = {"hello_kitty"}
 
 
 class HybridContentPlaceChatRetriever:
-    """Fuse semantic, lexical and facet signals over a bounded vector candidate pool."""
+    """Fuse semantic, lexical and facet signals over a bounded vector candidate pool.
+
+    Categories are deliberately treated as ranking evidence, not repository
+    filters.  This keeps open-vocabulary queries useful even when the parser
+    cannot map the user's wording to a canonical category.
+    """
 
     def __init__(
         self,
@@ -50,7 +57,7 @@ class HybridContentPlaceChatRetriever:
         intent: ParsedPlaceChatIntent,
         limit: int,
     ) -> Sequence[PlaceChatCandidate]:
-        if intent.action != "recommendations" or not intent.target_category:
+        if intent.action != "recommendations":
             return []
         if limit < 1:
             return []
@@ -62,36 +69,40 @@ class HybridContentPlaceChatRetriever:
             if cached is not None:
                 return cached
 
-        embedding = self._embedding_provider.embed_text(semantic_query)
-        repository_categories = tuple(
-            dict.fromkeys(
-                (
-                    *intent.category_values,
-                    *intent.compatible_category_values,
-                )
-            )
+        embedding = await asyncio.to_thread(
+            self._embedding_provider.embed_text,
+            semantic_query,
         )
         filters = PlaceFilters(
-            city=None,
-            state=None,
-            categories=repository_categories,
+            city=_optional_string(intent.hard_filters.get("city")),
+            state=_optional_string(intent.hard_filters.get("state")),
+            # A canonical category is a hypothesis, not a hard constraint.  A
+            # category filter here would prevent semantic retrieval from ever
+            # seeing useful places whose source taxonomy differs from ours.
+            categories=None,
             price_range=_optional_string(intent.hard_filters.get("price_range")),
             occasion=_optional_string(intent.hard_filters.get("occasion")),
+            place_ids=(
+                tuple(
+                    str(place_id)
+                    for place_id in intent.hard_filters.get("place_ids", ())
+                    if str(place_id).strip()
+                )
+                if intent.hard_filters.get("place_ids") is not None
+                else None
+            ),
             is_active=True,
         )
+        candidate_pool_limit = min(max(limit * 8, 40), 120)
         raw_candidates = list(
-            await self._place_repository.search(
+            await self._search_repository(
+                query_text=intent.semantic_query.strip(),
                 embedding=embedding,
                 filters=filters,
-                limit=min(max(limit * 3, limit), 120),
+                limit=candidate_pool_limit,
             )
         )
-        candidates = [
-            candidate
-            for candidate in raw_candidates
-            if self._matches_hard_category(candidate, intent)
-            and not self._matches_exclusions(candidate, intent.exclusions)
-        ]
+        candidates = raw_candidates
         if not candidates:
             return []
 
@@ -111,26 +122,68 @@ class HybridContentPlaceChatRetriever:
                 b=self._b,
             )
             lexical = normalize_bm25(raw_lexical)
-            semantic = _unit_score(candidate.score)
+            repository_semantic = _optional_finite_score(
+                candidate.metadata.get("semantic_score")
+            )
+            repository_lexical = _optional_finite_score(
+                candidate.metadata.get("lexical_score")
+            )
+            has_repository_channel_scores = (
+                repository_semantic is not None or repository_lexical is not None
+            )
+            semantic = _unit_score(
+                repository_semantic
+                if has_repository_channel_scores
+                else candidate.score
+            )
+            if repository_lexical is not None:
+                lexical = max(lexical, normalize_bm25(repository_lexical))
+            category_score, category_match, category_reason = (
+                self._category_affinity(candidate, intent)
+            )
             theme_score, match_level, reasons = self._facet_match(
                 candidate,
                 intent,
                 document_tokens,
+                category_score=category_score,
+                category_reason=category_reason,
             )
-            content_score = self._weights.score(
+            base_content_score = self._weights.score(
                 semantic_score=semantic,
                 lexical_score=lexical,
                 theme_or_reference_score=theme_score,
             )
-            requires_content_evidence = bool(
-                intent.soft_preferences
-                or (intent.reference and intent.reference.entity)
+            exclusion_affinity, exclusion_matches = self._exclusion_affinity(
+                candidate,
+                intent.exclusions,
             )
-            if (
-                requires_content_evidence
-                and content_score < self._minimum_content_score
-            ):
-                continue
+            # Exclusions are negative ranking evidence, not a boolean gate. A
+            # source description may mention an excluded concept in a negated
+            # form ("sin ruido"), and removing that row would invert intent.
+            content_score = max(
+                0.0,
+                base_content_score - 0.35 * exclusion_affinity,
+            )
+            # Keep weak candidates so short or novel queries do not collapse to
+            # zero results.  The old minimum remains a quality diagnostic for
+            # downstream confidence/clarification policy, rather than a gate.
+            metadata = dict(candidate.metadata)
+            metadata["retrieval_diagnostics"] = {
+                "category_affinity": round(category_score, 6),
+                "category_match": category_match,
+                "exclusion_affinity": round(exclusion_affinity, 6),
+                "exclusion_matches": list(exclusion_matches),
+                "content_quality": (
+                    "sufficient"
+                    if content_score >= self._minimum_content_score
+                    else "weak"
+                ),
+                "meets_minimum_content_score": (
+                    content_score >= self._minimum_content_score
+                ),
+                "minimum_content_score": self._minimum_content_score,
+                "query_token_count": len(query_tokens),
+            }
             ranked.append(
                 PlaceChatCandidate(
                     place_id=candidate.id,
@@ -141,16 +194,16 @@ class HybridContentPlaceChatRetriever:
                     lexical_score=lexical,
                     match_level=match_level,
                     matched_reasons=reasons,
-                    metadata=dict(candidate.metadata),
+                    metadata=metadata,
                 )
             )
 
         ranked.sort(
             key=lambda item: (
-                _match_level_priority(item.match_level),
                 -item.content_score,
                 -item.semantic_score,
                 -item.lexical_score,
+                _match_level_priority(item.match_level),
                 item.place_id,
             )
         )
@@ -168,6 +221,34 @@ class HybridContentPlaceChatRetriever:
             self._cache.set(cache_key, result)
         return result
 
+    async def _search_repository(
+        self,
+        query_text: str,
+        embedding: list[float],
+        filters: PlaceFilters,
+        limit: int,
+    ) -> Sequence[PlaceCandidate]:
+        """Prefer an optional independent dense+lexical repository search.
+
+        ``PlaceVectorRepository`` intentionally keeps its existing contract.
+        Repositories can opt into hybrid candidate generation duck-typically,
+        while mocks and current adapters continue through ``search``.
+        """
+
+        hybrid_search = getattr(self._place_repository, "search_hybrid", None)
+        if callable(hybrid_search):
+            return await hybrid_search(
+                query_text=query_text,
+                embedding=embedding,
+                filters=filters,
+                limit=limit,
+            )
+        return await self._place_repository.search(
+            embedding=embedding,
+            filters=filters,
+            limit=limit,
+        )
+
     @staticmethod
     def _cache_key(
         intent: ParsedPlaceChatIntent,
@@ -176,6 +257,7 @@ class HybridContentPlaceChatRetriever:
     ) -> str:
         payload = {
             "query": semantic_query,
+            "target_category": intent.target_category,
             "categories": intent.category_values,
             "compatible_categories": intent.compatible_category_values,
             "category_evidence_terms": intent.category_evidence_terms,
@@ -191,59 +273,88 @@ class HybridContentPlaceChatRetriever:
         )
 
     @staticmethod
-    def _matches_hard_category(
+    def _category_affinity(
         candidate: PlaceCandidate,
         intent: ParsedPlaceChatIntent,
-    ) -> bool:
-        if not candidate.category:
-            return False
-        actual = prepare_for_embedding(candidate.category).replace(" ", "_")
+    ) -> tuple[float, str, str | None]:
+        actual = _normalized_category(candidate.category)
         exact = {
-            prepare_for_embedding(value).replace(" ", "_")
-            for value in intent.category_values
+            normalized
+            for value in (intent.target_category, *intent.category_values)
+            if (normalized := _normalized_category(value))
         }
-        if actual in exact:
-            return True
         compatible = {
-            prepare_for_embedding(value).replace(" ", "_")
+            normalized
             for value in intent.compatible_category_values
+            if (normalized := _normalized_category(value))
         }
-        if actual not in compatible:
-            return False
-        document_tokens = _category_evidence_tokens(candidate)
-        return any(
-            evidence_tokens and evidence_tokens <= document_tokens
+        has_category_hypothesis = bool(exact or compatible)
+        if not has_category_hypothesis:
+            return 0.0, "not_requested", None
+
+        reason = intent.target_category or next(iter(intent.category_values), None)
+        if actual and actual in exact:
+            return 1.0, "exact", reason or candidate.category
+
+        candidate_evidence_tokens = _category_evidence_tokens(candidate)
+        has_specific_evidence = any(
+            term_tokens and term_tokens <= candidate_evidence_tokens
             for term in intent.category_evidence_terms
-            if (evidence_tokens := set(tokenize(term)))
+            if (term_tokens := set(tokenize(term)))
         )
+        if actual and actual in compatible:
+            if has_specific_evidence:
+                return 0.80, "compatible_with_evidence", reason
+            return 0.35, "compatible", reason
+        if has_specific_evidence:
+            return 0.65, "textual_evidence", reason
+        return 0.0, "none", None
 
     @staticmethod
-    def _matches_exclusions(
+    def _exclusion_affinity(
         candidate: PlaceCandidate,
         exclusions: tuple[str, ...],
-    ) -> bool:
+    ) -> tuple[float, tuple[str, ...]]:
         if not exclusions:
-            return False
-        document_tokens = set(place_tokens(candidate))
-        return any(
-            exclusion_tokens
-            and exclusion_tokens <= document_tokens
-            for exclusion in exclusions
-            if (
-                exclusion_tokens := set(
-                    tokenize(exclusion.replace("_", " "))
+            return 0.0, ()
+        evidence = prepare_for_embedding(
+            " ".join(
+                value
+                for value in (
+                    candidate.name,
+                    candidate.category or "",
+                    candidate.document or "",
+                    _as_evidence_text(candidate.metadata.get("tags")),
+                    _as_evidence_text(candidate.metadata.get("short_description")),
                 )
+                if value
             )
         )
+        document_tokens = set(tokenize(evidence))
+        matches: list[str] = []
+        for exclusion in exclusions:
+            normalized = prepare_for_embedding(exclusion.replace("_", " "))
+            exclusion_tokens = set(tokenize(normalized))
+            if not exclusion_tokens or not exclusion_tokens <= document_tokens:
+                continue
+            if _is_negated_in_evidence(evidence, normalized):
+                continue
+            matches.append(exclusion)
+        unique_matches = tuple(dict.fromkeys(matches))
+        return len(unique_matches) / len(exclusions), unique_matches
 
     @staticmethod
     def _facet_match(
         candidate: PlaceCandidate,
         intent: ParsedPlaceChatIntent,
         document_tokens: list[str],
+        category_score: float = 0.0,
+        category_reason: str | None = None,
     ) -> tuple[float, str, tuple[str, ...]]:
         token_set = set(document_tokens)
-        reasons: list[str] = [intent.target_category or "place"]
+        reasons: list[str] = []
+        if category_score > 0 and category_reason:
+            reasons.append(category_reason)
         matched_preferences = 0
         exact_preference = False
         for preference in intent.soft_preferences:
@@ -268,11 +379,16 @@ class HybridContentPlaceChatRetriever:
             if reference_exact:
                 reasons.append(intent.reference.entity)
 
-        if reference_exact or exact_preference:
-            return 1.0, "exact", tuple(dict.fromkeys(reasons))
-        if matched_preferences:
-            return preference_score, "family", tuple(dict.fromkeys(reasons))
-        return 0.0, "broad", tuple(dict.fromkeys(reasons))
+        facet_score = max(
+            category_score,
+            preference_score,
+            1.0 if reference_exact else 0.0,
+        )
+        if reference_exact or exact_preference or category_score >= 1.0:
+            return facet_score, "exact", tuple(dict.fromkeys(reasons))
+        if matched_preferences or category_score >= 0.50:
+            return facet_score, "family", tuple(dict.fromkeys(reasons))
+        return facet_score, "broad", tuple(dict.fromkeys(reasons))
 
 
 def _match_level_priority(level: str) -> int:
@@ -284,6 +400,12 @@ def _optional_string(value: object) -> str | None:
         return None
     normalized = str(value).strip()
     return normalized or None
+
+
+def _normalized_category(value: object) -> str:
+    if value is None:
+        return ""
+    return prepare_for_embedding(str(value)).replace(" ", "_")
 
 
 def _category_evidence_tokens(candidate: PlaceCandidate) -> set[str]:
@@ -310,6 +432,22 @@ def _as_evidence_text(value: object) -> str:
     return str(value)
 
 
+def _is_negated_in_evidence(evidence: str, concept: str) -> bool:
+    """Detect common source-side negation without business-category rules."""
+
+    escaped = re.escape(concept).replace(r"\ ", r"\s+")
+    negation = (
+        r"(?:sin|libre\s+de|no\s+(?:hay|tiene|ofrece)|"
+        r"evita(?:r)?|prohibid[oa]s?)"
+    )
+    return bool(
+        re.search(
+            rf"\b{negation}\s+(?:\w+\s+){{0,2}}{escaped}\b",
+            evidence,
+        )
+    )
+
+
 def _unit_score(value: object) -> float:
     try:
         score = float(value)
@@ -318,3 +456,13 @@ def _unit_score(value: object) -> float:
     if not math.isfinite(score):
         return 0.0
     return max(0.0, min(1.0, score))
+
+
+def _optional_finite_score(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return None
+    return score if math.isfinite(score) else None

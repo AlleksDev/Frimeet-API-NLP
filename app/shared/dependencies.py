@@ -4,7 +4,10 @@ from app.shared.cache.memory import SimpleTTLCache
 from app.shared.config.settings import get_settings
 from app.shared.nlp.embeddings.base import EmbeddingProvider
 from app.shared.nlp.embeddings.cached import CachedEmbeddingProvider
-from app.shared.nlp.embeddings.factory import create_embedding_provider
+from app.shared.nlp.embeddings.factory import (
+    create_embedding_provider,
+    create_place_embedding_provider,
+)
 from app.shared.nlp.llm.base import LLMProvider
 from app.shared.nlp.llm.groq_llama import GroqLlamaProvider
 from app.shared.nlp.llm.mock import MockLLMProvider
@@ -15,6 +18,32 @@ def get_embedding_provider() -> EmbeddingProvider:
     settings = get_settings()
     return CachedEmbeddingProvider(
         provider=create_embedding_provider(settings),
+        cache=SimpleTTLCache(default_ttl_seconds=settings.embedding_cache_ttl_seconds),
+    )
+
+
+@lru_cache
+def get_place_embedding_provider() -> EmbeddingProvider:
+    """Return the query encoder dedicated to Places.
+
+    It intentionally has a separate cache and configuration so a 768-dimensional
+    BERT rollout cannot invalidate or break the global 300-dimensional indexes.
+    """
+
+    settings = get_settings()
+    return CachedEmbeddingProvider(
+        provider=create_place_embedding_provider(settings, text_role="query"),
+        cache=SimpleTTLCache(default_ttl_seconds=settings.embedding_cache_ttl_seconds),
+    )
+
+
+@lru_cache
+def get_place_passage_embedding_provider() -> EmbeddingProvider:
+    """Return the Places passage encoder (for E5-style asymmetric models)."""
+
+    settings = get_settings()
+    return CachedEmbeddingProvider(
+        provider=create_place_embedding_provider(settings, text_role="passage"),
         cache=SimpleTTLCache(default_ttl_seconds=settings.embedding_cache_ttl_seconds),
     )
 

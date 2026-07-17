@@ -1,4 +1,6 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+import re
+import unicodedata
 from uuid import uuid4
 
 from app.modules.places.domain.chat_intent import (
@@ -11,36 +13,33 @@ from app.modules.places.domain.chat_intent import (
 )
 
 
-_CATEGORY_LABELS = {
-    "restaurant": "Restaurantes",
-    "cafe": "Cafeterias",
-    "park": "Parques",
-    "nightlife": "Fiesta y vida nocturna",
-    "sports": "Ejercicio y deporte",
-    "cinema": "Cines",
-    "shopping": "Compras",
-    "lodging": "Hospedaje",
-}
-
-
 def new_category_clarification(
     categories: Sequence[str],
     *,
     kind: ClarificationKind = "target_category",
+    labels: Mapping[str, str] | None = None,
 ) -> PendingClarification:
     unique = tuple(dict.fromkeys(category for category in categories if category))[:5]
     if len(unique) < 2:
         raise ValueError("a category clarification requires at least two options")
+    option_labels = labels or {}
+    option_ids = _category_option_ids(unique)
     return PendingClarification(
         clarification_id=str(uuid4()),
         kind=kind,
         options=tuple(
             PendingClarificationOption(
-                option_id=category,
+                option_id=option_id,
                 value=category,
-                label=_CATEGORY_LABELS.get(category, category.replace("_", " ").title()),
+                label=_bounded_text(
+                    option_labels.get(
+                        category,
+                        category.replace("_", " ").title(),
+                    ),
+                    160,
+                ),
             )
-            for category in unique
+            for category, option_id in zip(unique, option_ids)
         ),
     )
 
@@ -156,3 +155,27 @@ def _bounded_text(value: str, maximum: int) -> str:
     if len(value) <= maximum:
         return value
     return value[: maximum - 1].rstrip() + "…"
+
+
+def _category_option_ids(values: Sequence[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    option_ids: list[str] = []
+    for index, value in enumerate(values, start=1):
+        option_id = _category_option_id(value, index)
+        if option_id in seen:
+            suffix = f"_{index}"
+            option_id = option_id[: 64 - len(suffix)].rstrip("_-") + suffix
+        seen.add(option_id)
+        option_ids.append(option_id)
+    return tuple(option_ids)
+
+
+def _category_option_id(value: str, index: int) -> str:
+    if re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", value):
+        return value
+    ascii_value = unicodedata.normalize("NFKD", value).encode(
+        "ascii", "ignore"
+    ).decode("ascii")
+    slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", ascii_value).strip("_-").lower()
+    slug = slug[:54].rstrip("_-") or "category"
+    return f"{slug}_{index}"
