@@ -27,13 +27,13 @@
     },
     "validation": {
       "path": "data/training/places_retrieval_v1/validation.jsonl",
-      "records": 20,
-      "sha256": "418c93e09aae4783354287a6976517d132b2dd461879a73cc408ae9f0def066e"
+      "records": 60,
+      "sha256": "9f61e3467e907f195f14015f15acf78f7d4568fb2198b86516724ce1088a8241"
     },
     "test": {
       "path": "data/training/places_retrieval_v1/test.jsonl",
-      "records": 20,
-      "sha256": "010036e21b1515dd262728064259a4b526c8f36058ba6e33b026ba89fb103408"
+      "records": 80,
+      "sha256": "d99fd7094e7cc999b62ee264d88280e62e464c9a9562be8ebdeb1a9f06d64b37"
     }
   }
 }
