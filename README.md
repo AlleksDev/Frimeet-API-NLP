@@ -388,6 +388,24 @@ Para fine-tuning, `scripts/train_place_retriever.py` acepta JSONL con `query`,
 `positive` y `hard_negatives`. El artefacto resultante se configura mediante
 `PLACES_EMBEDDING_MODEL`; no se incluye un modelo ficticio preentrenado en el repo.
 
+La evaluación del retriever debe usar el corpus global, no cuatro candidatos aislados
+por fila. Validation incluye 60 consultas y el test sintético 80 consultas, cada uno
+sobre 20 documentos propios y no vistos, con lenguaje
+coloquial, errores ortográficos, necesidades implícitas y frases contrastivas. Para
+comparar el modelo base y el fine-tuned sobre exactamente el mismo corpus:
+
+```powershell
+python scripts/evaluate_place_retriever.py `
+  --test-file data/training/places_retrieval_v1/test.jsonl `
+  --model base=intfloat/multilingual-e5-base `
+  --model fine_tuned=C:\ruta\al\places-e5-retriever-v1 `
+  --output-json artifacts/retriever-evaluation.json
+```
+
+Además de Top-1, Recall@k, MRR y nDCG@10, el reporte separa resultados para
+`colloquial`, `misspelling`, `implicit`, `contrastive` y otras dificultades. El
+prefijo `query:`/`passage:` se aplica dentro del evaluador.
+
 El extractor de intencion se entrena por separado con
 `scripts/train_place_intent_bert.py`. Su JSONL contiene `text` y spans abiertos
 `{start, end, slot}`; los slots permitidos son `CATEGORY`, `PREFERENCE`,
