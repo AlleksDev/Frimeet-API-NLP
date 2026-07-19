@@ -294,6 +294,207 @@ PLACE_SPECS: tuple[PlaceSpec, ...] = (
 )
 
 
+# Validation and test deliberately contain several queries for the same relevant
+# document. Validation supports epoch/model selection without inspecting test.
+# Test remains the final, harder holdout.
+# This is closer to production retrieval than a one-query/one-document lookup:
+# the model must survive slang, misspellings, implicit needs and contrastive
+# wording while ranking against the complete test corpus.  Keep these variants
+# out of train to prevent evaluation leakage.
+RETRIEVAL_VALIDATION_QUERY_VARIANTS: dict[
+    str,
+    tuple[tuple[str, tuple[str, ...]], ...],
+] = {
+    "Pupusas Centroamérica": (
+        ("se me antoja comida salvadoreña de masa rellena", ("implicit", "paraphrase")),
+        ("unas pupusitas con curtido dónde", ("colloquial", "implicit")),
+    ),
+    "Crêpe Maison": (
+        ("quiero algo enrollado que pueda ser dulce o salado", ("implicit", "contrastive")),
+        ("crepas pa cenar, no solo postre", ("colloquial", "contrastive")),
+    ),
+    "Planetario Orión": (
+        ("quiero ver el cielo proyectado sin salir de la ciudad", ("implicit", "paraphrase")),
+        ("plan de estrellas y astronomía bajo techo", ("implicit", "constraint")),
+    ),
+    "Aqua Centro": (
+        ("donde hay carriles pa echarme unos largos", ("colloquial", "implicit")),
+        ("alberca techada con clases para nadar", ("paraphrase", "constraint")),
+    ),
+    "Clave Oculta": (
+        ("plan con acertijos pa escapar con la banda", ("colloquial", "implicit")),
+        ("cuarto temático donde resolvemos pistas", ("implicit", "paraphrase")),
+    ),
+    "Vinilo Sur": (
+        ("dónde consigo discos de los grandotes", ("colloquial", "implicit")),
+        ("ando cazando elepés usados", ("colloquial", "paraphrase")),
+    ),
+    "Centro Presente": (
+        ("necesito respirar y apagar la mente un rato", ("implicit", "colloquial")),
+        ("un lugar silencioso con meditación guiada", ("paraphrase", "constraint")),
+    ),
+    "Lúpulo Local": (
+        ("cheve artesanal y que expliquen cómo la hacen", ("colloquial", "implicit")),
+        ("quiero degustar varias cervezas locales", ("paraphrase",)),
+    ),
+    "Sushi Viajero": (
+        ("sushi que vaya pasando frente a la mesa", ("implicit", "paraphrase")),
+        ("japonés con banda de platitos", ("colloquial", "implicit")),
+    ),
+    "Cero Residuo": (
+        ("comprar despensa llevando mis propios frascos", ("implicit", "constraint")),
+        ("tienda a granel sin tanto empaque", ("paraphrase", "constraint")),
+    ),
+    "Salto Alto": (
+        ("dónde llevo a brincar a los chamacos", ("colloquial", "implicit")),
+        ("parque techado lleno de camas elásticas", ("paraphrase", "implicit")),
+    ),
+    "Teatro Bel Canto": (
+        ("quiero escuchar voces líricas en un teatro", ("implicit", "paraphrase")),
+        ("algún recinto con bel canto y música de cámara", ("paraphrase",)),
+    ),
+    "Finca Aroma": (
+        ("quiero ver de dónde sale el café antes de la taza", ("implicit", "paraphrase")),
+        ("paseo entre cafetales con tostado", ("implicit", "paraphrase")),
+    ),
+    "Raqueta Sur": (
+        ("dónde rentan raqueta y cancha de squash", ("constraint", "paraphrase")),
+        ("quiero pegarle a la pelota contra la pared", ("implicit", "colloquial")),
+    ),
+    "Fábrica Lab": (
+        ("taller para fabricar prototipos con impresora 3d", ("implicit", "paraphrase")),
+        ("necesito herramientas y electrónica compartidas", ("implicit", "constraint")),
+    ),
+    "Estudio Obturador": (
+        ("renta de ciclorama y luces por hora", ("constraint", "paraphrase")),
+        ("lugar equipado pa una sesión de fotos", ("colloquial", "implicit")),
+    ),
+    "Verso Café": (
+        ("cafecito con micro abierto para leer versos", ("colloquial", "implicit")),
+        ("dónde escucho poesía mientras tomo algo", ("implicit", "paraphrase")),
+    ),
+    "Baño Nube": (
+        ("quiero un baño de vapor árabe", ("implicit", "paraphrase")),
+        ("spa con circuito de vapor tipo turco", ("paraphrase", "constraint")),
+    ),
+    "Cosecha Directa": (
+        ("verduras directo de quien las cosecha", ("implicit", "paraphrase")),
+        ("mercadito semanal de productores", ("colloquial", "paraphrase")),
+    ),
+    "Taco Verde": (
+        ("tacos sin nada de origen animal", ("implicit", "constraint")),
+        ("taquitos de setas, cero carne", ("colloquial", "contrastive")),
+    ),
+}
+
+
+RETRIEVAL_TEST_QUERY_VARIANTS: dict[
+    str,
+    tuple[tuple[str, tuple[str, ...]], ...],
+] = {
+    "Arepa Morena": (
+        ("traigo antojo de una reina pepiada", ("colloquial", "implicit")),
+        ("onde venden arepitas chidas", ("colloquial", "misspelling")),
+        ("algo venezolano relleno y hecho al momento", ("implicit", "paraphrase")),
+    ),
+    "Michi Café": (
+        ("un cafecito pa echar el rato con michis", ("colloquial", "implicit")),
+        ("cafeteria con gatitos rescatados", ("misspelling", "paraphrase")),
+        ("quiero tomar algo rodeado de mininos", ("implicit", "paraphrase")),
+    ),
+    "Laboratorio Curioso": (
+        ("algo chido pa que los peques hagan experimentos", ("colloquial", "implicit")),
+        ("museo no, mejor talleres cientificos para morritos", ("contrastive", "colloquial")),
+        ("donde llevo a mi hijo a aprender ciencia jugando", ("implicit", "paraphrase")),
+    ),
+    "Santuario Monarca": (
+        ("quiero ver un buen de mariposas en un jardin", ("colloquial", "misspelling")),
+        ("algún lugar de conservación de monarcas", ("implicit", "paraphrase")),
+        ("plan tranqui entre plantas y maripositas", ("colloquial", "implicit")),
+    ),
+    "Risa Abierta": (
+        ("donde hay standap esta noche", ("misspelling", "colloquial")),
+        ("quiero echarme unas risas con micro abierto", ("colloquial", "implicit")),
+        ("un plan de comedia en vivo, no cine", ("contrastive", "paraphrase")),
+    ),
+    "Café Babel": (
+        ("cafecito pa practicar inglés con la banda", ("colloquial", "implicit")),
+        ("intercambio d idiomas en un lugar para tomar algo", ("misspelling", "paraphrase")),
+        ("quiero conversar con gente en otras lenguas", ("implicit", "paraphrase")),
+    ),
+    "Miga Verde": (
+        ("algo dulce pero cero ingredientes animales", ("implicit", "contrastive")),
+        ("panecito vegano pa'l antojo", ("colloquial", "paraphrase")),
+        ("pasteles sin leche ni huevo, qué hay", ("implicit", "constraint")),
+    ),
+    "Bosque Domo": (
+        ("acampar sí pero sin sufrirle", ("colloquial", "implicit")),
+        ("un domito cómodo en el bosque", ("colloquial", "paraphrase")),
+        ("naturaleza con cama y techo, plan de finde", ("implicit", "colloquial")),
+    ),
+    "La Media Luna": (
+        ("se me antoja algo relleno y horneadito", ("implicit", "colloquial")),
+        ("onde hay empanadas dulces y saladas", ("misspelling", "paraphrase")),
+        ("un lugar de medias lunas no, de empanadas", ("contrastive", "adversarial")),
+    ),
+    "Herpetario Verde": (
+        ("quiero ver víboras y lagartos", ("implicit", "paraphrase")),
+        ("un plan educativo con animalitos de sangre fría", ("implicit", "paraphrase")),
+        ("donde conocen los peques a los reptiles", ("colloquial", "implicit")),
+    ),
+    "Museo del Barro": (
+        ("quiero ver piezas antiguas hechas de barro", ("implicit", "paraphrase")),
+        ("museo d alfareria de la region", ("misspelling", "paraphrase")),
+        ("un plan cultural sobre vasijas y cerámica", ("implicit", "paraphrase")),
+    ),
+    "Pista Furia": (
+        ("dónde entrenan ese deporte rudo en patines", ("implicit", "paraphrase")),
+        ("quiero darle al roler derbi", ("misspelling", "colloquial")),
+        ("pista para aprender derby sobre ruedas", ("paraphrase", "implicit")),
+    ),
+    "Voz Estudio": (
+        ("necesito una cabina que no meta ruido pa grabar", ("colloquial", "implicit")),
+        ("donde puedo producir mi podcast", ("paraphrase",)),
+        ("un estudio con tratamiento acustico y edición", ("misspelling", "implicit")),
+    ),
+    "Invernadero Café": (
+        ("cafecito entre un montón de plantas", ("colloquial", "implicit")),
+        ("un lugar verde para tomar café sin estar afuera", ("contrastive", "implicit")),
+        ("cafeteria tipo jardin techado", ("misspelling", "paraphrase")),
+    ),
+    "Robot Peques": (
+        ("algo pa que mi morrito arme robots", ("colloquial", "implicit")),
+        ("tayer infantil de programacion y electronica", ("misspelling", "paraphrase")),
+        ("donde enseñan tecnología construyendo cosas", ("implicit", "paraphrase")),
+    ),
+    "Remo Río": (
+        ("quiero remar pero necesito que me presten todo", ("implicit", "constraint")),
+        ("renta de kayak pa novatos con alguien que guíe", ("colloquial", "constraint")),
+        ("plan en el río con remo y equipo seguro", ("implicit", "paraphrase")),
+    ),
+    "Quesería Sierra": (
+        ("quiero probar quesitos de la región", ("colloquial", "implicit")),
+        ("una tienda donde den degustacion de queso artesanal", ("misspelling", "paraphrase")),
+        ("ando buscando lácteos locales, sobre todo quesos", ("implicit", "paraphrase")),
+    ),
+    "Circo Aire": (
+        ("quiero aprender a colgarme de telas sin matarme", ("colloquial", "implicit")),
+        ("clases d acrobacia aerea pa principiantes", ("misspelling", "colloquial")),
+        ("una escuela de circo con equilibrio y telas", ("paraphrase",)),
+    ),
+    "Reserva Alas": (
+        ("plan para pajarear con binoculares", ("colloquial", "implicit")),
+        ("un sitio con observatorios para avistar plumíferos", ("paraphrase", "implicit")),
+        ("quiero caminar por una reserva viendo aves", ("paraphrase",)),
+    ),
+    "Bar Cero": (
+        ("quiero salir de noche sin ponerme peda", ("colloquial", "implicit")),
+        ("bar con tragos cero alcohol y ambiente tranqui", ("colloquial", "constraint")),
+        ("mocktels y musiquita pero nada de chela", ("misspelling", "colloquial", "constraint")),
+    ),
+}
+
+
 def main() -> None:
     INTENT_ROOT.mkdir(parents=True, exist_ok=True)
     RETRIEVAL_ROOT.mkdir(parents=True, exist_ok=True)
@@ -409,16 +610,24 @@ def _retrieval_records(split: str) -> list[dict[str, object]]:
             and _concept_key(candidate) != _concept_key(spec)
         ]
         rotated = other_family[index % len(other_family) :] + other_family[: index % len(other_family)]
-        negative_specs = _unique_specs((*same_family, *rotated))[:3]
-        if len(negative_specs) < 3:
+        negative_limit = 3 if split == "train" else 7
+        negative_specs = _unique_specs((*same_family, *rotated))[:negative_limit]
+        if len(negative_specs) < negative_limit:
             raise RuntimeError(f"Not enough hard negatives for {spec.name}")
-        records.append(
-            {
-                "query": spec.query,
+        query_variants = [(spec.query, ("canonical",))]
+        if split == "validation":
+            query_variants.extend(RETRIEVAL_VALIDATION_QUERY_VARIANTS[spec.name])
+        elif split == "test":
+            query_variants.extend(RETRIEVAL_TEST_QUERY_VARIANTS[spec.name])
+        for query, challenge_tags in query_variants:
+            record: dict[str, object] = {
+                "query": query,
                 "positive": documents[spec.name],
                 "hard_negatives": [documents[item.name] for item in negative_specs],
             }
-        )
+            if split != "train":
+                record["challenge_tags"] = list(challenge_tags)
+            records.append(record)
     return records
 
 
@@ -544,8 +753,11 @@ def _validate_cross_split_uniqueness() -> None:
             positive = str(record["positive"])
             if query in retrieval_seen:
                 raise ValueError(f"Duplicate retrieval query in {retrieval_seen[query]} and {split}: {query}")
-            if positive in positive_seen:
-                raise ValueError(f"Duplicate positive document in {positive_seen[positive]} and {split}")
+            positive_owner = positive_seen.get(positive)
+            if positive_owner is not None and positive_owner != split:
+                raise ValueError(
+                    f"Duplicate positive document in {positive_owner} and {split}"
+                )
             retrieval_seen[query] = split
             positive_seen[positive] = split
 
