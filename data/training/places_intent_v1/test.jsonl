@@ -1,0 +1,34 @@
+{"text":"Busco tienda de cómics.","spans":[{"start":6,"end":22,"slot":"CATEGORY"}]}
+{"text":"Quiero tienda de comics tranquilo.","spans":[{"start":7,"end":23,"slot":"CATEGORY"},{"start":24,"end":33,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame tienda de cómics sin ruido cerca de Centro Histórico.","spans":[{"start":13,"end":29,"slot":"CATEGORY"},{"start":34,"end":39,"slot":"EXCLUSION"},{"start":49,"end":65,"slot":"LOCATION"}]}
+{"text":"¿Hay tienda de comics a menos de 500 m de Centro Histórico?","spans":[{"start":5,"end":21,"slot":"CATEGORY"},{"start":33,"end":38,"slot":"RADIUS"},{"start":42,"end":58,"slot":"LOCATION"}]}
+{"text":"Busco tienda de comics parecido a Casa Azul.","spans":[{"start":6,"end":22,"slot":"CATEGORY"},{"start":34,"end":43,"slot":"REFERENCE"}]}
+{"text":"Busco temazcal.","spans":[{"start":6,"end":14,"slot":"CATEGORY"}]}
+{"text":"Quiero temazcal con terraza.","spans":[{"start":7,"end":15,"slot":"CATEGORY"},{"start":16,"end":27,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame temazcal sin filas largas cerca de Parque Central.","spans":[{"start":13,"end":21,"slot":"CATEGORY"},{"start":26,"end":38,"slot":"EXCLUSION"},{"start":48,"end":62,"slot":"LOCATION"}]}
+{"text":"¿Hay temazcal a menos de 1 km de Parque Central?","spans":[{"start":5,"end":13,"slot":"CATEGORY"},{"start":25,"end":29,"slot":"RADIUS"},{"start":33,"end":47,"slot":"LOCATION"}]}
+{"text":"Busco temazcal parecido a La Estación.","spans":[{"start":6,"end":14,"slot":"CATEGORY"},{"start":26,"end":37,"slot":"REFERENCE"}]}
+{"text":"Busco taller de cerámica.","spans":[{"start":6,"end":24,"slot":"CATEGORY"}]}
+{"text":"Quiero tayer de ceramica pet friendly.","spans":[{"start":7,"end":24,"slot":"CATEGORY"},{"start":25,"end":37,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame taller de cerámica sin música fuerte cerca de Plaza del Sol.","spans":[{"start":13,"end":31,"slot":"CATEGORY"},{"start":36,"end":49,"slot":"EXCLUSION"},{"start":59,"end":72,"slot":"LOCATION"}]}
+{"text":"¿Hay tayer de ceramica a menos de 2 km de Plaza del Sol?","spans":[{"start":5,"end":22,"slot":"CATEGORY"},{"start":34,"end":38,"slot":"RADIUS"},{"start":42,"end":55,"slot":"LOCATION"}]}
+{"text":"Busco restaurante de comida libanesa.","spans":[{"start":6,"end":36,"slot":"CATEGORY"}]}
+{"text":"Quiero resturante libanés económico.","spans":[{"start":7,"end":25,"slot":"CATEGORY"},{"start":26,"end":35,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame restaurante de comida libanesa sin humo cerca de Universidad Autónoma.","spans":[{"start":13,"end":43,"slot":"CATEGORY"},{"start":48,"end":52,"slot":"EXCLUSION"},{"start":62,"end":82,"slot":"LOCATION"}]}
+{"text":"¿Hay resturante libanés a menos de 3 km de Universidad Autónoma?","spans":[{"start":5,"end":23,"slot":"CATEGORY"},{"start":35,"end":39,"slot":"RADIUS"},{"start":43,"end":63,"slot":"LOCATION"}]}
+{"text":"Busco parque para perros.","spans":[{"start":6,"end":24,"slot":"CATEGORY"}]}
+{"text":"Quiero parque para perros romántico.","spans":[{"start":7,"end":25,"slot":"CATEGORY"},{"start":26,"end":35,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame parque para perros sin alcohol cerca de Barrio de Guadalupe.","spans":[{"start":13,"end":31,"slot":"CATEGORY"},{"start":36,"end":43,"slot":"EXCLUSION"},{"start":53,"end":72,"slot":"LOCATION"}]}
+{"text":"¿Hay parque para perros a menos de 750 metros de Barrio de Guadalupe?","spans":[{"start":5,"end":23,"slot":"CATEGORY"},{"start":35,"end":45,"slot":"RADIUS"},{"start":49,"end":68,"slot":"LOCATION"}]}
+{"text":"Busco observatorio astronómico.","spans":[{"start":6,"end":30,"slot":"CATEGORY"}]}
+{"text":"Quiero observatorio astronomico con wifi.","spans":[{"start":7,"end":31,"slot":"CATEGORY"},{"start":32,"end":40,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame observatorio astronómico sin aglomeraciones cerca de Terminal de Autobuses.","spans":[{"start":13,"end":37,"slot":"CATEGORY"},{"start":42,"end":56,"slot":"EXCLUSION"},{"start":66,"end":87,"slot":"LOCATION"}]}
+{"text":"¿Hay observatorio astronomico a menos de 500 m de Terminal de Autobuses?","spans":[{"start":5,"end":29,"slot":"CATEGORY"},{"start":41,"end":46,"slot":"RADIUS"},{"start":50,"end":71,"slot":"LOCATION"}]}
+{"text":"No sé qué quiero, enséñame lugares.","spans":[]}
+{"text":"Uno como La Casona.","spans":[{"start":9,"end":18,"slot":"REFERENCE"}]}
+{"text":"Sin escaleras y sin demasiado ruido.","spans":[{"start":4,"end":13,"slot":"EXCLUSION"},{"start":20,"end":35,"slot":"EXCLUSION"}]}
+{"text":"Que acepte mascotas y tenga estacionamiento.","spans":[{"start":4,"end":19,"slot":"PREFERENCE"},{"start":28,"end":43,"slot":"PREFERENCE"}]}
+{"text":"Por la zona del Museo Regional.","spans":[{"start":16,"end":30,"slot":"LOCATION"}]}
+{"text":"Máximo a 5 kilómetros.","spans":[{"start":9,"end":21,"slot":"RADIUS"}]}
+{"text":"Parecido a Punto Cero alrededor de la Glorieta de la Paz.","spans":[{"start":11,"end":21,"slot":"REFERENCE"},{"start":38,"end":56,"slot":"LOCATION"}]}
+{"text":"Quiero conocer algo nuevo hoy.","spans":[]}

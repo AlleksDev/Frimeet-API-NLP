@@ -1,0 +1,132 @@
+{"text":"Busco donas artesanales.","spans":[{"start":6,"end":23,"slot":"CATEGORY"}]}
+{"text":"Quiero donas artensanales tranquilo.","spans":[{"start":7,"end":25,"slot":"CATEGORY"},{"start":26,"end":35,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame donas artesanales sin ruido cerca de Centro Histórico.","spans":[{"start":13,"end":30,"slot":"CATEGORY"},{"start":35,"end":40,"slot":"EXCLUSION"},{"start":50,"end":66,"slot":"LOCATION"}]}
+{"text":"¿Hay donas artensanales a menos de 500 m de Centro Histórico?","spans":[{"start":5,"end":23,"slot":"CATEGORY"},{"start":35,"end":40,"slot":"RADIUS"},{"start":44,"end":60,"slot":"LOCATION"}]}
+{"text":"Busco donas artensanales parecido a Casa Azul.","spans":[{"start":6,"end":24,"slot":"CATEGORY"},{"start":36,"end":45,"slot":"REFERENCE"}]}
+{"text":"Busco bubble tea.","spans":[{"start":6,"end":16,"slot":"CATEGORY"}]}
+{"text":"Quiero buble tea con terraza.","spans":[{"start":7,"end":16,"slot":"CATEGORY"},{"start":17,"end":28,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame bubble tea sin filas largas cerca de Parque Central.","spans":[{"start":13,"end":23,"slot":"CATEGORY"},{"start":28,"end":40,"slot":"EXCLUSION"},{"start":50,"end":64,"slot":"LOCATION"}]}
+{"text":"¿Hay buble tea a menos de 1 km de Parque Central?","spans":[{"start":5,"end":14,"slot":"CATEGORY"},{"start":26,"end":30,"slot":"RADIUS"},{"start":34,"end":48,"slot":"LOCATION"}]}
+{"text":"Busco buble tea parecido a La Estación.","spans":[{"start":6,"end":15,"slot":"CATEGORY"},{"start":27,"end":38,"slot":"REFERENCE"}]}
+{"text":"Busco salón de té.","spans":[{"start":6,"end":17,"slot":"CATEGORY"}]}
+{"text":"Quiero salon de te pet friendly.","spans":[{"start":7,"end":18,"slot":"CATEGORY"},{"start":19,"end":31,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame salón de té sin música fuerte cerca de Plaza del Sol.","spans":[{"start":13,"end":24,"slot":"CATEGORY"},{"start":29,"end":42,"slot":"EXCLUSION"},{"start":52,"end":65,"slot":"LOCATION"}]}
+{"text":"¿Hay salon de te a menos de 2 km de Plaza del Sol?","spans":[{"start":5,"end":16,"slot":"CATEGORY"},{"start":28,"end":32,"slot":"RADIUS"},{"start":36,"end":49,"slot":"LOCATION"}]}
+{"text":"Busco salon de te parecido a Punto Cero.","spans":[{"start":6,"end":17,"slot":"CATEGORY"},{"start":29,"end":39,"slot":"REFERENCE"}]}
+{"text":"Busco tacos de birria.","spans":[{"start":6,"end":21,"slot":"CATEGORY"}]}
+{"text":"Quiero tacos d birria económico.","spans":[{"start":7,"end":21,"slot":"CATEGORY"},{"start":22,"end":31,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame tacos de birria sin humo cerca de Universidad Autónoma.","spans":[{"start":13,"end":28,"slot":"CATEGORY"},{"start":33,"end":37,"slot":"EXCLUSION"},{"start":47,"end":67,"slot":"LOCATION"}]}
+{"text":"¿Hay tacos d birria a menos de 3 km de Universidad Autónoma?","spans":[{"start":5,"end":19,"slot":"CATEGORY"},{"start":31,"end":35,"slot":"RADIUS"},{"start":39,"end":59,"slot":"LOCATION"}]}
+{"text":"Busco tacos d birria parecido a El Farol.","spans":[{"start":6,"end":20,"slot":"CATEGORY"},{"start":32,"end":40,"slot":"REFERENCE"}]}
+{"text":"Busco ramen.","spans":[{"start":6,"end":11,"slot":"CATEGORY"}]}
+{"text":"Quiero ramen romántico.","spans":[{"start":7,"end":12,"slot":"CATEGORY"},{"start":13,"end":22,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame ramen sin alcohol cerca de Barrio de Guadalupe.","spans":[{"start":13,"end":18,"slot":"CATEGORY"},{"start":23,"end":30,"slot":"EXCLUSION"},{"start":40,"end":59,"slot":"LOCATION"}]}
+{"text":"¿Hay ramen a menos de 750 metros de Barrio de Guadalupe?","spans":[{"start":5,"end":10,"slot":"CATEGORY"},{"start":22,"end":32,"slot":"RADIUS"},{"start":36,"end":55,"slot":"LOCATION"}]}
+{"text":"Busco ramen parecido a Café Nómada.","spans":[{"start":6,"end":11,"slot":"CATEGORY"},{"start":23,"end":34,"slot":"REFERENCE"}]}
+{"text":"Busco comida coreana.","spans":[{"start":6,"end":20,"slot":"CATEGORY"}]}
+{"text":"Quiero comida coreana con wifi.","spans":[{"start":7,"end":21,"slot":"CATEGORY"},{"start":22,"end":30,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame comida coreana sin aglomeraciones cerca de Terminal de Autobuses.","spans":[{"start":13,"end":27,"slot":"CATEGORY"},{"start":32,"end":46,"slot":"EXCLUSION"},{"start":56,"end":77,"slot":"LOCATION"}]}
+{"text":"¿Hay comida coreana a menos de 500 m de Terminal de Autobuses?","spans":[{"start":5,"end":19,"slot":"CATEGORY"},{"start":31,"end":36,"slot":"RADIUS"},{"start":40,"end":61,"slot":"LOCATION"}]}
+{"text":"Busco comida coreana parecido a La Casona.","spans":[{"start":6,"end":20,"slot":"CATEGORY"},{"start":32,"end":41,"slot":"REFERENCE"}]}
+{"text":"Busco restaurante vegano.","spans":[{"start":6,"end":24,"slot":"CATEGORY"}]}
+{"text":"Quiero restaurante vegano familiar.","spans":[{"start":7,"end":25,"slot":"CATEGORY"},{"start":26,"end":34,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame restaurante vegano sin ruido cerca de Centro Histórico.","spans":[{"start":13,"end":31,"slot":"CATEGORY"},{"start":36,"end":41,"slot":"EXCLUSION"},{"start":51,"end":67,"slot":"LOCATION"}]}
+{"text":"¿Hay restaurante vegano a menos de 1 km de Centro Histórico?","spans":[{"start":5,"end":23,"slot":"CATEGORY"},{"start":35,"end":39,"slot":"RADIUS"},{"start":43,"end":59,"slot":"LOCATION"}]}
+{"text":"Busco restaurante vegano parecido a Patio Central.","spans":[{"start":6,"end":24,"slot":"CATEGORY"},{"start":36,"end":49,"slot":"REFERENCE"}]}
+{"text":"Busco cafetería de libros.","spans":[{"start":6,"end":25,"slot":"CATEGORY"}]}
+{"text":"Quiero cafetría con libros al aire libre.","spans":[{"start":7,"end":26,"slot":"CATEGORY"},{"start":27,"end":40,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame cafetería de libros sin filas largas cerca de Parque Central.","spans":[{"start":13,"end":32,"slot":"CATEGORY"},{"start":37,"end":49,"slot":"EXCLUSION"},{"start":59,"end":73,"slot":"LOCATION"}]}
+{"text":"¿Hay cafetría con libros a menos de 2 km de Parque Central?","spans":[{"start":5,"end":24,"slot":"CATEGORY"},{"start":36,"end":40,"slot":"RADIUS"},{"start":44,"end":58,"slot":"LOCATION"}]}
+{"text":"Busco cafetría con libros parecido a Foro Once.","spans":[{"start":6,"end":25,"slot":"CATEGORY"},{"start":37,"end":46,"slot":"REFERENCE"}]}
+{"text":"Busco espacio de coworking.","spans":[{"start":6,"end":26,"slot":"CATEGORY"}]}
+{"text":"Quiero espacio de co-working accesible.","spans":[{"start":7,"end":28,"slot":"CATEGORY"},{"start":29,"end":38,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame espacio de coworking sin música fuerte cerca de Plaza del Sol.","spans":[{"start":13,"end":33,"slot":"CATEGORY"},{"start":38,"end":51,"slot":"EXCLUSION"},{"start":61,"end":74,"slot":"LOCATION"}]}
+{"text":"¿Hay espacio de co-working a menos de 3 km de Plaza del Sol?","spans":[{"start":5,"end":26,"slot":"CATEGORY"},{"start":38,"end":42,"slot":"RADIUS"},{"start":46,"end":59,"slot":"LOCATION"}]}
+{"text":"Busco espacio de co-working parecido a Casa Azul.","spans":[{"start":6,"end":27,"slot":"CATEGORY"},{"start":39,"end":48,"slot":"REFERENCE"}]}
+{"text":"Busco jardín botánico.","spans":[{"start":6,"end":21,"slot":"CATEGORY"}]}
+{"text":"Quiero jardin botanico abierto de noche.","spans":[{"start":7,"end":22,"slot":"CATEGORY"},{"start":23,"end":39,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame jardín botánico sin humo cerca de Universidad Autónoma.","spans":[{"start":13,"end":28,"slot":"CATEGORY"},{"start":33,"end":37,"slot":"EXCLUSION"},{"start":47,"end":67,"slot":"LOCATION"}]}
+{"text":"¿Hay jardin botanico a menos de 750 metros de Universidad Autónoma?","spans":[{"start":5,"end":20,"slot":"CATEGORY"},{"start":32,"end":42,"slot":"RADIUS"},{"start":46,"end":66,"slot":"LOCATION"}]}
+{"text":"Busco jardin botanico parecido a La Estación.","spans":[{"start":6,"end":21,"slot":"CATEGORY"},{"start":33,"end":44,"slot":"REFERENCE"}]}
+{"text":"Busco mirador panorámico.","spans":[{"start":6,"end":24,"slot":"CATEGORY"}]}
+{"text":"Quiero mirador panorámico tranquilo.","spans":[{"start":7,"end":25,"slot":"CATEGORY"},{"start":26,"end":35,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame mirador panorámico sin alcohol cerca de Barrio de Guadalupe.","spans":[{"start":13,"end":31,"slot":"CATEGORY"},{"start":36,"end":43,"slot":"EXCLUSION"},{"start":53,"end":72,"slot":"LOCATION"}]}
+{"text":"¿Hay mirador panorámico a menos de 500 m de Barrio de Guadalupe?","spans":[{"start":5,"end":23,"slot":"CATEGORY"},{"start":35,"end":40,"slot":"RADIUS"},{"start":44,"end":63,"slot":"LOCATION"}]}
+{"text":"Busco mirador panorámico parecido a Punto Cero.","spans":[{"start":6,"end":24,"slot":"CATEGORY"},{"start":36,"end":46,"slot":"REFERENCE"}]}
+{"text":"Busco sendero natural.","spans":[{"start":6,"end":21,"slot":"CATEGORY"}]}
+{"text":"Quiero sendero natural con terraza.","spans":[{"start":7,"end":22,"slot":"CATEGORY"},{"start":23,"end":34,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame sendero natural sin aglomeraciones cerca de Terminal de Autobuses.","spans":[{"start":13,"end":28,"slot":"CATEGORY"},{"start":33,"end":47,"slot":"EXCLUSION"},{"start":57,"end":78,"slot":"LOCATION"}]}
+{"text":"¿Hay sendero natural a menos de 1 km de Terminal de Autobuses?","spans":[{"start":5,"end":20,"slot":"CATEGORY"},{"start":32,"end":36,"slot":"RADIUS"},{"start":40,"end":61,"slot":"LOCATION"}]}
+{"text":"Busco sendero natural parecido a El Farol.","spans":[{"start":6,"end":21,"slot":"CATEGORY"},{"start":33,"end":41,"slot":"REFERENCE"}]}
+{"text":"Busco museo de ciencia.","spans":[{"start":6,"end":22,"slot":"CATEGORY"}]}
+{"text":"Quiero museo d ciencia pet friendly.","spans":[{"start":7,"end":22,"slot":"CATEGORY"},{"start":23,"end":35,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame museo de ciencia sin ruido cerca de Centro Histórico.","spans":[{"start":13,"end":29,"slot":"CATEGORY"},{"start":34,"end":39,"slot":"EXCLUSION"},{"start":49,"end":65,"slot":"LOCATION"}]}
+{"text":"¿Hay museo d ciencia a menos de 2 km de Centro Histórico?","spans":[{"start":5,"end":20,"slot":"CATEGORY"},{"start":32,"end":36,"slot":"RADIUS"},{"start":40,"end":56,"slot":"LOCATION"}]}
+{"text":"Busco galería de arte.","spans":[{"start":6,"end":21,"slot":"CATEGORY"}]}
+{"text":"Quiero galería de arte económico.","spans":[{"start":7,"end":22,"slot":"CATEGORY"},{"start":23,"end":32,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame galería de arte sin filas largas cerca de Parque Central.","spans":[{"start":13,"end":28,"slot":"CATEGORY"},{"start":33,"end":45,"slot":"EXCLUSION"},{"start":55,"end":69,"slot":"LOCATION"}]}
+{"text":"¿Hay galería de arte a menos de 3 km de Parque Central?","spans":[{"start":5,"end":20,"slot":"CATEGORY"},{"start":32,"end":36,"slot":"RADIUS"},{"start":40,"end":54,"slot":"LOCATION"}]}
+{"text":"Busco biblioteca pública.","spans":[{"start":6,"end":24,"slot":"CATEGORY"}]}
+{"text":"Quiero biblioteca pública romántico.","spans":[{"start":7,"end":25,"slot":"CATEGORY"},{"start":26,"end":35,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame biblioteca pública sin música fuerte cerca de Plaza del Sol.","spans":[{"start":13,"end":31,"slot":"CATEGORY"},{"start":36,"end":49,"slot":"EXCLUSION"},{"start":59,"end":72,"slot":"LOCATION"}]}
+{"text":"¿Hay biblioteca pública a menos de 750 metros de Plaza del Sol?","spans":[{"start":5,"end":23,"slot":"CATEGORY"},{"start":35,"end":45,"slot":"RADIUS"},{"start":49,"end":62,"slot":"LOCATION"}]}
+{"text":"Busco cine independiente.","spans":[{"start":6,"end":24,"slot":"CATEGORY"}]}
+{"text":"Quiero cine independiente con wifi.","spans":[{"start":7,"end":25,"slot":"CATEGORY"},{"start":26,"end":34,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame cine independiente sin humo cerca de Universidad Autónoma.","spans":[{"start":13,"end":31,"slot":"CATEGORY"},{"start":36,"end":40,"slot":"EXCLUSION"},{"start":50,"end":70,"slot":"LOCATION"}]}
+{"text":"¿Hay cine independiente a menos de 500 m de Universidad Autónoma?","spans":[{"start":5,"end":23,"slot":"CATEGORY"},{"start":35,"end":40,"slot":"RADIUS"},{"start":44,"end":64,"slot":"LOCATION"}]}
+{"text":"Busco café de juegos de mesa.","spans":[{"start":6,"end":28,"slot":"CATEGORY"}]}
+{"text":"Quiero cafe con juegos de mesa familiar.","spans":[{"start":7,"end":30,"slot":"CATEGORY"},{"start":31,"end":39,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame café de juegos de mesa sin alcohol cerca de Barrio de Guadalupe.","spans":[{"start":13,"end":35,"slot":"CATEGORY"},{"start":40,"end":47,"slot":"EXCLUSION"},{"start":57,"end":76,"slot":"LOCATION"}]}
+{"text":"¿Hay cafe con juegos de mesa a menos de 1 km de Barrio de Guadalupe?","spans":[{"start":5,"end":28,"slot":"CATEGORY"},{"start":40,"end":44,"slot":"RADIUS"},{"start":48,"end":67,"slot":"LOCATION"}]}
+{"text":"Busco arcade.","spans":[{"start":6,"end":12,"slot":"CATEGORY"}]}
+{"text":"Quiero arcade al aire libre.","spans":[{"start":7,"end":13,"slot":"CATEGORY"},{"start":14,"end":27,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame arcade sin aglomeraciones cerca de Terminal de Autobuses.","spans":[{"start":13,"end":19,"slot":"CATEGORY"},{"start":24,"end":38,"slot":"EXCLUSION"},{"start":48,"end":69,"slot":"LOCATION"}]}
+{"text":"¿Hay arcade a menos de 2 km de Terminal de Autobuses?","spans":[{"start":5,"end":11,"slot":"CATEGORY"},{"start":23,"end":27,"slot":"RADIUS"},{"start":31,"end":52,"slot":"LOCATION"}]}
+{"text":"Busco karaoke.","spans":[{"start":6,"end":13,"slot":"CATEGORY"}]}
+{"text":"Quiero karaoke accesible.","spans":[{"start":7,"end":14,"slot":"CATEGORY"},{"start":15,"end":24,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame karaoke sin ruido cerca de Centro Histórico.","spans":[{"start":13,"end":20,"slot":"CATEGORY"},{"start":25,"end":30,"slot":"EXCLUSION"},{"start":40,"end":56,"slot":"LOCATION"}]}
+{"text":"¿Hay karaoke a menos de 3 km de Centro Histórico?","spans":[{"start":5,"end":12,"slot":"CATEGORY"},{"start":24,"end":28,"slot":"RADIUS"},{"start":32,"end":48,"slot":"LOCATION"}]}
+{"text":"Busco muro de escalada.","spans":[{"start":6,"end":22,"slot":"CATEGORY"}]}
+{"text":"Quiero muro de escalada abierto de noche.","spans":[{"start":7,"end":23,"slot":"CATEGORY"},{"start":24,"end":40,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame muro de escalada sin filas largas cerca de Parque Central.","spans":[{"start":13,"end":29,"slot":"CATEGORY"},{"start":34,"end":46,"slot":"EXCLUSION"},{"start":56,"end":70,"slot":"LOCATION"}]}
+{"text":"¿Hay muro de escalada a menos de 750 metros de Parque Central?","spans":[{"start":5,"end":21,"slot":"CATEGORY"},{"start":33,"end":43,"slot":"RADIUS"},{"start":47,"end":61,"slot":"LOCATION"}]}
+{"text":"Busco estudio de yoga.","spans":[{"start":6,"end":21,"slot":"CATEGORY"}]}
+{"text":"Quiero estudio de yoga tranquilo.","spans":[{"start":7,"end":22,"slot":"CATEGORY"},{"start":23,"end":32,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame estudio de yoga sin música fuerte cerca de Plaza del Sol.","spans":[{"start":13,"end":28,"slot":"CATEGORY"},{"start":33,"end":46,"slot":"EXCLUSION"},{"start":56,"end":69,"slot":"LOCATION"}]}
+{"text":"¿Hay estudio de yoga a menos de 500 m de Plaza del Sol?","spans":[{"start":5,"end":20,"slot":"CATEGORY"},{"start":32,"end":37,"slot":"RADIUS"},{"start":41,"end":54,"slot":"LOCATION"}]}
+{"text":"Busco mercado artesanal.","spans":[{"start":6,"end":23,"slot":"CATEGORY"}]}
+{"text":"Quiero mercado artesanal con terraza.","spans":[{"start":7,"end":24,"slot":"CATEGORY"},{"start":25,"end":36,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame mercado artesanal sin humo cerca de Universidad Autónoma.","spans":[{"start":13,"end":30,"slot":"CATEGORY"},{"start":35,"end":39,"slot":"EXCLUSION"},{"start":49,"end":69,"slot":"LOCATION"}]}
+{"text":"¿Hay mercado artesanal a menos de 1 km de Universidad Autónoma?","spans":[{"start":5,"end":22,"slot":"CATEGORY"},{"start":34,"end":38,"slot":"RADIUS"},{"start":42,"end":62,"slot":"LOCATION"}]}
+{"text":"Busco heladería italiana.","spans":[{"start":6,"end":24,"slot":"CATEGORY"}]}
+{"text":"Quiero eladería italiana pet friendly.","spans":[{"start":7,"end":24,"slot":"CATEGORY"},{"start":25,"end":37,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame heladería italiana sin alcohol cerca de Barrio de Guadalupe.","spans":[{"start":13,"end":31,"slot":"CATEGORY"},{"start":36,"end":43,"slot":"EXCLUSION"},{"start":53,"end":72,"slot":"LOCATION"}]}
+{"text":"¿Hay eladería italiana a menos de 2 km de Barrio de Guadalupe?","spans":[{"start":5,"end":22,"slot":"CATEGORY"},{"start":34,"end":38,"slot":"RADIUS"},{"start":42,"end":61,"slot":"LOCATION"}]}
+{"text":"Busco hostal juvenil.","spans":[{"start":6,"end":20,"slot":"CATEGORY"}]}
+{"text":"Quiero hostal juvenil económico.","spans":[{"start":7,"end":21,"slot":"CATEGORY"},{"start":22,"end":31,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame hostal juvenil sin aglomeraciones cerca de Terminal de Autobuses.","spans":[{"start":13,"end":27,"slot":"CATEGORY"},{"start":32,"end":46,"slot":"EXCLUSION"},{"start":56,"end":77,"slot":"LOCATION"}]}
+{"text":"¿Hay hostal juvenil a menos de 3 km de Terminal de Autobuses?","spans":[{"start":5,"end":19,"slot":"CATEGORY"},{"start":31,"end":35,"slot":"RADIUS"},{"start":39,"end":60,"slot":"LOCATION"}]}
+{"text":"Busco bar con música en vivo.","spans":[{"start":6,"end":28,"slot":"CATEGORY"}]}
+{"text":"Quiero bar con música en vivo romántico.","spans":[{"start":7,"end":29,"slot":"CATEGORY"},{"start":30,"end":39,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame bar con música en vivo sin ruido cerca de Centro Histórico.","spans":[{"start":13,"end":35,"slot":"CATEGORY"},{"start":40,"end":45,"slot":"EXCLUSION"},{"start":55,"end":71,"slot":"LOCATION"}]}
+{"text":"¿Hay bar con música en vivo a menos de 750 metros de Centro Histórico?","spans":[{"start":5,"end":27,"slot":"CATEGORY"},{"start":39,"end":49,"slot":"RADIUS"},{"start":53,"end":69,"slot":"LOCATION"}]}
+{"text":"Busco cafetería de especialidad.","spans":[{"start":6,"end":31,"slot":"CATEGORY"}]}
+{"text":"Quiero cafeteria de especialidad con wifi.","spans":[{"start":7,"end":32,"slot":"CATEGORY"},{"start":33,"end":41,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame cafetería de especialidad sin filas largas cerca de Parque Central.","spans":[{"start":13,"end":38,"slot":"CATEGORY"},{"start":43,"end":55,"slot":"EXCLUSION"},{"start":65,"end":79,"slot":"LOCATION"}]}
+{"text":"¿Hay cafeteria de especialidad a menos de 500 m de Parque Central?","spans":[{"start":5,"end":30,"slot":"CATEGORY"},{"start":42,"end":47,"slot":"RADIUS"},{"start":51,"end":65,"slot":"LOCATION"}]}
+{"text":"Busco marisquería.","spans":[{"start":6,"end":17,"slot":"CATEGORY"}]}
+{"text":"Quiero marisquería familiar.","spans":[{"start":7,"end":18,"slot":"CATEGORY"},{"start":19,"end":27,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame marisquería sin música fuerte cerca de Plaza del Sol.","spans":[{"start":13,"end":24,"slot":"CATEGORY"},{"start":29,"end":42,"slot":"EXCLUSION"},{"start":52,"end":65,"slot":"LOCATION"}]}
+{"text":"¿Hay marisquería a menos de 1 km de Plaza del Sol?","spans":[{"start":5,"end":16,"slot":"CATEGORY"},{"start":28,"end":32,"slot":"RADIUS"},{"start":36,"end":49,"slot":"LOCATION"}]}
+{"text":"Busco desayunos chiapanecos.","spans":[{"start":6,"end":27,"slot":"CATEGORY"}]}
+{"text":"Quiero desayunos chiapanecos al aire libre.","spans":[{"start":7,"end":28,"slot":"CATEGORY"},{"start":29,"end":42,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame desayunos chiapanecos sin humo cerca de Universidad Autónoma.","spans":[{"start":13,"end":34,"slot":"CATEGORY"},{"start":39,"end":43,"slot":"EXCLUSION"},{"start":53,"end":73,"slot":"LOCATION"}]}
+{"text":"¿Hay desayunos chiapanecos a menos de 2 km de Universidad Autónoma?","spans":[{"start":5,"end":26,"slot":"CATEGORY"},{"start":38,"end":42,"slot":"RADIUS"},{"start":46,"end":66,"slot":"LOCATION"}]}
+{"text":"Dame algunas opciones para salir.","spans":[]}
+{"text":"Quiero algo parecido a Casa Azul.","spans":[{"start":23,"end":32,"slot":"REFERENCE"}]}
+{"text":"Algo como Café Nómada pero sin música.","spans":[{"start":10,"end":21,"slot":"REFERENCE"},{"start":31,"end":37,"slot":"EXCLUSION"}]}
+{"text":"Que sea silencioso y con wifi.","spans":[{"start":8,"end":18,"slot":"PREFERENCE"},{"start":21,"end":29,"slot":"PREFERENCE"}]}
+{"text":"No quiero lugares con humo.","spans":[{"start":22,"end":26,"slot":"EXCLUSION"}]}
+{"text":"Cerca del Parque Bicentenario.","spans":[{"start":10,"end":29,"slot":"LOCATION"}]}
+{"text":"A no más de 3 km.","spans":[{"start":12,"end":16,"slot":"RADIUS"}]}
+{"text":"Parecido a La Estación cerca de Plaza Ámbar.","spans":[{"start":11,"end":22,"slot":"REFERENCE"},{"start":32,"end":43,"slot":"LOCATION"}]}
