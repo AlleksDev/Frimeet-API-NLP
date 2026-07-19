@@ -1,0 +1,34 @@
+{"text":"Busco panadería sin gluten.","spans":[{"start":6,"end":26,"slot":"CATEGORY"}]}
+{"text":"Quiero panaderia sin glúten tranquilo.","spans":[{"start":7,"end":27,"slot":"CATEGORY"},{"start":28,"end":37,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame panadería sin gluten sin ruido cerca de Centro Histórico.","spans":[{"start":13,"end":33,"slot":"CATEGORY"},{"start":38,"end":43,"slot":"EXCLUSION"},{"start":53,"end":69,"slot":"LOCATION"}]}
+{"text":"¿Hay panaderia sin glúten a menos de 500 m de Centro Histórico?","spans":[{"start":5,"end":25,"slot":"CATEGORY"},{"start":37,"end":42,"slot":"RADIUS"},{"start":46,"end":62,"slot":"LOCATION"}]}
+{"text":"Busco panaderia sin glúten parecido a Casa Azul.","spans":[{"start":6,"end":26,"slot":"CATEGORY"},{"start":38,"end":47,"slot":"REFERENCE"}]}
+{"text":"Busco restaurante etíope.","spans":[{"start":6,"end":24,"slot":"CATEGORY"}]}
+{"text":"Quiero resturante etíope con terraza.","spans":[{"start":7,"end":24,"slot":"CATEGORY"},{"start":25,"end":36,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame restaurante etíope sin filas largas cerca de Parque Central.","spans":[{"start":13,"end":31,"slot":"CATEGORY"},{"start":36,"end":48,"slot":"EXCLUSION"},{"start":58,"end":72,"slot":"LOCATION"}]}
+{"text":"¿Hay resturante etíope a menos de 1 km de Parque Central?","spans":[{"start":5,"end":22,"slot":"CATEGORY"},{"start":34,"end":38,"slot":"RADIUS"},{"start":42,"end":56,"slot":"LOCATION"}]}
+{"text":"Busco resturante etíope parecido a La Estación.","spans":[{"start":6,"end":23,"slot":"CATEGORY"},{"start":35,"end":46,"slot":"REFERENCE"}]}
+{"text":"Busco casa de jazz.","spans":[{"start":6,"end":18,"slot":"CATEGORY"}]}
+{"text":"Quiero casa de jazz pet friendly.","spans":[{"start":7,"end":19,"slot":"CATEGORY"},{"start":20,"end":32,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame casa de jazz sin música fuerte cerca de Plaza del Sol.","spans":[{"start":13,"end":25,"slot":"CATEGORY"},{"start":30,"end":43,"slot":"EXCLUSION"},{"start":53,"end":66,"slot":"LOCATION"}]}
+{"text":"¿Hay casa de jazz a menos de 2 km de Plaza del Sol?","spans":[{"start":5,"end":17,"slot":"CATEGORY"},{"start":29,"end":33,"slot":"RADIUS"},{"start":37,"end":50,"slot":"LOCATION"}]}
+{"text":"Busco pista de patinaje.","spans":[{"start":6,"end":23,"slot":"CATEGORY"}]}
+{"text":"Quiero pista para patinar económico.","spans":[{"start":7,"end":25,"slot":"CATEGORY"},{"start":26,"end":35,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame pista de patinaje sin humo cerca de Universidad Autónoma.","spans":[{"start":13,"end":30,"slot":"CATEGORY"},{"start":35,"end":39,"slot":"EXCLUSION"},{"start":49,"end":69,"slot":"LOCATION"}]}
+{"text":"¿Hay pista para patinar a menos de 3 km de Universidad Autónoma?","spans":[{"start":5,"end":23,"slot":"CATEGORY"},{"start":35,"end":39,"slot":"RADIUS"},{"start":43,"end":63,"slot":"LOCATION"}]}
+{"text":"Busco chocolatería.","spans":[{"start":6,"end":18,"slot":"CATEGORY"}]}
+{"text":"Quiero chocolatería romántico.","spans":[{"start":7,"end":19,"slot":"CATEGORY"},{"start":20,"end":29,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame chocolatería sin alcohol cerca de Barrio de Guadalupe.","spans":[{"start":13,"end":25,"slot":"CATEGORY"},{"start":30,"end":37,"slot":"EXCLUSION"},{"start":47,"end":66,"slot":"LOCATION"}]}
+{"text":"¿Hay chocolatería a menos de 750 metros de Barrio de Guadalupe?","spans":[{"start":5,"end":17,"slot":"CATEGORY"},{"start":29,"end":39,"slot":"RADIUS"},{"start":43,"end":62,"slot":"LOCATION"}]}
+{"text":"Busco vivero de orquídeas.","spans":[{"start":6,"end":25,"slot":"CATEGORY"}]}
+{"text":"Quiero vivero de orquídeas con wifi.","spans":[{"start":7,"end":26,"slot":"CATEGORY"},{"start":27,"end":35,"slot":"PREFERENCE"}]}
+{"text":"Recomiéndame vivero de orquídeas sin aglomeraciones cerca de Terminal de Autobuses.","spans":[{"start":13,"end":32,"slot":"CATEGORY"},{"start":37,"end":51,"slot":"EXCLUSION"},{"start":61,"end":82,"slot":"LOCATION"}]}
+{"text":"¿Hay vivero de orquídeas a menos de 500 m de Terminal de Autobuses?","spans":[{"start":5,"end":24,"slot":"CATEGORY"},{"start":36,"end":41,"slot":"RADIUS"},{"start":45,"end":66,"slot":"LOCATION"}]}
+{"text":"Sorpréndeme con algún lugar distinto.","spans":[]}
+{"text":"Algo similar a Casa Frida.","spans":[{"start":15,"end":25,"slot":"REFERENCE"}]}
+{"text":"Sin niños y sin música alta.","spans":[{"start":4,"end":9,"slot":"EXCLUSION"},{"start":16,"end":27,"slot":"EXCLUSION"}]}
+{"text":"Que tenga enchufes y sea silencioso.","spans":[{"start":10,"end":18,"slot":"PREFERENCE"},{"start":25,"end":35,"slot":"PREFERENCE"}]}
+{"text":"Alrededor del Teatro de la Ciudad.","spans":[{"start":14,"end":33,"slot":"LOCATION"}]}
+{"text":"En un radio de 1200 metros.","spans":[{"start":15,"end":26,"slot":"RADIUS"}]}
+{"text":"Como El Farol pero cerca del Barrio Antiguo.","spans":[{"start":5,"end":13,"slot":"REFERENCE"},{"start":29,"end":43,"slot":"LOCATION"}]}
+{"text":"Busco algo para pasar la tarde.","spans":[]}

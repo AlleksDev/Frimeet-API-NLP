@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "license": "Proprietary - Frimeet internal training data",
+  "provenance": "Synthetic bootstrap corpus; contains no production user data",
+  "intent": {
+    "train": {
+      "path": "data/training/places_intent_v1/train.jsonl",
+      "records": 132,
+      "sha256": "ee373dd589efc9ba1c3a53875f53d121dc1c2cee1bd97099ea63106786066386"
+    },
+    "validation": {
+      "path": "data/training/places_intent_v1/validation.jsonl",
+      "records": 34,
+      "sha256": "a539f559c9ae510d211d51f7f3bbade66d55622692818763781a1417eae610a3"
+    },
+    "test": {
+      "path": "data/training/places_intent_v1/test.jsonl",
+      "records": 34,
+      "sha256": "1608ce0913b6d1e54a53a8b1fae63064b9356d9578d35903868ab1bd0352a614"
+    }
+  },
+  "retrieval": {
+    "train": {
+      "path": "data/training/places_retrieval_v1/train.jsonl",
+      "records": 160,
+      "sha256": "298fd5ac83e68a28aa49270ce4dbc178433c82dcb74f3278a8e24534ab58cd5b"
+    },
+    "validation": {
+      "path": "data/training/places_retrieval_v1/validation.jsonl",
+      "records": 20,
+      "sha256": "418c93e09aae4783354287a6976517d132b2dd461879a73cc408ae9f0def066e"
+    },
+    "test": {
+      "path": "data/training/places_retrieval_v1/test.jsonl",
+      "records": 20,
+      "sha256": "010036e21b1515dd262728064259a4b526c8f36058ba6e33b026ba89fb103408"
+    }
+  }
+}
