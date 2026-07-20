@@ -122,6 +122,7 @@ class IntentAlternative:
     key: str
     description: str
     confidence: float
+    category_values: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -224,6 +225,7 @@ class ParsedPlaceChatIntent:
     alternatives: tuple[IntentAlternative, ...] = ()
     unresolved: tuple[str, ...] = ()
     clarification_message: str | None = None
+    response_message: str | None = None
     raw_category_phrase: str | None = None
     intent_model_version: str = "deterministic-open-v2"
 

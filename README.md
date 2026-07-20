@@ -205,6 +205,14 @@ Las ambiguedades que cambiarian los resultados devuelven `action=clarification` 
 `state_patch` con `pending_clarification`; el siguiente turno puede resolverlo con frases
 como "la primera opcion" o "la segunda, cerca de mi".
 
+Los turnos puramente sociales (`hola`, `ola`, `gracias`, despedidas y confirmaciones)
+se responden sin ejecutar clasificacion, filtro geografico ni retrieval. Un saludo que
+tambien contiene una busqueda, por ejemplo `hola, recomiendame una cafeteria`, conserva
+la intencion de lugares. Las hipotesis de una aclaracion solo se muestran cuando superan
+el umbral semantico y cuentan con candidatos locales suficientes; sus IDs siguen siendo
+tecnicos, pero sus etiquetas fallback son legibles y la localizacion final pertenece a
+la API principal.
+
 El chat no exige que el usuario nombre siempre una categoria. Puede habilitar un BERT
 fine-tuneado de token classification para extraer valores abiertos de categoria,
 preferencia, exclusion, ubicacion, referencia y radio. Esos textos se alinean despues
@@ -221,6 +229,16 @@ candidatos tecnicos y `content_score`; el GPS se aplica como filtro explicito de
 del ranking cuando el proveedor de lugares cercanos esta configurado. El flag inicial es
 `PLACES_CHAT_V2_ENABLED=false` y debe activarse despues de desplegar en Go tanto el proxy
 de chat como `/api/v1/internal/places/resolve-anchor`.
+
+Un radio implicito inicia con `PLACES_CHAT_DEFAULT_RADIUS_METERS` y, si no produce
+lugares o evidencia de la categoria, puede ampliarse hasta
+`PLACES_CHAT_MAX_AUTO_RADIUS_METERS`. Un radio escrito por el usuario nunca se amplia.
+El radio efectivo queda en `location_directive.radius_meters`; los `place_ids` usados
+para cada consulta son transitorios y no se persisten en `state_patch`.
+
+Los ajustes que pertenecen a otros repositorios se documentan en
+`docs/cambios_api_principal_chat_lugares.md` y
+`docs/cambios_app_movil_chat_lugares.md`; no se implementan desde este servicio.
 
 ## SQL RDS
 

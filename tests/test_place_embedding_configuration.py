@@ -214,6 +214,29 @@ def test_place_chat_intent_provider_defaults_to_deterministic() -> None:
     assert settings.places_chat_bert_model_path is None
 
 
+def test_place_chat_auto_radius_is_configurable_and_bounded() -> None:
+    settings = Settings(
+        _env_file=None,
+        ENV="local",
+        PLACES_CHAT_DEFAULT_RADIUS_METERS=4_000,
+        PLACES_CHAT_MAX_AUTO_RADIUS_METERS=20_000,
+    )
+
+    assert settings.places_chat_default_radius_meters == 4_000
+    assert settings.places_chat_max_auto_radius_meters == 20_000
+
+    with pytest.raises(
+        ValidationError,
+        match="PLACES_CHAT_MAX_AUTO_RADIUS_METERS",
+    ):
+        Settings(
+            _env_file=None,
+            ENV="local",
+            PLACES_CHAT_DEFAULT_RADIUS_METERS=10_000,
+            PLACES_CHAT_MAX_AUTO_RADIUS_METERS=5_000,
+        )
+
+
 def test_place_chat_bert_provider_is_explicit_and_validated() -> None:
     settings = Settings(
         _env_file=None,

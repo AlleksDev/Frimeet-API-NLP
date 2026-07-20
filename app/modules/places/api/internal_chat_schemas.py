@@ -333,5 +333,12 @@ def internal_chat_result_to_schema(
             "category_source": result.category_source,
             "raw_category_phrase": result.raw_category_phrase,
             "intent_model_version": result.intent_model_version,
+            "input_kind": (
+                "non_search"
+                if "non_search_input" in result.unresolved
+                else "place_search"
+            ),
+            "effective_radius_meters": directive.radius_meters,
+            "radius_is_strict": directive.strict_radius,
         },
     )

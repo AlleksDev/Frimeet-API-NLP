@@ -66,6 +66,45 @@ _RADIUS_VALUE_PATTERN = re.compile(
     r"(?P<unit>km|kilometros?|m|metros?)\b"
 )
 _LOGGER = logging.getLogger(__name__)
+_TRANSIENT_HARD_FILTER_KEYS = {"place_ids"}
+_SOCIAL_GREETING_VALUES = {
+    "buenas",
+    "buenas noches",
+    "buenas tardes",
+    "buenos dias",
+    "hello",
+    "hey",
+    "hola",
+    "hola como estas",
+    "hola que tal",
+    "hola que tal como estas",
+    "holi",
+    "holis",
+    "ola",
+    "ola que tal",
+    "que tal",
+}
+_SOCIAL_THANKS_VALUES = {
+    "gracias",
+    "mil gracias",
+    "muchas gracias",
+    "te lo agradezco",
+}
+_SOCIAL_FAREWELL_VALUES = {
+    "adios",
+    "bye",
+    "hasta luego",
+    "hasta pronto",
+    "nos vemos",
+}
+_SOCIAL_ACKNOWLEDGEMENT_VALUES = {
+    "entendido",
+    "listo",
+    "ok",
+    "okay",
+    "perfecto",
+    "vale",
+}
 _GENERIC_REQUEST_TOKENS = {
     "dame",
     "favor",
@@ -221,6 +260,29 @@ class DeterministicPlaceChatIntentParser:
                 choice=clarification_choice,
                 state=state,
                 has_user_location=has_user_location,
+            )
+        social_turn = _social_turn(normalized)
+        if social_turn is not None:
+            social_kind, social_message = social_turn
+            if social_kind == "greeting" and state.pending_clarification is not None:
+                repeated = self._clarification(
+                    pending=state.pending_clarification,
+                    unresolved=(state.pending_clarification.kind,),
+                    state=state,
+                    has_user_location=has_user_location,
+                )
+                if repeated.clarification is None:
+                    raise RuntimeError("pending clarification requires public options")
+                prompt = f"¡Hola! {repeated.clarification.prompt}"
+                return replace(
+                    repeated,
+                    clarification=replace(repeated.clarification, prompt=prompt),
+                    clarification_message=prompt,
+                    response_message=prompt,
+                )
+            return self._direct_response(
+                message=social_message,
+                state=state,
             )
         contextual = self._contextual_signals(message)
         # Token classification is multi-label and a valid frame can still be
@@ -402,7 +464,7 @@ class DeterministicPlaceChatIntentParser:
             if reference_text
             else inherited_reference
         )
-        hard_filters = dict(state.hard_filters)
+        hard_filters = _persistent_hard_filters(state.hard_filters)
         if state.city and "city" not in hard_filters:
             hard_filters["city"] = state.city
         if state.state and "state" not in hard_filters:
@@ -562,6 +624,34 @@ class DeterministicPlaceChatIntentParser:
                 )
             ),
             intent_model_version=contextual.intent_model_version,
+        )
+
+    def _direct_response(
+        self,
+        message: str,
+        state: ConversationState,
+    ) -> ParsedPlaceChatIntent:
+        hard_filters = _persistent_hard_filters(state.hard_filters)
+        return ParsedPlaceChatIntent(
+            action="no_match",
+            target_category=None,
+            category_values=(),
+            hard_filters=hard_filters,
+            soft_preferences=(),
+            exclusions=(),
+            reference=None,
+            location=LocationIntent(scope="unresolved", source="none"),
+            semantic_query="",
+            confidence=1.0,
+            state_patch=ConversationStatePatch(
+                hard_filters=(
+                    hard_filters if hard_filters != state.hard_filters else None
+                ),
+                taxonomy_version=self._taxonomy.version,
+            ),
+            unresolved=("non_search_input",),
+            response_message=message,
+            intent_model_version=_DETERMINISTIC_INTENT_VERSION,
         )
 
     def _location_scope_clarification(
@@ -924,7 +1014,7 @@ class DeterministicPlaceChatIntentParser:
             raise ClarificationStateMismatchError(
                 "clarification category must not be empty"
             )
-        hard_filters = dict(state.hard_filters)
+        hard_filters = _persistent_hard_filters(state.hard_filters)
         if state.city and "city" not in hard_filters:
             hard_filters["city"] = state.city
         if state.state and "state" not in hard_filters:
@@ -1192,19 +1282,37 @@ class DeterministicPlaceChatIntentParser:
     ) -> tuple[IntentAlternative, ...]:
         if self._activity_classifier is None:
             return ()
-        rank = getattr(self._activity_classifier, "rank", None)
-        if not callable(rank):
+        rank_supported = getattr(
+            self._activity_classifier,
+            "rank_supported",
+            None,
+        )
+        if not callable(rank_supported):
             return ()
-        matches = rank(normalized, limit=5)
+        matches = rank_supported(normalized, limit=5)
         return tuple(
             IntentAlternative(
                 key=str(match.concept_id),
-                description=str(match.label),
+                description=self._category_display_label(
+                    str(match.concept_id),
+                    str(match.label),
+                ),
                 confidence=max(0.0, min(1.0, (float(match.score) + 1.0) / 2.0)),
+                category_values=tuple(
+                    str(value)
+                    for value in getattr(match, "storage_values", ())
+                    if str(value).strip()
+                ),
             )
             for match in matches
             if getattr(match, "concept_id", None)
         )
+
+    def _category_display_label(self, category: str, fallback: str) -> str:
+        definition = self._taxonomy.category(category)
+        if definition is not None and definition.aliases:
+            return _humanize_category_label(definition.aliases[0])
+        return _humanize_category_label(fallback or category)
 
     @staticmethod
     def _target_clause(normalized: str) -> str:
@@ -1270,6 +1378,7 @@ class DeterministicPlaceChatIntentParser:
     ) -> ParsedPlaceChatIntent:
         pending = ensure_legacy_pending_options(pending)
         clarification = to_public_clarification(pending)
+        hard_filters = _persistent_hard_filters(state.hard_filters)
         location = (
             LocationIntent(scope="user_current_location", source="user_current")
             if has_user_location
@@ -1279,7 +1388,7 @@ class DeterministicPlaceChatIntentParser:
             action="clarification",
             target_category=state.target_category,
             category_values=(),
-            hard_filters=dict(state.hard_filters),
+            hard_filters=hard_filters,
             soft_preferences=state.soft_preferences,
             exclusions=state.exclusions,
             reference=state.reference,
@@ -1287,8 +1396,11 @@ class DeterministicPlaceChatIntentParser:
             semantic_query="",
             confidence=0.5,
             state_patch=ConversationStatePatch(
+                hard_filters=(
+                    hard_filters if hard_filters != state.hard_filters else None
+                ),
                 pending_clarification=pending,
-                taxonomy_version=self._taxonomy.version
+                taxonomy_version=self._taxonomy.version,
             ),
             category_source=(
                 "conversation_state" if state.target_category else "unresolved"
@@ -1344,6 +1456,47 @@ def load_place_chat_taxonomy() -> PlaceChatTaxonomy:
             for item in payload["preferences"]
         ),
     )
+
+
+def _social_turn(normalized: str) -> tuple[str, str] | None:
+    standalone = re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+    if standalone in _SOCIAL_GREETING_VALUES:
+        return (
+            "greeting",
+            "¡Hola! Cuéntame qué tipo de lugar o actividad buscas y te ayudo "
+            "a encontrar opciones cerca de ti.",
+        )
+    if standalone in _SOCIAL_THANKS_VALUES:
+        return (
+            "thanks",
+            "¡Con gusto! Cuando quieras, dime qué lugar o plan buscas y seguimos.",
+        )
+    if standalone in _SOCIAL_FAREWELL_VALUES:
+        return (
+            "farewell",
+            "¡Hasta luego! Cuando necesites ideas de lugares, aquí estaré.",
+        )
+    if standalone in _SOCIAL_ACKNOWLEDGEMENT_VALUES:
+        return (
+            "acknowledgement",
+            "Perfecto. Dime qué lugar o actividad te interesa para continuar.",
+        )
+    return None
+
+
+def _persistent_hard_filters(filters: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in filters.items()
+        if key not in _TRANSIENT_HARD_FILTER_KEYS
+    }
+
+
+def _humanize_category_label(value: str) -> str:
+    label = " ".join(value.replace("_", " ").split()).strip()
+    if not label:
+        return "Lugar"
+    return label[:1].upper() + label[1:]
 
 
 def _contains_phrase(text: str, phrase: str) -> bool:

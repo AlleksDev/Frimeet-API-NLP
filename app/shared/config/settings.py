@@ -321,6 +321,12 @@ class Settings(BaseSettings):
         le=50_000,
         alias="PLACES_CHAT_DEFAULT_RADIUS_METERS",
     )
+    places_chat_max_auto_radius_meters: int = Field(
+        default=50_000,
+        ge=1,
+        le=50_000,
+        alias="PLACES_CHAT_MAX_AUTO_RADIUS_METERS",
+    )
     places_chat_ranking_version: str = Field(
         default="places-chat-v2",
         min_length=1,
@@ -479,6 +485,14 @@ class Settings(BaseSettings):
             raise ValueError(
                 "PLACES_CHAT_INTENT_PROVIDER debe ser disabled, "
                 "deterministic o bert"
+            )
+        if (
+            self.places_chat_max_auto_radius_meters
+            < self.places_chat_default_radius_meters
+        ):
+            raise ValueError(
+                "PLACES_CHAT_MAX_AUTO_RADIUS_METERS debe ser mayor o igual que "
+                "PLACES_CHAT_DEFAULT_RADIUS_METERS"
             )
         if self.places_chat_bert_model_path is not None:
             self.places_chat_bert_model_path = (

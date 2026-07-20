@@ -32,9 +32,9 @@ def new_category_clarification(
                 option_id=option_id,
                 value=category,
                 label=_bounded_text(
-                    option_labels.get(
+                    _category_display_label(
                         category,
-                        category.replace("_", " ").title(),
+                        option_labels.get(category),
                     ),
                     160,
                 ),
@@ -155,6 +155,13 @@ def _bounded_text(value: str, maximum: int) -> str:
     if len(value) <= maximum:
         return value
     return value[: maximum - 1].rstrip() + "…"
+
+
+def _category_display_label(category: str, label: str | None) -> str:
+    value = " ".join((label or category).replace("_", " ").split()).strip()
+    if not value:
+        value = "Lugar"
+    return value[:1].upper() + value[1:]
 
 
 def _category_option_ids(values: Sequence[str]) -> tuple[str, ...]:

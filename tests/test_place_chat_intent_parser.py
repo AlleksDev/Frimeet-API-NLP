@@ -18,6 +18,98 @@ from app.modules.places.infrastructure.deterministic_intent_parser import (
 )
 
 
+@pytest.mark.parametrize(
+    "message",
+    ("ola", "hola", "holi", "buenas", "¿qué tal?"),
+)
+def test_standalone_greetings_return_a_friendly_non_search_response(
+    message: str,
+) -> None:
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message=message,
+        state=ConversationState(),
+        has_user_location=True,
+    )
+
+    assert intent.action == "no_match"
+    assert intent.unresolved == ("non_search_input",)
+    assert intent.response_message is not None
+    assert "hola" in intent.response_message.casefold()
+    assert "lugar o actividad" in intent.response_message.casefold()
+    assert intent.semantic_query == ""
+    assert intent.alternatives == ()
+
+
+def test_greeting_with_a_place_request_remains_actionable() -> None:
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message="hola, busco una cafeteria tranquila",
+        state=ConversationState(),
+        has_user_location=True,
+    )
+
+    assert intent.action == "recommendations"
+    assert intent.target_category == "cafe"
+    assert "tranquilo" in intent.soft_preferences
+    assert "non_search_input" not in intent.unresolved
+
+
+def test_greeting_repeats_the_same_pending_clarification() -> None:
+    pending = PendingClarification(
+        clarification_id="pending-category-1",
+        kind="intent_category",
+        options=(
+            PendingClarificationOption(
+                option_id="cafe",
+                value="cafe",
+                label="Cafetería",
+            ),
+            PendingClarificationOption(
+                option_id="restaurant",
+                value="restaurant",
+                label="Restaurante",
+            ),
+        ),
+    )
+
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message="hola",
+        state=ConversationState(pending_clarification=pending),
+        has_user_location=True,
+    )
+
+    assert intent.action == "clarification"
+    assert intent.clarification is not None
+    assert intent.clarification.clarification_id == pending.clarification_id
+    assert [option.option_id for option in intent.clarification.options] == [
+        "cafe",
+        "restaurant",
+    ]
+    repeated = intent.state_patch.pending_clarification
+    assert repeated is not None
+    assert repeated.clarification_id == pending.clarification_id
+    assert repeated.options == pending.options
+    assert intent.response_message is not None
+    assert intent.response_message.startswith("¡Hola!")
+
+
+def test_transient_place_ids_are_removed_from_filters_and_state_patch() -> None:
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message="una cafeteria",
+        state=ConversationState(
+            hard_filters={
+                "city": "Puebla",
+                "place_ids": ("stale-nearby-id",),
+            },
+        ),
+        has_user_location=True,
+    )
+
+    assert intent.action == "recommendations"
+    assert intent.hard_filters == {"city": "Puebla"}
+    assert intent.state_patch.hard_filters == {"city": "Puebla"}
+    assert intent.state_patch.as_dict()["hard_filters"] == {"city": "Puebla"}
+
+
 def test_category_is_not_polluted_by_the_location_anchor() -> None:
     intent = DeterministicPlaceChatIntentParser().parse(
         message="Recomiendame alguna cafeteria cerca del Parque Central",

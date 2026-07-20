@@ -107,6 +107,33 @@ def test_open_category_buttons_use_safe_ids_and_preserve_raw_values() -> None:
     ]
 
 
+def test_category_buttons_humanize_labels_without_changing_ids() -> None:
+    from app.modules.places.domain.clarifications import new_category_clarification
+
+    pending = new_category_clarification(
+        ("religious_organization", "ropa_barata"),
+        kind="intent_category",
+    )
+    clarification = to_public_clarification(pending)
+
+    assert [option.option_id for option in pending.options] == [
+        "religious_organization",
+        "ropa_barata",
+    ]
+    assert [option.value for option in pending.options] == [
+        "religious_organization",
+        "ropa_barata",
+    ]
+    assert [option.label for option in clarification.options] == [
+        "Religious organization",
+        "Ropa barata",
+    ]
+    assert [option.option_id for option in clarification.options] == [
+        "religious_organization",
+        "ropa_barata",
+    ]
+
+
 @pytest.mark.asyncio
 async def test_llm_cannot_change_action_or_candidates() -> None:
     without_llm = await build_use_case(llm_enabled=False).execute(
@@ -161,23 +188,33 @@ class LowConfidenceIntentParser:
 
 
 class CategoryEvidenceRetriever:
-    def __init__(self) -> None:
+    def __init__(self, categories: tuple[str, ...] = ("bakery",)) -> None:
         self.calls = 0
+        self.intents = []
+        self._categories = categories
 
     async def retrieve(self, intent, limit):
-        del intent, limit
+        del limit
         self.calls += 1
+        self.intents.append(intent)
         return [
             PlaceChatCandidate(
-                place_id="bakery_1",
-                name="Panaderia Local",
-                category="bakery",
-                content_score=0.62,
-                semantic_score=0.64,
+                place_id=f"{category}_1",
+                name=f"Opcion local {category}",
+                category=category,
+                content_score=0.62 - (index * 0.01),
+                semantic_score=0.64 - (index * 0.01),
                 lexical_score=0.20,
                 match_level="broad",
                 matched_reasons=("algo dulce",),
+                metadata={
+                    "retrieval_diagnostics": {
+                        "category_match": "exact",
+                        "meets_minimum_content_score": True,
+                    }
+                },
             )
+            for index, category in enumerate(self._categories)
         ]
 
 
@@ -201,6 +238,7 @@ async def test_low_confidence_uses_dynamic_category_hypotheses() -> None:
     result = await build_use_case(
         llm_enabled=False,
         intent_parser=parser,
+        retriever=CategoryEvidenceRetriever(("bakery", "ice_cream")),
     ).execute(
         message="quiero algo dulce y tranquilo",
         state=ConversationState(),
@@ -226,6 +264,56 @@ async def test_low_confidence_uses_dynamic_category_hypotheses() -> None:
         option["id"]
         for option in result.state_patch["pending_clarification"]["options"]
     ] == ["bakery", "ice_cream"]
+
+
+@pytest.mark.asyncio
+async def test_low_confidence_hypotheses_without_local_evidence_are_not_buttons() -> None:
+    parser = LowConfidenceIntentParser(
+        alternatives=(
+            IntentAlternative(
+                key="bakery",
+                description="Panaderias artesanales",
+                confidence=0.68,
+                category_values=("bakery",),
+            ),
+            IntentAlternative(
+                key="ice_cream",
+                description="Postres y heladerias",
+                confidence=0.64,
+                category_values=("ice_cream",),
+            ),
+            IntentAlternative(
+                key="office",
+                description="Oficinas",
+                confidence=0.63,
+                category_values=("office",),
+            ),
+        )
+    )
+
+    result = await build_use_case(
+        llm_enabled=False,
+        intent_parser=parser,
+        retriever=CategoryEvidenceRetriever(("bakery", "ice_cream")),
+    ).execute(
+        message="quiero algo dulce y tranquilo",
+        state=ConversationState(),
+        user_latitude=16.7531,
+        user_longitude=-93.1156,
+        candidate_limit=5,
+        result_limit=3,
+    )
+
+    assert result.action == "clarification"
+    assert result.clarification is not None
+    assert [option.option_id for option in result.clarification.options] == [
+        "bakery",
+        "ice_cream",
+    ]
+    assert "office" not in {
+        option["id"]
+        for option in result.state_patch["pending_clarification"]["options"]
+    }
 
 
 @pytest.mark.asyncio
@@ -324,6 +412,186 @@ async def test_weak_candidates_are_returned_as_reviewable_not_confident() -> Non
     assert "evidencia" in result.message.casefold()
 
 
+class SequencedNearbyProvider:
+    def __init__(self, responses: tuple[set[str], ...]) -> None:
+        self.calls = []
+        self._responses = responses
+
+    async def get_nearby_place_ids(self, latitude, longitude, radius_meters):
+        self.calls.append((latitude, longitude, radius_meters))
+        index = len(self.calls) - 1
+        if index >= len(self._responses):
+            raise AssertionError("nearby provider received an unexpected call")
+        return self._responses[index]
+
+
+class ForbiddenRetriever:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def retrieve(self, intent, limit):
+        del intent, limit
+        self.calls += 1
+        raise AssertionError("retriever must not be called")
+
+
+class ForbiddenNearbyProvider:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def get_nearby_place_ids(self, latitude, longitude, radius_meters):
+        del latitude, longitude, radius_meters
+        self.calls += 1
+        raise AssertionError("nearby provider must not be called")
+
+
+class UnsupportedCategoryRetriever:
+    def __init__(self) -> None:
+        self.intents = []
+
+    async def retrieve(self, intent, limit):
+        del limit
+        self.intents.append(intent)
+        return [
+            PlaceChatCandidate(
+                place_id=f"park_{len(self.intents)}",
+                name="Parque disponible",
+                category="park",
+                content_score=0.82,
+                semantic_score=0.79,
+                lexical_score=0.20,
+                match_level="broad",
+                matched_reasons=("aire libre",),
+                metadata={
+                    "retrieval_diagnostics": {
+                        "category_match": "none",
+                        "meets_minimum_content_score": True,
+                    }
+                },
+            )
+        ]
+
+
+@pytest.mark.asyncio
+async def test_greeting_does_not_call_retriever_or_nearby_provider() -> None:
+    retriever = ForbiddenRetriever()
+    nearby = ForbiddenNearbyProvider()
+
+    result = await build_use_case(
+        llm_enabled=False,
+        retriever=retriever,
+        nearby_place_provider=nearby,
+    ).execute(
+        message="ola",
+        state=ConversationState(),
+        user_latitude=16.7531,
+        user_longitude=-93.1156,
+        candidate_limit=5,
+        result_limit=3,
+    )
+
+    assert result.action == "no_match"
+    assert result.candidates == ()
+    assert result.unresolved == ("non_search_input",)
+    assert "hola" in result.message.casefold()
+    assert retriever.calls == 0
+    assert nearby.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_empty_implicit_radius_expands_from_five_to_fifty_kilometers() -> None:
+    nearby = SequencedNearbyProvider((set(), set()))
+    retriever = ForbiddenRetriever()
+
+    result = await build_use_case(
+        llm_enabled=False,
+        retriever=retriever,
+        nearby_place_provider=nearby,
+    ).execute(
+        message="una cafeteria",
+        state=ConversationState(),
+        user_latitude=16.7531,
+        user_longitude=-93.1156,
+        candidate_limit=5,
+        result_limit=3,
+    )
+
+    assert result.action == "no_match"
+    assert result.unresolved == ("nearby_catalog_empty",)
+    assert nearby.calls == [
+        (16.7531, -93.1156, 5_000),
+        (16.7531, -93.1156, 50_000),
+    ]
+    assert result.location_directive.radius_meters == 50_000
+    assert result.location_directive.strict_radius is False
+    assert retriever.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_empty_explicit_radius_does_not_expand() -> None:
+    nearby = SequencedNearbyProvider((set(),))
+    retriever = ForbiddenRetriever()
+
+    result = await build_use_case(
+        llm_enabled=False,
+        retriever=retriever,
+        nearby_place_provider=nearby,
+    ).execute(
+        message="una cafeteria a 2 km",
+        state=ConversationState(),
+        user_latitude=16.7531,
+        user_longitude=-93.1156,
+        candidate_limit=5,
+        result_limit=3,
+    )
+
+    assert result.action == "no_match"
+    assert result.unresolved == ("nearby_catalog_empty",)
+    assert nearby.calls == [(16.7531, -93.1156, 2_000)]
+    assert result.location_directive.radius_meters == 2_000
+    assert result.location_directive.strict_radius is True
+    assert retriever.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_unsupported_category_expands_then_returns_category_availability() -> None:
+    nearby = SequencedNearbyProvider(
+        (
+            {"park_near"},
+            {"park_far", "park_near"},
+        )
+    )
+    retriever = UnsupportedCategoryRetriever()
+
+    result = await build_use_case(
+        llm_enabled=False,
+        retriever=retriever,
+        nearby_place_provider=nearby,
+    ).execute(
+        message="una cafeteria",
+        state=ConversationState(),
+        user_latitude=16.7531,
+        user_longitude=-93.1156,
+        candidate_limit=5,
+        result_limit=3,
+    )
+
+    assert result.action == "no_match"
+    assert result.candidates == ()
+    assert result.unresolved == ("category_availability",)
+    assert nearby.calls == [
+        (16.7531, -93.1156, 5_000),
+        (16.7531, -93.1156, 50_000),
+    ]
+    assert len(retriever.intents) == 2
+    assert retriever.intents[0].hard_filters["place_ids"] == ("park_near",)
+    assert retriever.intents[1].hard_filters["place_ids"] == (
+        "park_far",
+        "park_near",
+    )
+    assert result.location_directive.radius_meters == 50_000
+
+
 class RecordingNearbyProvider:
     def __init__(self) -> None:
         self.call = None
@@ -380,6 +648,51 @@ async def test_current_location_ids_are_applied_before_content_retrieval() -> No
     assert result.action == "recommendations"
     assert nearby.call == (16.7531, -93.1156, 5_000)
     assert retriever.intent.hard_filters["place_ids"] == ("near_1", "near_2")
+
+
+@pytest.mark.asyncio
+async def test_transient_geographic_place_ids_are_not_persisted_in_clarification() -> None:
+    nearby = SequencedNearbyProvider(({"bakery_1", "ice_cream_1"},))
+    retriever = CategoryEvidenceRetriever(("bakery", "ice_cream"))
+    parser = LowConfidenceIntentParser(
+        alternatives=(
+            IntentAlternative(
+                key="bakery",
+                description="Panaderias artesanales",
+                confidence=0.68,
+                category_values=("bakery",),
+            ),
+            IntentAlternative(
+                key="ice_cream",
+                description="Postres y heladerias",
+                confidence=0.64,
+                category_values=("ice_cream",),
+            ),
+        )
+    )
+
+    result = await build_use_case(
+        llm_enabled=False,
+        intent_parser=parser,
+        retriever=retriever,
+        nearby_place_provider=nearby,
+    ).execute(
+        message="quiero algo dulce y tranquilo",
+        state=ConversationState(hard_filters={"city": "Tuxtla"}),
+        user_latitude=16.7531,
+        user_longitude=-93.1156,
+        candidate_limit=5,
+        result_limit=3,
+    )
+
+    assert result.action == "clarification"
+    assert retriever.intents[0].hard_filters["place_ids"] == (
+        "bakery_1",
+        "ice_cream_1",
+    )
+    assert result.state_patch["hard_filters"] == {"city": "Tuxtla"}
+    assert "place_ids" not in result.state_patch["hard_filters"]
+    assert result.location_directive.radius_meters == 5_000
 
 
 class CoordinateAnchorResolver:

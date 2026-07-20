@@ -88,6 +88,28 @@ def test_internal_chat_recommends_restaurants_for_implicit_food_intent() -> None
     assert payload["candidates"]
 
 
+@pytest.mark.parametrize("message", ("hola", "ola", "¡buenas!"))
+def test_internal_chat_answers_social_greetings_without_recommendations(
+    message: str,
+) -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/internal/places/chat",
+        json={**BASE_REQUEST, "message": message},
+        headers=AUTHORIZATION,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["action"] == "no_match"
+    assert payload["candidates"] == []
+    assert payload["clarification"] is None
+    assert payload["unresolved"] == ["non_search_input"]
+    assert payload["metadata"]["input_kind"] == "non_search"
+    assert "hola" in payload["message"].casefold()
+
+
 @pytest.mark.parametrize(
     ("message", "expected_place_id"),
     (

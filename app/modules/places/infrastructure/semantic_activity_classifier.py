@@ -54,3 +54,10 @@ class SemanticPlaceActivityClassifier:
 
     def rank(self, text: str, limit: int = 3) -> tuple[PlaceCategoryMatch, ...]:
         return self._delegate.rank(text, limit=limit)
+
+    def rank_supported(
+        self,
+        text: str,
+        limit: int = 3,
+    ) -> tuple[PlaceCategoryMatch, ...]:
+        return self._delegate.rank_supported(text, limit=limit)
