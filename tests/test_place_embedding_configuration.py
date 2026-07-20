@@ -3,6 +3,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
+from app.jobs.sync_place_embeddings import _validate_backfill_configuration
 from app.modules.places.api import dependencies as place_dependencies
 from app.modules.places.infrastructure.bert_intent_extractor import (
     BertPlaceIntentExtractor,
@@ -40,11 +41,13 @@ def test_blank_optional_places_runtime_values_are_normalized_to_none() -> None:
     settings = Settings(
         _env_file=None,
         PLACES_EMBEDDING_DEVICE="   ",
+        PLACES_EMBEDDING_MODEL_REVISION="   ",
         PLACES_CATEGORY_CATALOG_PATH="",
         PLACES_PGVECTOR_HYBRID_FUNCTION=" ",
     )
 
     assert settings.places_embedding_device is None
+    assert settings.places_embedding_model_revision is None
     assert settings.places_category_catalog_path is None
     assert settings.places_pgvector_hybrid_function is None
 
@@ -56,6 +59,9 @@ def test_sentence_transformer_factory_configures_query_and_passage_prefixes() ->
         PLACES_EMBEDDING_PROVIDER="sentence_transformer",
         PLACES_EMBEDDING_DIMENSION=768,
         PLACES_EMBEDDING_MODEL="intfloat/multilingual-e5-base",
+        PLACES_EMBEDDING_MODEL_REVISION=(
+            "  0123456789abcdef0123456789abcdef01234567  "
+        ),
         PLACES_EMBEDDING_QUERY_PREFIX="query: ",
         PLACES_EMBEDDING_PASSAGE_PREFIX="passage: ",
     )
@@ -67,6 +73,10 @@ def test_sentence_transformer_factory_configures_query_and_passage_prefixes() ->
     assert isinstance(passage, SentenceTransformerEmbeddingProvider)
     assert query.text_prefix == "query: "
     assert passage.text_prefix == "passage: "
+    assert query.model_revision == "0123456789abcdef0123456789abcdef01234567"
+    assert passage.model_revision == "0123456789abcdef0123456789abcdef01234567"
+    assert query.fix_mistral_regex is True
+    assert passage.fix_mistral_regex is True
     assert query.is_loaded is False
     assert passage.is_loaded is False
 
@@ -85,6 +95,17 @@ def test_quoted_e5_prefixes_preserve_the_significant_space(tmp_path) -> None:
     assert settings.places_embedding_passage_prefix == "passage: "
 
 
+def test_e5_prefixes_recover_space_trimmed_by_deployment_ui() -> None:
+    settings = Settings(
+        _env_file=None,
+        PLACES_EMBEDDING_QUERY_PREFIX="query:",
+        PLACES_EMBEDDING_PASSAGE_PREFIX="passage:",
+    )
+
+    assert settings.places_embedding_query_prefix == "query: "
+    assert settings.places_embedding_passage_prefix == "passage: "
+
+
 def test_places_embedding_provider_rejects_unknown_backend() -> None:
     with pytest.raises(ValidationError, match="PLACES_EMBEDDING_PROVIDER"):
         Settings(
@@ -92,6 +113,73 @@ def test_places_embedding_provider_rejects_unknown_backend() -> None:
             ENV="local",
             PLACES_EMBEDDING_PROVIDER="closed_taxonomy_magic",
         )
+
+
+def test_semantic_backfill_requires_a_coherent_768d_writer_profile() -> None:
+    settings = Settings(
+        _env_file=None,
+        ENV="local",
+        PLACES_EMBEDDING_PROVIDER="sentence_transformer",
+        PLACES_EMBEDDING_DIMENSION=768,
+        PLACES_EMBEDDING_MODEL="owner/retriever",
+        PLACES_EMBEDDING_MODEL_REVISION=(
+            "0123456789abcdef0123456789abcdef01234567"
+        ),
+        PLACES_EMBEDDING_PASSAGE_PREFIX="passage:",
+        PLACES_PGVECTOR_UPSERT_FUNCTION="upsert_place_embedding_semantic_v1",
+        PLACES_PGVECTOR_HASH_FUNCTION=(
+            "get_place_content_hashes_semantic_v1"
+        ),
+    )
+
+    _validate_backfill_configuration(settings)
+
+    settings.places_pgvector_hash_function = "get_place_content_hashes"
+    with pytest.raises(RuntimeError, match="requires both writer functions"):
+        _validate_backfill_configuration(settings)
+
+
+def test_768d_retriever_cannot_write_to_legacy_places_table() -> None:
+    settings = Settings(
+        _env_file=None,
+        ENV="local",
+        PLACES_EMBEDDING_PROVIDER="sentence_transformer",
+        PLACES_EMBEDDING_DIMENSION=768,
+        PLACES_EMBEDDING_MODEL="owner/retriever",
+    )
+
+    with pytest.raises(RuntimeError, match="legacy 300d"):
+        _validate_backfill_configuration(settings)
+
+
+def test_production_sentence_transformer_requires_full_commit_sha() -> None:
+    common = {
+        "_env_file": None,
+        "ENV": "production",
+        "NLP_SERVICE_TOKEN": "service-token",
+        "MAIN_API_INTERNAL_TOKEN": "main-api-token",
+        "VECTOR_STORE_PROVIDER": "aws_pgvector",
+        "PLACES_EMBEDDING_PROVIDER": "sentence_transformer",
+        "PLACES_EMBEDDING_DIMENSION": 768,
+        "PLACES_EMBEDDING_MODEL": "owner/retriever",
+    }
+
+    with pytest.raises(
+        ValidationError,
+        match="PLACES_EMBEDDING_MODEL_REVISION",
+    ):
+        Settings(**common, PLACES_EMBEDDING_MODEL_REVISION="main")
+
+    settings = Settings(
+        **common,
+        PLACES_EMBEDDING_MODEL_REVISION=(
+            "0123456789abcdef0123456789abcdef01234567"
+        ),
+    )
+
+    assert settings.places_embedding_model_revision == (
+        "0123456789abcdef0123456789abcdef01234567"
+    )
 
 
 def test_external_place_concept_catalog_is_data_driven(tmp_path) -> None:

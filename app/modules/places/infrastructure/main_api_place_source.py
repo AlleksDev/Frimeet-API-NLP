@@ -137,17 +137,33 @@ class MainApiPlacesClient:
         if not isinstance(payload, dict):
             return None
         cursor = payload.get("next_cursor") or payload.get("nextCursor")
-        if cursor is None:
-            return None
-        cursor = str(cursor).strip()
-        return cursor or None
+        if cursor is not None:
+            cursor = str(cursor).strip()
+            if cursor:
+                return cursor
+        for key in ("data", "pagination", "meta"):
+            nested_cursor = MainApiPlacesClient._extract_next_cursor(
+                payload.get(key)
+            )
+            if nested_cursor:
+                return nested_cursor
+        return None
 
     @staticmethod
     def _extract_has_more(payload: Any) -> bool:
         if not isinstance(payload, dict):
             return False
-        value = payload.get("has_more", payload.get("hasMore", False))
-        return bool(value)
+        if "has_more" in payload or "hasMore" in payload:
+            value = payload.get("has_more", payload.get("hasMore"))
+            return bool(value)
+        for key in ("data", "pagination", "meta"):
+            nested = payload.get(key)
+            if (
+                isinstance(nested, dict)
+                and MainApiPlacesClient._extract_has_more(nested)
+            ):
+                return True
+        return False
 
 
 def place_to_source_record(place: dict[str, Any]) -> PlaceSourceRecord | None:

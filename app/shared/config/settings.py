@@ -1,5 +1,6 @@
 from functools import lru_cache
 import math
+import re
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -183,6 +184,14 @@ class Settings(BaseSettings):
         default="facebook/fasttext-es-vectors",
         min_length=1,
         alias="PLACES_EMBEDDING_MODEL",
+    )
+    places_embedding_model_revision: str | None = Field(
+        default=None,
+        alias="PLACES_EMBEDDING_MODEL_REVISION",
+    )
+    places_embedding_fix_mistral_regex: bool = Field(
+        default=True,
+        alias="PLACES_EMBEDDING_FIX_MISTRAL_REGEX",
     )
     places_embedding_version: str = Field(
         default="common-crawl-300-v1",
@@ -411,10 +420,20 @@ class Settings(BaseSettings):
     def validate_post_feed_security(self) -> "Settings":
         self.vector_store_provider = self.vector_store_provider.strip().lower()
         self.places_embedding_provider = self.places_embedding_provider.strip().lower()
+        if self.places_embedding_model_revision is not None:
+            self.places_embedding_model_revision = (
+                self.places_embedding_model_revision.strip() or None
+            )
         if self.places_embedding_device is not None:
             self.places_embedding_device = (
                 self.places_embedding_device.strip() or None
             )
+        self.places_embedding_query_prefix = _normalize_embedding_prefix(
+            self.places_embedding_query_prefix
+        )
+        self.places_embedding_passage_prefix = _normalize_embedding_prefix(
+            self.places_embedding_passage_prefix
+        )
         if self.places_category_catalog_path is not None:
             self.places_category_catalog_path = (
                 self.places_category_catalog_path.strip() or None
@@ -432,6 +451,22 @@ class Settings(BaseSettings):
             raise ValueError(
                 "PLACES_EMBEDDING_PROVIDER debe ser fasttext, mock, "
                 "sentence_transformer o bert"
+            )
+        if (
+            self.env.lower() != "local"
+            and self.places_embedding_provider in {"sentence_transformer", "bert"}
+            and (
+                self.places_embedding_model_revision is None
+                or re.fullmatch(
+                    r"[0-9a-fA-F]{40}",
+                    self.places_embedding_model_revision,
+                )
+                is None
+            )
+        ):
+            raise ValueError(
+                "PLACES_EMBEDDING_MODEL_REVISION debe ser el SHA completo "
+                "de 40 caracteres fuera del entorno local"
             )
         self.places_chat_intent_provider = (
             self.places_chat_intent_provider.strip().lower()
@@ -509,3 +544,10 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def _normalize_embedding_prefix(value: str) -> str:
+    """Keep retrieval prefixes usable when a deployment UI trims whitespace."""
+
+    normalized = value.strip()
+    return f"{normalized} " if normalized else ""
