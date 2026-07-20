@@ -237,4 +237,7 @@ def get_chat_place_recommendations_use_case() -> ChatPlaceRecommendationsUseCase
             else None
         ),
         default_radius_meters=settings.places_chat_default_radius_meters,
+        maximum_auto_radius_meters=(
+            settings.places_chat_max_auto_radius_meters
+        ),
     )

@@ -180,6 +180,26 @@ class OpenVocabularyPlaceCategoryClassifier:
             )
         return tuple(matches)
 
+    def rank_supported(
+        self,
+        text: str,
+        limit: int = 3,
+    ) -> tuple[PlaceCategoryMatch, ...]:
+        """Return only hypotheses with enough absolute semantic evidence.
+
+        ``rank`` intentionally exposes diagnostic nearest neighbours even for
+        out-of-distribution text.  Those raw neighbours must not become public
+        clarification buttons.  Ambiguous supported concepts may remain tied;
+        the margin is a requirement for automatic classification, not for
+        asking the user to choose between two genuinely plausible options.
+        """
+
+        return tuple(
+            match
+            for match in self.rank(text, limit=limit)
+            if match.score >= self._minimum_similarity
+        )
+
     def classify(self, text: str) -> PlaceCategoryInference | None:
         """Return the best concept only when its score and margin are sufficient."""
 

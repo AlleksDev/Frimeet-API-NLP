@@ -31,6 +31,37 @@ def test_place_to_source_record_maps_api_place() -> None:
     assert len(record.content_hash) == 64
 
 
+def test_place_to_source_record_maps_category_label_and_closed_state() -> None:
+    record = place_to_source_record(
+        {
+            "id": "place_closed",
+            "name": "Lugar cerrado",
+            "category": "religious_organization",
+            "categoryLabel": "Organización religiosa",
+            "isActive": True,
+            "isPermanentlyClosed": True,
+        }
+    )
+
+    assert record is not None
+    assert record.metadata["category_label"] == "Organización religiosa"
+    assert record.metadata["is_active"] is False
+    assert record.is_active is False
+
+
+def test_explicit_string_active_state_is_not_coerced_as_truthy() -> None:
+    record = place_to_source_record(
+        {
+            "id": "place_inactive",
+            "name": "Lugar inactivo",
+            "is_active": "false",
+        }
+    )
+
+    assert record is not None
+    assert record.is_active is False
+
+
 def test_place_to_source_record_resolves_tags_without_token_repetition() -> None:
     record = place_to_source_record(
         {

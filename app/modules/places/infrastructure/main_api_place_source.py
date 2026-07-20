@@ -173,11 +173,27 @@ def place_to_source_record(place: dict[str, Any]) -> PlaceSourceRecord | None:
 
     name = str(_first_present(place, "name", "title", default="")).strip()
     category = _first_present(place, "category", "type")
+    category_label = _first_present(place, "category_label", "categoryLabel")
     city = _first_present(place, "city", "municipality")
     state = _first_present(place, "state", default="Chiapas")
     source = _first_present(place, "source")
     price_range = _first_present(place, "price_range", "priceRange")
-    is_active = _first_present(place, "is_active", "isActive", default=True)
+    explicit_is_active = _first_present(place, "is_active", "isActive")
+    is_permanently_closed = _as_bool(
+        _first_present(
+            place,
+            "is_permanently_closed",
+            "isPermanentlyClosed",
+            default=False,
+        ),
+        default=False,
+    )
+    if is_permanently_closed:
+        is_active = False
+    elif explicit_is_active is None:
+        is_active = True
+    else:
+        is_active = _as_bool(explicit_is_active, default=True)
     description = str(_first_present(place, "description", "summary", "about", default=""))
     address = str(_first_present(place, "address", "formatted_address", default=""))
 
@@ -196,11 +212,12 @@ def place_to_source_record(place: dict[str, Any]) -> PlaceSourceRecord | None:
     metadata = {
         "name": name,
         "category": _to_metadata_value(category),
+        "category_label": _to_metadata_value(category_label),
         "city": _to_metadata_value(city),
         "state": _to_metadata_value(state),
         "source": _to_metadata_value(source),
         "price_range": _to_metadata_value(price_range),
-        "is_active": bool(is_active),
+        "is_active": is_active,
         "occasion": ",".join(occasion),
         "tags": ",".join(resolved_tags.names),
         "tag_ids": list(resolved_tags.ids),
@@ -218,7 +235,7 @@ def place_to_source_record(place: dict[str, Any]) -> PlaceSourceRecord | None:
         {
             "document": document,
             "metadata": filtered_metadata,
-            "is_active": bool(is_active),
+            "is_active": is_active,
             "semantic_document_version": PLACE_SEMANTIC_DOCUMENT_VERSION,
         }
     )
@@ -228,7 +245,7 @@ def place_to_source_record(place: dict[str, Any]) -> PlaceSourceRecord | None:
         document=document,
         metadata=filtered_metadata,
         content_hash=content_hash,
-        is_active=bool(is_active),
+        is_active=is_active,
     )
 
 
@@ -252,6 +269,22 @@ def _as_text_list(value: Any) -> list[str]:
     if isinstance(value, str):
         return [item.strip() for item in value.split(",") if item.strip()]
     return [str(value).strip()]
+
+
+def _as_bool(value: Any, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        if normalized in {"true", "1", "yes", "si", "sí"}:
+            return True
+        if normalized in {"false", "0", "no", ""}:
+            return False
+    return bool(value)
 
 
 def _to_metadata_value(value: Any) -> str | int | float | bool | None:
