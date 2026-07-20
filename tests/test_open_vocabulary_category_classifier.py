@@ -96,6 +96,45 @@ def test_rank_limit_still_calculates_top_margin_against_runner_up() -> None:
     assert only_match[0].margin > 0.88
 
 
+def test_rank_supported_discards_nearest_neighbors_below_absolute_threshold() -> None:
+    classifier = OpenVocabularyPlaceCategoryClassifier(
+        _concepts(),
+        ControlledEmbeddingProvider(_catalog_vectors()),
+        minimum_similarity=0.5,
+    )
+
+    raw_matches = classifier.rank("algo completamente distinto", limit=2)
+    supported_matches = classifier.rank_supported(
+        "algo completamente distinto",
+        limit=2,
+    )
+
+    assert len(raw_matches) == 2
+    assert all(match.score < 0.5 for match in raw_matches)
+    assert supported_matches == ()
+
+
+def test_rank_supported_keeps_supported_ties_for_clarification() -> None:
+    classifier = OpenVocabularyPlaceCategoryClassifier(
+        _concepts(),
+        ControlledEmbeddingProvider(_catalog_vectors()),
+        minimum_similarity=0.5,
+        minimum_margin=0.05,
+    )
+
+    supported_matches = classifier.rank_supported("quiero salir", limit=2)
+
+    assert classifier.classify("quiero salir") is None
+    assert [match.concept_id for match in supported_matches] == [
+        "sweet_baked_goods",
+        "urban_nature",
+    ]
+    assert supported_matches[0].score == pytest.approx(
+        supported_matches[1].score
+    )
+    assert supported_matches[0].score > 0.5
+
+
 def test_query_and_concept_encoders_can_use_distinct_e5_prefix_roles() -> None:
     vectors = _catalog_vectors()
     query_embeddings = ControlledEmbeddingProvider(

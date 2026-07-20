@@ -388,6 +388,12 @@ scores tecnicos. No devuelve cards, coordenadas ni metadata privada. `clarificat
 hidratar los IDs, revalidar el anchor y aplicar distancia/PostGIS antes de responder a
 la app.
 
+Un turno puramente social se devuelve como `action="no_match"`,
+`unresolved=["non_search_input"]`, `candidates=[]` y
+`metadata.input_kind="non_search"`, con un mensaje conversacional. Esto evita convertir
+saludos como `ola` en categorias cercanas por similitud. Si el mensaje tambien contiene
+una solicitud de lugares, se procesa como busqueda normal.
+
 `state` puede incluir `target_category`, `hard_filters`, `soft_preferences`,
 `exclusions`, `reference`, `explicit_target_location` y `pending_clarification`. Si
 `taxonomy_version` no coincide con la version desplegada, el endpoint responde `409`.
@@ -519,6 +525,20 @@ pueden obtener la misma categoria aunque no coincidan palabra por palabra. El
 clasificador exige similitud minima y separacion frente a la segunda categoria; una
 frase abierta como `quiero salir` aun solicita aclaracion. Una categoria explicita tiene
 prioridad y una nueva intencion clara elimina un `pending_clarification` obsoleto.
+
+Las opciones de categoria conservan `option.id` y el `value` pendiente como valores
+tecnicos. NLP humaniza la etiqueta fallback y solo publica hipotesis respaldadas por
+candidatos locales con evidencia suficiente. La API principal debe localizar
+`label/message` mediante su catalogo sin alterar IDs, valores, orden ni allowlist.
+
+Cuando hay coordenadas y proveedor nearby, un radio implicito comienza en
+`PLACES_CHAT_DEFAULT_RADIUS_METERS` y puede ampliarse de forma acotada hasta
+`PLACES_CHAT_MAX_AUTO_RADIUS_METERS`. El valor realmente consultado se devuelve en
+`location_directive.radius_meters`. Un radio explicito (`strict_radius=true`) no se
+amplia y los `place_ids` geograficos nunca se guardan en el estado conversacional.
+
+Cambios de integracion fuera de NLP: `docs/cambios_api_principal_chat_lugares.md` y
+`docs/cambios_app_movil_chat_lugares.md`.
 
 ## 3. Publicaciones
 
@@ -974,6 +994,8 @@ finalizados. Los cursores quedan ligados a query, recursos, filtros, ubicacion,
 | `PLACES_CHAT_MIN_CONTENT_SCORE` | Umbral minimo antes de devolver candidatos |
 | `PLACES_CHAT_INTENT_MIN_CONFIDENCE` | Confianza minima; por debajo se solicita aclaracion |
 | `PLACES_CHAT_AMBIGUITY_DELTA` | Diferencia maxima para considerar ambiguos dos anchors |
+| `PLACES_CHAT_DEFAULT_RADIUS_METERS` | Radio inicial para ubicacion implicita; default `5000` |
+| `PLACES_CHAT_MAX_AUTO_RADIUS_METERS` | Limite de expansion automatica no estricta; default `50000` |
 | `PLACES_CHAT_RANKING_VERSION` | Version observable de la politica de ranking |
 | `PLACES_CHAT_TAXONOMY_VERSION` | Version del parser y del estado conversacional |
 | `MAX_REQUEST_BODY_BYTES` | Debe ser al menos `131072`; valor recomendado `262144` para 500 candidatos |

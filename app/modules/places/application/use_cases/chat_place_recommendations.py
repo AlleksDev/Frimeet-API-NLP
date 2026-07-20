@@ -86,6 +86,7 @@ class ChatPlaceRecommendationsUseCase:
         maximum_hypothesis_gap: float = 0.15,
         nearby_place_provider: NearbyPlaceProvider | None = None,
         default_radius_meters: int = 5_000,
+        maximum_auto_radius_meters: int = 50_000,
     ) -> None:
         if not 0.0 <= minimum_intent_confidence <= 1.0:
             raise ValueError("minimum_intent_confidence must be between zero and one")
@@ -97,6 +98,11 @@ class ChatPlaceRecommendationsUseCase:
             raise ValueError("maximum_hypothesis_gap must be between zero and one")
         if not 1 <= default_radius_meters <= 50_000:
             raise ValueError("default_radius_meters must be between 1 and 50000")
+        if not default_radius_meters <= maximum_auto_radius_meters <= 50_000:
+            raise ValueError(
+                "maximum_auto_radius_meters must be between the default radius "
+                "and 50000"
+            )
         self._intent_parser = intent_parser
         self._anchor_resolver = anchor_resolver
         self._retriever = retriever
@@ -111,6 +117,7 @@ class ChatPlaceRecommendationsUseCase:
         self._maximum_hypothesis_gap = maximum_hypothesis_gap
         self._nearby_place_provider = nearby_place_provider
         self._default_radius_meters = default_radius_meters
+        self._maximum_auto_radius_meters = maximum_auto_radius_meters
 
     async def execute(
         self,
@@ -136,6 +143,19 @@ class ChatPlaceRecommendationsUseCase:
             has_user_location,
             clarification_choice,
         )
+        if intent.action == "no_match":
+            return self._result(
+                action="no_match",
+                message=(
+                    intent.response_message
+                    or "Cuéntame qué tipo de lugar o actividad buscas."
+                ),
+                intent=intent,
+                directive=self._location_directive(intent),
+                candidates=(),
+                unresolved=intent.unresolved,
+                trace_id=trace_id,
+            )
         if intent.action == "clarification":
             return self._clarification_result(intent, trace_id)
 
@@ -175,27 +195,48 @@ class ChatPlaceRecommendationsUseCase:
             if directive.source == "user_current"
             else intent.location.longitude
         )
+        can_auto_expand_radius = False
         if (
             directive.source in {"user_current", "explicit_anchor", "state_anchor"}
             and self._nearby_place_provider is not None
             and geographic_latitude is not None
             and geographic_longitude is not None
         ):
+            allows_auto_expansion = (
+                directive.radius_meters is None and not directive.strict_radius
+            )
+            effective_radius = (
+                directive.radius_meters or self._default_radius_meters
+            )
             nearby_ids = await self._nearby_place_provider.get_nearby_place_ids(
                 latitude=geographic_latitude,
                 longitude=geographic_longitude,
-                radius_meters=(
-                    directive.radius_meters or self._default_radius_meters
-                ),
+                radius_meters=effective_radius,
             )
+            if (
+                not nearby_ids
+                and allows_auto_expansion
+                and effective_radius < self._maximum_auto_radius_meters
+            ):
+                effective_radius = self._maximum_auto_radius_meters
+                nearby_ids = await self._nearby_place_provider.get_nearby_place_ids(
+                    latitude=geographic_latitude,
+                    longitude=geographic_longitude,
+                    radius_meters=effective_radius,
+                )
+            directive = replace(directive, radius_meters=effective_radius)
             if not nearby_ids:
                 return self._result(
                     action="no_match",
-                    message="No encontre lugares cercanos dentro del radio solicitado.",
+                    message=(
+                        "No encontré lugares disponibles cerca de tu ubicación "
+                        f"dentro de {self._distance_label(effective_radius)}. "
+                        "Puedes indicar otra zona o intentarlo con un plan distinto."
+                    ),
                     intent=intent,
                     directive=directive,
                     candidates=(),
-                    unresolved=(),
+                    unresolved=("nearby_catalog_empty",),
                     trace_id=trace_id,
                 )
             intent = replace(
@@ -204,6 +245,10 @@ class ChatPlaceRecommendationsUseCase:
                     **intent.hard_filters,
                     "place_ids": tuple(sorted(nearby_ids)),
                 },
+            )
+            can_auto_expand_radius = (
+                allows_auto_expansion
+                and effective_radius < self._maximum_auto_radius_meters
             )
 
         if intent.confidence < self._minimum_intent_confidence:
@@ -214,7 +259,10 @@ class ChatPlaceRecommendationsUseCase:
                 )
             )
             pending = (
-                self._category_clarification_from_hypotheses(intent)
+                self._category_clarification_from_hypotheses(
+                    intent,
+                    evidence_candidates,
+                )
                 or self._category_clarification_from_candidates(evidence_candidates)
             )
             if pending is not None:
@@ -223,7 +271,11 @@ class ChatPlaceRecommendationsUseCase:
                     pending,
                     unresolved=("intent_confidence",),
                 )
-                return self._clarification_result(clarified, trace_id)
+                return self._clarification_result(
+                    clarified,
+                    trace_id,
+                    directive=directive,
+                )
 
             sufficient_candidates = tuple(
                 candidate
@@ -277,12 +329,80 @@ class ChatPlaceRecommendationsUseCase:
         candidates = tuple(
             await self._retriever.retrieve(intent=intent, limit=candidate_limit)
         )
+        category_supported = self._has_category_supported_candidate(
+            intent,
+            candidates,
+        )
+        if (
+            can_auto_expand_radius
+            and (not candidates or (intent.target_category and not category_supported))
+            and self._nearby_place_provider is not None
+            and geographic_latitude is not None
+            and geographic_longitude is not None
+        ):
+            expanded_radius = self._maximum_auto_radius_meters
+            expanded_ids = await self._nearby_place_provider.get_nearby_place_ids(
+                latitude=geographic_latitude,
+                longitude=geographic_longitude,
+                radius_meters=expanded_radius,
+            )
+            directive = replace(directive, radius_meters=expanded_radius)
+            if expanded_ids:
+                expanded_intent = replace(
+                    intent,
+                    hard_filters={
+                        **intent.hard_filters,
+                        "place_ids": tuple(sorted(expanded_ids)),
+                    },
+                )
+                expanded_candidates = tuple(
+                    await self._retriever.retrieve(
+                        intent=expanded_intent,
+                        limit=candidate_limit,
+                    )
+                )
+                expanded_category_supported = (
+                    self._has_category_supported_candidate(
+                        expanded_intent,
+                        expanded_candidates,
+                    )
+                )
+                if (
+                    not candidates
+                    or expanded_category_supported
+                    or not intent.target_category
+                ):
+                    intent = expanded_intent
+                    candidates = expanded_candidates
+                    category_supported = expanded_category_supported
+
+        if intent.target_category and candidates and not category_supported:
+            category_label = self._display_category(intent.target_category)
+            radius_label = (
+                f" dentro de {self._distance_label(directive.radius_meters)}"
+                if directive.radius_meters is not None
+                else ""
+            )
+            return self._result(
+                action="no_match",
+                message=(
+                    f"No encontré opciones disponibles de {category_label}"
+                    f"{radius_label}. Prueba con otra categoría o indícame "
+                    "una zona diferente."
+                ),
+                intent=intent,
+                directive=directive,
+                candidates=(),
+                unresolved=("category_availability",),
+                trace_id=trace_id,
+            )
         if not candidates:
             return self._result(
                 action="no_match",
                 message=(
-                    "No encontre opciones suficientemente relacionadas con lo que buscas. "
-                    "Puedes cambiar alguna preferencia o pedirme otro tipo de lugar."
+                    "No encontré opciones suficientemente relacionadas con lo que "
+                    "buscas. Puedes cambiar alguna preferencia o pedirme otro tipo "
+                    "de lugar."
                 ),
                 intent=intent,
                 directive=directive,
@@ -595,21 +715,47 @@ class ChatPlaceRecommendationsUseCase:
     def _category_clarification_from_hypotheses(
         self,
         intent: ParsedPlaceChatIntent,
+        candidates: Sequence[PlaceChatCandidate],
     ) -> PendingClarification | None:
         scores: dict[str, float] = {}
         labels: dict[str, str] = {}
+        category_values: dict[str, tuple[str, ...]] = {}
         if intent.target_category:
             scores[intent.target_category] = intent.confidence
+            category_values[intent.target_category] = tuple(
+                dict.fromkeys(
+                    (
+                        intent.target_category,
+                        *intent.category_values,
+                    )
+                )
+            )
 
         for alternative in intent.alternatives:
             key = alternative.key.strip()
             if not key or key in _NON_CATEGORY_ALTERNATIVE_KEYS:
                 continue
             scores[key] = max(scores.get(key, 0.0), alternative.confidence)
+            category_values[key] = tuple(
+                dict.fromkeys((key, *alternative.category_values))
+            )
             if alternative.description.strip():
                 labels[key] = alternative.description.strip()
 
-        ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
+        ranked = sorted(
+            (
+                (category, score)
+                for category, score in scores.items()
+                if any(
+                    self._candidate_supports_category_values(
+                        candidate,
+                        category_values.get(category, (category,)),
+                    )
+                    for candidate in candidates
+                )
+            ),
+            key=lambda item: (-item[1], item[0]),
+        )
         if not ranked or ranked[0][1] < self._minimum_hypothesis_confidence:
             return None
         top_score = ranked[0][1]
@@ -633,6 +779,7 @@ class ChatPlaceRecommendationsUseCase:
     ) -> PendingClarification | None:
         counts: dict[str, int] = {}
         best_scores: dict[str, float] = {}
+        display_labels: dict[str, str] = {}
         for candidate in candidates:
             diagnostics = candidate.metadata.get("retrieval_diagnostics", {})
             if diagnostics.get("meets_minimum_content_score") is False:
@@ -645,6 +792,9 @@ class ChatPlaceRecommendationsUseCase:
                 best_scores.get(category, 0.0),
                 candidate.content_score,
             )
+            source_label = candidate.metadata.get("category_label")
+            if isinstance(source_label, str) and source_label.strip():
+                display_labels[category] = source_label.strip()
         ordered = tuple(
             category
             for category, _ in sorted(
@@ -656,7 +806,7 @@ class ChatPlaceRecommendationsUseCase:
             return None
         labels = {
             category: (
-                f"{category.replace('_', ' ').title()} "
+                f"{display_labels.get(category) or _display_category(category)} "
                 f"({counts[category]} opciones encontradas)"
             )
             for category in ordered
@@ -781,6 +931,57 @@ class ChatPlaceRecommendationsUseCase:
             return bool(diagnostics["meets_minimum_content_score"])
         return candidate.content_score > 0.0
 
+    @classmethod
+    def _candidate_supports_category_values(
+        cls,
+        candidate: PlaceChatCandidate,
+        values: Sequence[str],
+    ) -> bool:
+        if not cls._meets_content_threshold(candidate):
+            return False
+        supported = {
+            normalized
+            for value in values
+            if (normalized := _normalized_category(value))
+        }
+        return _candidate_has_category_evidence(candidate, supported)
+
+    @staticmethod
+    def _has_category_supported_candidate(
+        intent: ParsedPlaceChatIntent,
+        candidates: Sequence[PlaceChatCandidate],
+    ) -> bool:
+        if not intent.target_category:
+            return True
+
+        requested_values = {
+            normalized
+            for value in (
+                intent.target_category,
+                *intent.category_values,
+                *intent.compatible_category_values,
+            )
+            if (normalized := _normalized_category(value))
+        }
+        for candidate in candidates:
+            diagnostics = candidate.metadata.get("retrieval_diagnostics", {})
+            category_match = diagnostics.get("category_match")
+            if category_match not in {None, "none", "not_requested"}:
+                return True
+            if _candidate_has_category_evidence(candidate, requested_values):
+                return True
+        return False
+
+    @staticmethod
+    def _display_category(value: str) -> str:
+        return _display_category(value).casefold()
+
+    @staticmethod
+    def _distance_label(radius_meters: int) -> str:
+        if radius_meters >= 1_000 and radius_meters % 1_000 == 0:
+            return f"{radius_meters // 1_000} km"
+        return f"{radius_meters} m"
+
     @staticmethod
     def _candidate_context(candidate: PlaceChatCandidate) -> dict[str, Any]:
         return {
@@ -798,6 +999,8 @@ class ChatPlaceRecommendationsUseCase:
         self,
         intent: ParsedPlaceChatIntent,
         trace_id: str,
+        *,
+        directive: PlaceChatLocationDirective | None = None,
     ) -> ChatPlaceRecommendationsResult:
         if intent.clarification is None:
             raise RuntimeError("clarification action requires structured options")
@@ -805,7 +1008,7 @@ class ChatPlaceRecommendationsUseCase:
             action="clarification",
             message=intent.clarification.prompt,
             intent=intent,
-            directive=self._location_directive(intent),
+            directive=directive or self._location_directive(intent),
             candidates=(),
             unresolved=intent.unresolved,
             trace_id=trace_id,
@@ -819,6 +1022,12 @@ class ChatPlaceRecommendationsUseCase:
     ) -> ParsedPlaceChatIntent:
         clarification = to_public_clarification(pending)
         patch = intent.state_patch
+        source_hard_filters = (
+            patch.hard_filters
+            if patch.hard_filters is not None
+            else intent.hard_filters
+        )
+        persistent_hard_filters = _persistent_hard_filters(source_hard_filters)
         return replace(
             intent,
             action="clarification",
@@ -829,9 +1038,9 @@ class ChatPlaceRecommendationsUseCase:
                     patch.target_category or intent.target_category
                 ),
                 hard_filters=(
-                    patch.hard_filters
-                    if patch.hard_filters is not None
-                    else (dict(intent.hard_filters) if intent.hard_filters else None)
+                    persistent_hard_filters
+                    if patch.hard_filters is not None or persistent_hard_filters
+                    else None
                 ),
                 soft_preferences=(
                     patch.soft_preferences
@@ -922,6 +1131,79 @@ class ChatPlaceRecommendationsUseCase:
             result.used_llm,
             result.guard_reason,
         )
+
+
+def _persistent_hard_filters(filters: dict[str, Any] | None) -> dict[str, Any]:
+    if not filters:
+        return {}
+    return {
+        key: value
+        for key, value in filters.items()
+        if key != "place_ids"
+    }
+
+
+def _normalized_category(value: str | None) -> str:
+    if not value:
+        return ""
+    return " ".join(value.replace("_", " ").replace("-", " ").casefold().split())
+
+
+def _display_category(value: str) -> str:
+    humanized = " ".join(value.replace("_", " ").replace("-", " ").split())
+    if not humanized:
+        return "Lugar"
+    return humanized[:1].upper() + humanized[1:]
+
+
+def _candidate_category_values(candidate: PlaceChatCandidate) -> set[str]:
+    values: set[str] = set()
+    for raw_value in (
+        candidate.category,
+        candidate.metadata.get("category_label"),
+        candidate.metadata.get("tags"),
+        candidate.metadata.get("tag_names"),
+    ):
+        for value in _text_values(raw_value):
+            normalized = _normalized_category(value)
+            if normalized:
+                values.add(normalized)
+    return values
+
+
+def _candidate_has_category_evidence(
+    candidate: PlaceChatCandidate,
+    requested_values: set[str],
+) -> bool:
+    if not requested_values:
+        return False
+    if _candidate_category_values(candidate) & requested_values:
+        return True
+
+    raw_evidence: list[str] = []
+    for raw_value in (
+        candidate.category,
+        candidate.metadata.get("category_label"),
+        candidate.metadata.get("tags"),
+        candidate.metadata.get("tag_names"),
+    ):
+        raw_evidence.extend(_text_values(raw_value))
+    haystack = f" {' '.join(_normalized_category(value) for value in raw_evidence)} "
+    return any(f" {value} " in haystack for value in requested_values)
+
+
+def _text_values(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return tuple(
+            part.strip()
+            for part in value.replace(";", ",").split(",")
+            if part.strip()
+        )
+    if isinstance(value, Sequence) and not isinstance(value, bytes | bytearray):
+        return tuple(str(item).strip() for item in value if str(item).strip())
+    return (str(value).strip(),) if str(value).strip() else ()
 
 
 def _distance_meters(
