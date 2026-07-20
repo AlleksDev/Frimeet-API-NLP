@@ -1,7 +1,10 @@
 import math
+import sys
+from types import SimpleNamespace
 
 import pytest
 
+from app.shared.nlp.embeddings import sentence_transformer as sentence_transformer_module
 from app.shared.nlp.embeddings.sentence_transformer import (
     SentenceTransformerDimensionError,
     SentenceTransformerEmbeddingProvider,
@@ -46,12 +49,15 @@ def test_provider_loads_lazily_and_batches_non_empty_texts() -> None:
         expected_dimension=3,
         batch_size=8,
         device="cpu",
+        model_revision="revision-a",
         text_prefix="query: ",
         model_loader=loader,
     )
 
     assert provider.is_loaded is False
     assert provider.dimension == 3
+    assert provider.model_revision == "revision-a"
+    assert provider.fix_mistral_regex is True
     assert loader_calls == []
 
     embeddings = provider.embed_batch([" donas ", "  ", "cafecito"])
@@ -71,6 +77,124 @@ def test_provider_loads_lazily_and_batches_non_empty_texts() -> None:
                 "show_progress_bar": False,
             },
         )
+    ]
+
+
+def test_default_loader_pins_revision_and_caches_each_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    constructor_calls: list[tuple[str, dict[str, object]]] = []
+
+    def constructor(name: str, **kwargs: object) -> FakeSentenceTransformer:
+        constructor_calls.append((name, kwargs))
+        return FakeSentenceTransformer({}, dimension=3)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        SimpleNamespace(SentenceTransformer=constructor),
+    )
+    monkeypatch.setattr(sentence_transformer_module, "_SHARED_MODELS", {})
+
+    first = sentence_transformer_module._load_sentence_transformer(
+        "owner/retriever",
+        "cpu",
+        revision="sha-a",
+    )
+    cached = sentence_transformer_module._load_sentence_transformer(
+        "owner/retriever",
+        "cpu",
+        revision="sha-a",
+    )
+    second_revision = sentence_transformer_module._load_sentence_transformer(
+        "owner/retriever",
+        "cpu",
+        revision="sha-b",
+    )
+    different_tokenizer_config = (
+        sentence_transformer_module._load_sentence_transformer(
+            "owner/retriever",
+            "cpu",
+            revision="sha-a",
+            fix_mistral_regex=False,
+        )
+    )
+
+    assert first is cached
+    assert second_revision is not first
+    assert different_tokenizer_config is not first
+    assert constructor_calls == [
+        (
+            "owner/retriever",
+            {
+                "device": "cpu",
+                "revision": "sha-a",
+                "tokenizer_kwargs": {"fix_mistral_regex": True},
+            },
+        ),
+        (
+            "owner/retriever",
+            {
+                "device": "cpu",
+                "revision": "sha-b",
+                "tokenizer_kwargs": {"fix_mistral_regex": True},
+            },
+        ),
+        (
+            "owner/retriever",
+            {
+                "device": "cpu",
+                "revision": "sha-a",
+                "tokenizer_kwargs": {"fix_mistral_regex": False},
+            },
+        ),
+    ]
+
+
+def test_default_loader_uses_processor_kwargs_on_new_sentence_transformers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    class NewSentenceTransformer(FakeSentenceTransformer):
+        def __init__(
+            self,
+            name: str,
+            *,
+            device: str | None,
+            revision: str | None,
+            processor_kwargs: dict[str, object],
+        ) -> None:
+            super().__init__({}, dimension=3)
+            calls.append(
+                {
+                    "name": name,
+                    "device": device,
+                    "revision": revision,
+                    "processor_kwargs": processor_kwargs,
+                }
+            )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        SimpleNamespace(SentenceTransformer=NewSentenceTransformer),
+    )
+    monkeypatch.setattr(sentence_transformer_module, "_SHARED_MODELS", {})
+
+    sentence_transformer_module._load_sentence_transformer(
+        "owner/retriever",
+        "cpu",
+        revision="sha-a",
+    )
+
+    assert calls == [
+        {
+            "name": "owner/retriever",
+            "device": "cpu",
+            "revision": "sha-a",
+            "processor_kwargs": {"fix_mistral_regex": True},
+        }
     ]
 
 

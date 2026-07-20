@@ -32,6 +32,7 @@ async def main() -> None:
 
     if settings.vector_store_provider != "aws_pgvector":
         raise RuntimeError("sync_place_embeddings requires VECTOR_STORE_PROVIDER=aws_pgvector")
+    _validate_backfill_configuration(settings)
 
     source = MainApiPlacesClient(settings)
     vector_client = AwsPgvectorClient(settings, role="writer")
@@ -41,10 +42,13 @@ async def main() -> None:
 
     logger.info("Starting place embedding sync")
     logger.info(
-        "Places embedding model=%s version=%s dimension=%s",
+        "Places embedding model=%s revision=%s version=%s dimension=%s "
+        "fix_mistral_regex=%s",
         settings.places_embedding_model,
+        settings.places_embedding_model_revision or "unpinned",
         settings.places_embedding_version,
         settings.places_embedding_dimension,
+        settings.places_embedding_fix_mistral_regex,
     )
 
     async for place in source.iter_places(
@@ -107,6 +111,13 @@ async def _flush_batch(
                 model=settings.places_embedding_model,
                 version=settings.places_embedding_version,
                 dimension=settings.places_embedding_dimension,
+                revision=settings.places_embedding_model_revision,
+                fix_mistral_regex=(
+                    settings.places_embedding_fix_mistral_regex
+                    if settings.places_embedding_provider
+                    in {"sentence_transformer", "bert"}
+                    else None
+                ),
             )
             for record in batch
         }
@@ -142,10 +153,55 @@ async def _flush_batch(
                 embedding_model=settings.places_embedding_model,
                 embedding_version=settings.places_embedding_version,
             )
-        counters.upserted += len(upserts)
+            counters.upserted += len(upserts)
     except Exception:
         counters.errors += len(batch)
         logger.exception("Failed to sync place embedding batch")
+
+
+def _validate_backfill_configuration(settings: Settings) -> None:
+    """Fail early when the 768d model and database writers are mixed."""
+
+    semantic_upsert = "upsert_place_embedding_semantic_v1"
+    semantic_hash = "get_place_content_hashes_semantic_v1"
+    selected_upsert = settings.places_pgvector_upsert_function
+    selected_hash = settings.places_pgvector_hash_function
+    uses_semantic_upsert = selected_upsert == semantic_upsert
+    uses_semantic_hash = selected_hash == semantic_hash
+
+    if uses_semantic_upsert != uses_semantic_hash:
+        raise RuntimeError(
+            "The semantic Places backfill requires both writer functions: "
+            f"PLACES_PGVECTOR_UPSERT_FUNCTION={semantic_upsert} and "
+            f"PLACES_PGVECTOR_HASH_FUNCTION={semantic_hash}"
+        )
+
+    semantic_provider = settings.places_embedding_provider in {
+        "sentence_transformer",
+        "bert",
+    }
+    if uses_semantic_upsert:
+        if not semantic_provider or settings.places_embedding_dimension != 768:
+            raise RuntimeError(
+                "place_embeddings_semantic_v1 requires a Sentence-Transformer "
+                "provider with PLACES_EMBEDDING_DIMENSION=768"
+            )
+        if settings.places_embedding_model_revision is None:
+            logger.warning(
+                "PLACES_EMBEDDING_MODEL_REVISION is not pinned; use a full "
+                "Hugging Face commit SHA for reproducible production vectors"
+            )
+        if not settings.places_embedding_passage_prefix:
+            logger.warning(
+                "PLACES_EMBEDDING_PASSAGE_PREFIX is empty; E5-family models "
+                "normally require the 'passage:' prefix"
+            )
+    elif semantic_provider and settings.places_embedding_dimension == 768:
+        raise RuntimeError(
+            "A 768d Places retriever cannot write through the legacy 300d "
+            "functions. Configure PLACES_PGVECTOR_UPSERT_FUNCTION="
+            f"{semantic_upsert} and PLACES_PGVECTOR_HASH_FUNCTION={semantic_hash}"
+        )
 
 
 def _parse_args() -> argparse.Namespace:

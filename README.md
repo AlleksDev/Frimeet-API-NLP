@@ -367,6 +367,9 @@ hash y fuerza un re-embedding seguro cuando cambia el documento.
 
 ### Migracion BERT/Sentence-Transformer exclusiva de Places
 
+La guia operativa completa para Colab, backfill, verificacion, cutover y
+rollback esta en `docs/places_semantic_deployment.md`.
+
 La migracion es aditiva y no cambia los vectores de posts, perfiles o feed:
 
 1. Ejecuta `sql/migrations/20260716_02_places_semantic_v1.sql` con el rol DBA.

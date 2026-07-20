@@ -1,8 +1,12 @@
-"""Carga inicial de embeddings FastText de lugares desde Google Colab.
+"""Carga inicial de embeddings de lugares desde Google Colab.
 
 Ejecutar desde la raiz de un clon de este repositorio:
 
     !python scripts/colab_initial_load_places.py
+
+Para poblar la tabla Sentence-Transformer de 768 dimensiones:
+
+    !python scripts/colab_initial_load_places.py --semantic
 
 El script lee credenciales desde los Secrets de Colab usando los mismos nombres
 de las variables de entorno. Nunca imprime los valores secretos.
@@ -14,6 +18,7 @@ import argparse
 import getpass
 import os
 from pathlib import Path
+import re
 import socket
 import subprocess
 import sys
@@ -81,7 +86,7 @@ DEFAULT_MODEL_PATH = "/content/fasttext-es/model.bin"
 def main() -> None:
     args = _parse_args()
     os.chdir(REPO_ROOT)
-    _configure_environment()
+    _configure_environment(semantic=args.semantic)
 
     if not args.skip_install:
         print("[1/4] Instalando dependencias del proyecto...", flush=True)
@@ -101,7 +106,13 @@ def main() -> None:
     _check_main_api()
     _check_pgvector_network()
 
-    if not args.skip_download:
+    if args.semantic:
+        print(
+            "[3/4] El retriever se descargara desde Hugging Face al procesar "
+            "el primer lote.",
+            flush=True,
+        )
+    elif not args.skip_download:
         print("[3/4] Descargando o reutilizando el modelo FastText...", flush=True)
         _run(
             sys.executable,
@@ -131,8 +142,9 @@ def main() -> None:
     if args.dry_run:
         command.append("--dry-run")
 
+    model_kind = "Sentence-Transformer" if args.semantic else "FastText"
     print(
-        "[4/4] Cargando FastText y sincronizando lugares. "
+        f"[4/4] Cargando {model_kind} y sincronizando lugares. "
         "La carga inicial del modelo puede tardar varios minutos...",
         flush=True,
     )
@@ -140,9 +152,12 @@ def main() -> None:
     print("Carga de lugares terminada correctamente.")
 
 
-def _configure_environment() -> None:
+def _configure_environment(*, semantic: bool) -> None:
     defaults = {
-        "ENV": "colab",
+        # This is an offline maintenance process, not the long-lived API
+        # service. Local skips service-only token validation; the job still
+        # explicitly requires aws_pgvector and writer credentials.
+        "ENV": "local",
         "MAIN_API_BASE_URL": "http://3.212.166.108",
         "MAIN_API_PLACES_SEARCH_PATH": "/api/v1/places/search",
         "MAIN_API_TIMEOUT_SECONDS": "60",
@@ -168,7 +183,68 @@ def _configure_environment() -> None:
         # A raw notebook cell shares os.environ with every previous execution.
         # Use a Colab Secret when explicitly configured; otherwise reset the
         # value to this script's current default instead of inheriting stale data.
-        os.environ[name] = _read_colab_secret(name) or default
+        os.environ[name] = _read_setting(name, default)
+    os.environ["ENV"] = "local"
+
+    if semantic:
+        model = _read_required_setting("PLACES_EMBEDDING_MODEL")
+        revision = _read_required_setting("PLACES_EMBEDDING_MODEL_REVISION")
+        if re.fullmatch(r"[0-9a-fA-F]{40}", revision) is None:
+            raise RuntimeError(
+                "PLACES_EMBEDDING_MODEL_REVISION debe ser el SHA completo de "
+                "40 caracteres del commit de Hugging Face, no 'main' ni un tag."
+            )
+        version = _read_setting(
+            "PLACES_EMBEDDING_VERSION",
+            f"places-e5-retriever@{revision}",
+        ).strip()
+        if revision.casefold() not in version.casefold():
+            raise RuntimeError(
+                "PLACES_EMBEDDING_VERSION debe incluir el mismo SHA completo "
+                "configurado en PLACES_EMBEDDING_MODEL_REVISION."
+            )
+        semantic_profile = {
+            "PLACES_EMBEDDING_PROVIDER": "sentence_transformer",
+            "PLACES_EMBEDDING_DIMENSION": "768",
+            "PLACES_EMBEDDING_MODEL": model,
+            "PLACES_EMBEDDING_MODEL_REVISION": revision,
+            "PLACES_EMBEDDING_FIX_MISTRAL_REGEX": "true",
+            "PLACES_EMBEDDING_VERSION": version,
+            "PLACES_EMBEDDING_QUERY_PREFIX": "query:",
+            "PLACES_EMBEDDING_PASSAGE_PREFIX": "passage:",
+            "PLACES_PGVECTOR_MATCH_FUNCTION": "match_places_semantic_v1",
+            "PLACES_PGVECTOR_HYBRID_FUNCTION": "search_places_semantic_v1",
+            "PLACES_PGVECTOR_UPSERT_FUNCTION": (
+                "upsert_place_embedding_semantic_v1"
+            ),
+            "PLACES_PGVECTOR_HASH_FUNCTION": (
+                "get_place_content_hashes_semantic_v1"
+            ),
+        }
+        os.environ.update(semantic_profile)
+        os.environ["PLACES_EMBEDDING_BATCH_SIZE"] = _read_setting(
+            "PLACES_EMBEDDING_BATCH_SIZE",
+            "16",
+        )
+        os.environ["PLACES_EMBEDDING_DEVICE"] = _read_setting(
+            "PLACES_EMBEDDING_DEVICE"
+        )
+    else:
+        legacy_profile = {
+            "PLACES_EMBEDDING_PROVIDER": "fasttext",
+            "PLACES_EMBEDDING_DIMENSION": "300",
+            "PLACES_EMBEDDING_MODEL": "facebook/fasttext-es-vectors",
+            "PLACES_EMBEDDING_MODEL_REVISION": "",
+            "PLACES_EMBEDDING_FIX_MISTRAL_REGEX": "true",
+            "PLACES_EMBEDDING_VERSION": "common-crawl-300-v1",
+            "PLACES_EMBEDDING_QUERY_PREFIX": "",
+            "PLACES_EMBEDDING_PASSAGE_PREFIX": "",
+            "PLACES_PGVECTOR_MATCH_FUNCTION": "match_places",
+            "PLACES_PGVECTOR_HYBRID_FUNCTION": "",
+            "PLACES_PGVECTOR_UPSERT_FUNCTION": "upsert_place_embedding",
+            "PLACES_PGVECTOR_HASH_FUNCTION": "get_place_content_hashes",
+        }
+        os.environ.update(legacy_profile)
 
     os.environ["PGVECTOR_WRITER_PASSWORD"] = _read_required_secret(
         "PGVECTOR_WRITER_PASSWORD"
@@ -199,6 +275,16 @@ def _read_required_secret(name: str) -> str:
     value = getpass.getpass(f"Escribe {name} (la entrada permanecera oculta): ").strip()
     if not value:
         raise RuntimeError(f"No se proporciono el valor requerido {name!r}.")
+    return value
+
+
+def _read_required_setting(name: str) -> str:
+    value = _read_setting(name).strip()
+    if not value:
+        raise RuntimeError(
+            f"Configura {name} en os.environ o en los Secrets de Colab "
+            "antes de ejecutar el backfill semantico."
+        )
     return value
 
 
@@ -262,7 +348,8 @@ def _run(*command: str) -> None:
         raise RuntimeError(
             f"Fallo el comando con codigo {exc.returncode}: {executable}. "
             "Revisa la salida inmediatamente anterior; si API y red aparecen OK, "
-            "verifica la password/permisos de nlp_writer y la migracion VECTOR(300)."
+            "verifica la password/permisos de nlp_writer y que la migracion "
+            "correspondiente a la dimension configurada ya exista."
         ) from exc
 
 
@@ -272,6 +359,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--page-limit", type=int, default=50)
     parser.add_argument("--max-pages", type=int, default=None)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--semantic",
+        action="store_true",
+        help="Puebla place_embeddings_semantic_v1 con el retriever de 768d.",
+    )
     parser.add_argument("--skip-install", action="store_true")
     parser.add_argument("--skip-download", action="store_true")
     arguments = None if "__file__" in globals() else []
