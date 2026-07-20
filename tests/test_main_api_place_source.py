@@ -106,3 +106,18 @@ def test_place_source_extracts_cursor_metadata() -> None:
 
     assert MainApiPlacesClient._extract_next_cursor(payload) == "cursor_abc"
     assert MainApiPlacesClient._extract_has_more(payload) is True
+
+
+def test_place_source_extracts_nested_cursor_metadata() -> None:
+    payload = {
+        "data": {
+            "items": [{"id": "place_1"}],
+            "pagination": {
+                "nextCursor": "cursor_nested",
+                "hasMore": True,
+            },
+        }
+    }
+
+    assert MainApiPlacesClient._extract_next_cursor(payload) == "cursor_nested"
+    assert MainApiPlacesClient._extract_has_more(payload) is True

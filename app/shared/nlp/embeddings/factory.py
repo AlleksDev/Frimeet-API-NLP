@@ -60,6 +60,8 @@ def create_place_embedding_provider(
             expected_dimension=settings.places_embedding_dimension,
             batch_size=settings.places_embedding_batch_size,
             device=settings.places_embedding_device,
+            model_revision=settings.places_embedding_model_revision,
+            fix_mistral_regex=settings.places_embedding_fix_mistral_regex,
             text_prefix=prefix,
             normalize_embeddings=True,
         )

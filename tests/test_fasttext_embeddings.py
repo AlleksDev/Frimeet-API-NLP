@@ -48,3 +48,43 @@ def test_embedding_hash_changes_with_model_configuration() -> None:
     second = versioned_embedding_hash("source", "fasttext", "v2", 300)
 
     assert first != second
+
+
+def test_embedding_hash_changes_with_pinned_model_revision() -> None:
+    first = versioned_embedding_hash(
+        "source",
+        "owner/retriever",
+        "v1",
+        768,
+        revision="sha-a",
+    )
+    second = versioned_embedding_hash(
+        "source",
+        "owner/retriever",
+        "v1",
+        768,
+        revision="sha-b",
+    )
+
+    assert first != second
+
+
+def test_embedding_hash_changes_with_tokenizer_fix_configuration() -> None:
+    fixed = versioned_embedding_hash(
+        "source",
+        "owner/retriever",
+        "v1",
+        768,
+        revision="sha-a",
+        fix_mistral_regex=True,
+    )
+    unfixed = versioned_embedding_hash(
+        "source",
+        "owner/retriever",
+        "v1",
+        768,
+        revision="sha-a",
+        fix_mistral_regex=False,
+    )
+
+    assert fixed != unfixed

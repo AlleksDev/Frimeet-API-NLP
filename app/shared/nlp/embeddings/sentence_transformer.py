@@ -7,9 +7,11 @@ test discovery independent from heavyweight model loading.
 
 from __future__ import annotations
 
+import inspect
 import math
 import threading
 from collections.abc import Callable, Sequence
+from functools import partial
 from typing import Any, Protocol
 
 from app.shared.nlp.embeddings.base import EmbeddingProvider
@@ -26,7 +28,9 @@ class SentenceTransformerModel(Protocol):
 ModelLoader = Callable[[str, str | None], SentenceTransformerModel]
 
 
-_SHARED_MODELS: dict[tuple[str, str | None], SentenceTransformerModel] = {}
+_SHARED_MODELS: dict[
+    tuple[str, str | None, str | None, bool], SentenceTransformerModel
+] = {}
 _SHARED_MODELS_LOCK = threading.Lock()
 _MODEL_INFERENCE_LOCKS: dict[int, threading.Lock] = {}
 
@@ -63,6 +67,8 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
         *,
         batch_size: int = 32,
         device: str | None = None,
+        model_revision: str | None = None,
+        fix_mistral_regex: bool = True,
         text_prefix: str = "",
         normalize_embeddings: bool = True,
         model_loader: ModelLoader | None = None,
@@ -78,10 +84,20 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
         self.dimension = int(expected_dimension)
         self.batch_size = int(batch_size)
         self.device = device
+        self.model_revision = (
+            model_revision.strip() or None if model_revision is not None else None
+        )
+        self.fix_mistral_regex = bool(fix_mistral_regex)
         self.text_prefix = text_prefix
         self.normalize_embeddings = normalize_embeddings
 
-        self._model_loader = model_loader or _load_sentence_transformer
+        # Keep injected two-argument loaders backward-compatible while binding
+        # the immutable Hub revision only for the default loader.
+        self._model_loader = model_loader or partial(
+            _load_sentence_transformer,
+            revision=self.model_revision,
+            fix_mistral_regex=self.fix_mistral_regex,
+        )
         self._model: SentenceTransformerModel | None = None
         self._model_lock = threading.Lock()
 
@@ -237,8 +253,11 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
 def _load_sentence_transformer(
     model_name_or_path: str,
     device: str | None,
+    *,
+    revision: str | None = None,
+    fix_mistral_regex: bool = True,
 ) -> SentenceTransformerModel:
-    cache_key = (model_name_or_path, device)
+    cache_key = (model_name_or_path, revision, device, fix_mistral_regex)
     cached = _SHARED_MODELS.get(cache_key)
     if cached is not None:
         return cached
@@ -255,7 +274,26 @@ def _load_sentence_transformer(
             ) from exc
 
         try:
-            model = SentenceTransformer(model_name_or_path, device=device)
+            tokenizer_kwargs = {
+                "fix_mistral_regex": fix_mistral_regex,
+            }
+            try:
+                constructor_parameters = inspect.signature(
+                    SentenceTransformer
+                ).parameters
+            except (TypeError, ValueError):
+                constructor_parameters = {}
+            tokenizer_parameter = (
+                "processor_kwargs"
+                if "processor_kwargs" in constructor_parameters
+                else "tokenizer_kwargs"
+            )
+            model = SentenceTransformer(
+                model_name_or_path,
+                device=device,
+                revision=revision,
+                **{tokenizer_parameter: tokenizer_kwargs},
+            )
         except Exception as exc:
             raise SentenceTransformerModelLoadError(
                 "Could not initialize Sentence-Transformer model "
