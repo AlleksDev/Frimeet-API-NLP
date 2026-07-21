@@ -13,6 +13,25 @@ from app.modules.places.domain.chat_intent import (
 )
 
 
+_SPANISH_CHAT_CATEGORY_LABELS = {
+    "cafe": "Cafeterías",
+    "restaurant": "Restaurantes",
+    "park": "Parques",
+    "bar": "Bares",
+    "nightlife": "Vida nocturna",
+    "culture": "Cultura y museos",
+    "shopping": "Compras",
+    "sports": "Deportes",
+    "bakery": "Panaderías",
+    "ice_cream": "Heladerías y postres",
+    "cinema": "Cines",
+    "library": "Bibliotecas",
+    "market": "Mercados",
+    "outdoors": "Actividades al aire libre",
+    "lodging": "Alojamiento",
+}
+
+
 def new_category_clarification(
     categories: Sequence[str],
     *,
@@ -32,7 +51,7 @@ def new_category_clarification(
                 option_id=option_id,
                 value=category,
                 label=_bounded_text(
-                    _category_display_label(
+                    category_display_label(
                         category,
                         option_labels.get(category),
                     ),
@@ -157,8 +176,15 @@ def _bounded_text(value: str, maximum: int) -> str:
     return value[: maximum - 1].rstrip() + "…"
 
 
-def _category_display_label(category: str, label: str | None) -> str:
-    value = " ".join((label or category).replace("_", " ").split()).strip()
+def category_display_label(category: str, label: str | None = None) -> str:
+    normalized = category.strip().casefold()
+    value = " ".join(
+        (
+            label
+            or _SPANISH_CHAT_CATEGORY_LABELS.get(normalized)
+            or category
+        ).replace("_", " ").split()
+    ).strip()
     if not value:
         value = "Lugar"
     return value[:1].upper() + value[1:]

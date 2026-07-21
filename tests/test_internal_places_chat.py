@@ -208,6 +208,7 @@ def test_internal_chat_accepts_a_stateful_continuation() -> None:
     assert payload["state_patch"]["hard_filters"] == {
         "price_preference": "lower"
     }
+    assert payload["state_patch"]["taxonomy_version"] == "places-taxonomy-v2"
     assert payload["location_directive"]["source"] == "user_current"
 
 

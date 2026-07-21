@@ -1,6 +1,6 @@
 # Cambios requeridos en la API principal para el chat de lugares
 
-> Estado: pendiente fuera de este repositorio. Este documento describe cambios que deben implementarse en la API principal. No se modificó código Go como parte del ajuste del servicio NLP.
+> Estado: integración funcional implementada en la API principal Go. Las secciones de observabilidad y ciclo de vida conservan recomendaciones operativas adicionales.
 
 ## Objetivo
 

@@ -2,9 +2,11 @@ from dataclasses import dataclass
 from functools import lru_cache
 import json
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Any
 
 from app.shared.nlp.preprocessing.text import clean_text
+from app.modules.places.infrastructure.place_facets import ResolvedPlaceFacets
 
 
 PLACE_SEMANTIC_FIELD_WEIGHTS = {
@@ -12,8 +14,12 @@ PLACE_SEMANTIC_FIELD_WEIGHTS = {
     "category": 1,
     "description": 1,
     "name": 1,
+    "attributes": 1,
+    "entertainment": 1,
+    "contained_items": 1,
+    "menu": 1,
 }
-PLACE_SEMANTIC_DOCUMENT_VERSION = "structured-place-v3"
+PLACE_SEMANTIC_DOCUMENT_VERSION = "structured-place-v4"
 
 
 @dataclass(frozen=True)
@@ -36,16 +42,30 @@ def build_place_semantic_document(
     category: Any,
     description: str,
     resolved_tags: ResolvedPlaceTags,
+    *,
+    category_label: Any = None,
+    resolved_facets: ResolvedPlaceFacets | None = None,
 ) -> str:
     # Transformer encoders use context and sentence structure; repeating tokens
     # to simulate weights (the old FastText strategy) distorts that context.
     # Keep every source value once and expose its role explicitly instead.
+    facets = resolved_facets or ResolvedPlaceFacets({}, (), (), (), (), ())
     fields = (
         ("Nombre", clean_text(name)),
-        ("Tipo registrado", semantic_category_text(category)),
+        (
+            "Categoria",
+            _category_semantic_text(category, category_label),
+        ),
         ("Descripcion", clean_text(description)),
         ("Etiquetas", " ".join(resolved_tags.names)),
         ("Familias de etiquetas", " ".join(resolved_tags.categories)),
+        ("Atributos confirmados", ", ".join(facets.positive_attributes)),
+        (
+            "Entretenimiento disponible",
+            ", ".join(facets.entertainment_features),
+        ),
+        ("Elementos y actividades", ", ".join(facets.contained_items)),
+        ("Menu", ", ".join(facets.menu_items)),
     )
     return " ".join(
         f"{label}: {value}."
@@ -61,6 +81,16 @@ def semantic_category_text(category: Any) -> str:
     return raw_category
 
 
+def _category_semantic_text(category: Any, category_label: Any) -> str:
+    canonical = semantic_category_text(category)
+    localized = clean_text(str(category_label or ""))
+    if not localized:
+        return canonical
+    if localized.casefold() == canonical.casefold():
+        return localized
+    return " ".join(value for value in (localized, canonical) if value)
+
+
 def resolve_place_tags(value: Any) -> ResolvedPlaceTags:
     resolved_names: list[str] = []
     tag_ids: list[int] = []
@@ -69,17 +99,38 @@ def resolve_place_tags(value: Any) -> ResolvedPlaceTags:
     seen_names: set[str] = set()
 
     for raw_tag in _as_tag_values(value):
-        tag_id = _as_tag_id(raw_tag)
+        tag_payload = raw_tag if isinstance(raw_tag, Mapping) else None
+        tag_id = _as_tag_id(
+            tag_payload.get("id") if tag_payload is not None else raw_tag
+        )
         if tag_id is not None:
             tag_ids.append(tag_id)
+            supplied_name = (
+                tag_payload.get("label") or tag_payload.get("name")
+                if tag_payload is not None
+                else None
+            )
             tag = place_tag_catalog().get(tag_id)
-            if tag is None:
+            if supplied_name:
+                name = str(supplied_name).replace("_", " ")
+                supplied_category = tag_payload.get("category")
+                if supplied_category:
+                    tag_categories.append(str(supplied_category))
+                elif tag is not None:
+                    tag_categories.append(tag.category)
+            elif tag is None:
                 unknown_ids.append(tag_id)
                 continue
-            name = tag.name.replace("_", " ")
-            tag_categories.append(tag.category)
+            else:
+                name = tag.name.replace("_", " ")
+                tag_categories.append(tag.category)
         else:
-            name = str(raw_tag).replace("_", " ")
+            supplied_name = (
+                tag_payload.get("label") or tag_payload.get("name")
+                if tag_payload is not None
+                else raw_tag
+            )
+            name = str(supplied_name or "").replace("_", " ")
 
         cleaned_name = clean_text(name)
         normalized_name = cleaned_name.casefold()

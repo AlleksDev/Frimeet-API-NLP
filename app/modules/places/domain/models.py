@@ -56,7 +56,18 @@ class PlaceCandidate:
             {
                 key: value
                 for key, value in self.metadata.items()
-                if key in {"tags", "occasion", "short_description"}
+                if key
+                in {
+                    "tags",
+                    "occasion",
+                    "short_description",
+                    "category_label",
+                    "attribute_states",
+                    "attribute_terms",
+                    "entertainment_features",
+                    "contained_items",
+                    "menu_items",
+                }
             }
         )
         return context

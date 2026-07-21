@@ -15,6 +15,9 @@ from app.modules.places.application.use_cases.chat_place_recommendations import 
     ChatPlaceRecommendationsUseCase,
 )
 from app.modules.places.domain.errors import ClarificationStateMismatchError
+from app.modules.places.domain.taxonomy_version import (
+    is_compatible_place_chat_taxonomy,
+)
 from app.shared.config.settings import get_settings
 from app.shared.security.rate_limit import rate_limit_placeholder
 
@@ -39,9 +42,9 @@ async def chat_place_recommendations(
     settings = get_settings()
     if not settings.places_chat_v2_enabled:
         raise HTTPException(status_code=404, detail="Places chat V2 is disabled")
-    if (
-        payload.state.taxonomy_version is not None
-        and payload.state.taxonomy_version != settings.places_chat_taxonomy_version
+    if not is_compatible_place_chat_taxonomy(
+        payload.state.taxonomy_version,
+        settings.places_chat_taxonomy_version,
     ):
         raise HTTPException(
             status_code=409,

@@ -143,6 +143,7 @@ class ConversationStatePatch:
     reference: PlaceReference | None = None
     explicit_target_location: ExplicitTargetLocation | None = None
     pending_clarification: PendingClarification | None = None
+    clear_target_category: bool = False
     clear_reference: bool = False
     clear_explicit_target_location: bool = False
     clear_pending_clarification: bool = False
@@ -152,6 +153,8 @@ class ConversationStatePatch:
         payload: dict[str, Any] = {}
         if self.target_category is not None:
             payload["target_category"] = self.target_category
+        if self.clear_target_category:
+            payload["target_category"] = None
         if self.hard_filters is not None:
             payload["hard_filters"] = self.hard_filters
         if self.soft_preferences is not None:
@@ -227,7 +230,7 @@ class ParsedPlaceChatIntent:
     clarification_message: str | None = None
     response_message: str | None = None
     raw_category_phrase: str | None = None
-    intent_model_version: str = "deterministic-open-v2"
+    intent_model_version: str = "deterministic-open-v3"
 
 
 @dataclass(frozen=True)

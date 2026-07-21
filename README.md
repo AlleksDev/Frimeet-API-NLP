@@ -140,6 +140,12 @@ python -m app.jobs.sync_search_embeddings --resource all
 
 Los jobs calculan un `content_hash` versionado con el contenido, modelo, version y
 dimension. Un cambio de modelo fuerza la regeneracion aunque el texto no haya cambiado.
+El job de lugares tambien consulta `GET /api/v1/places/categories?lang=es` una vez por
+ejecucion y sincroniza etiquetas localizadas, atributos, entretenimiento, elementos
+contenidos y menu. Por ello, despues de desplegar cambios del catalogo principal se debe
+volver a ejecutar `python -m app.jobs.sync_place_embeddings`. Si el catalogo espanol no
+esta disponible o llega vacio, el job falla sin reindexar con etiquetas en ingles; se
+debe desplegar primero la API principal y volver a intentarlo.
 
 La sincronizacion de users, clubs, groups y events consume exclusivamente los snapshots
 internos de la API principal:
@@ -236,9 +242,10 @@ lugares o evidencia de la categoria, puede ampliarse hasta
 El radio efectivo queda en `location_directive.radius_meters`; los `place_ids` usados
 para cada consulta son transitorios y no se persisten en `state_patch`.
 
-Los ajustes que pertenecen a otros repositorios se documentan en
+La integracion complementaria ya esta implementada en la API principal Go. Sus contratos
+se documentan en
 `docs/cambios_api_principal_chat_lugares.md` y
-`docs/cambios_app_movil_chat_lugares.md`; no se implementan desde este servicio.
+`docs/cambios_app_movil_chat_lugares.md`.
 
 ## SQL RDS
 
@@ -375,13 +382,17 @@ El documento de Places contiene cada señal una sola vez y explicita el rol de c
 campo. Esto evita que la repeticion manual distorsione un encoder BERT:
 
 ```text
-Nombre: ... Tipo registrado: ... Descripcion: ... Etiquetas: ...
+Nombre: ... Categoria: <etiqueta en español> <valor canonico> ...
+Atributos confirmados: ... Entretenimiento disponible: ...
+Elementos y actividades: ... Menu: ...
 ```
 
 No se expanden categorias mediante diccionarios de sinonimos. Direccion, ciudad,
 estado, `source`, precio e IDs desconocidos permanecen fuera del embedding; siguen
-disponibles como metadatos o filtros. La version `structured-place-v3` forma parte del
-hash y fuerza un re-embedding seguro cuando cambia el documento.
+disponibles como metadatos o filtros. Los atributos `NULL` se consideran desconocidos
+y no restan relevancia; `false`/`no` se conservan como ausencia explicita, pero no se
+insertan como evidencia positiva. La version `structured-place-v4` forma parte del hash
+y fuerza un re-embedding seguro cuando cambia el documento.
 
 ### Migracion BERT/Sentence-Transformer exclusiva de Places
 

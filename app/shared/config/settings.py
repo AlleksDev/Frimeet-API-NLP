@@ -25,6 +25,16 @@ class Settings(BaseSettings):
         default="/api/v1/places/search",
         alias="MAIN_API_PLACES_SEARCH_PATH",
     )
+    main_api_place_categories_path: str = Field(
+        default="/api/v1/places/categories",
+        alias="MAIN_API_PLACE_CATEGORIES_PATH",
+    )
+    main_api_place_catalog_language: str = Field(
+        default="es",
+        min_length=2,
+        max_length=8,
+        alias="MAIN_API_PLACE_CATALOG_LANGUAGE",
+    )
     main_api_places_nearby_path: str = Field(
         default="/api/v1/places/nearby",
         alias="MAIN_API_PLACES_NEARBY_PATH",
@@ -328,13 +338,13 @@ class Settings(BaseSettings):
         alias="PLACES_CHAT_MAX_AUTO_RADIUS_METERS",
     )
     places_chat_ranking_version: str = Field(
-        default="places-chat-v2",
+        default="places-chat-v3",
         min_length=1,
         max_length=64,
         alias="PLACES_CHAT_RANKING_VERSION",
     )
     places_chat_taxonomy_version: str = Field(
-        default="places-taxonomy-v1",
+        default="places-taxonomy-v2",
         min_length=1,
         max_length=64,
         alias="PLACES_CHAT_TAXONOMY_VERSION",
