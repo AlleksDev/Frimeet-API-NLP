@@ -15,6 +15,9 @@ from app.modules.places.infrastructure.bert_intent_extractor import (
 from app.modules.places.domain.errors import ClarificationStateMismatchError
 from app.modules.places.infrastructure.deterministic_intent_parser import (
     DeterministicPlaceChatIntentParser,
+    PlaceChatTaxonomy,
+    PreferenceDefinition,
+    load_place_chat_taxonomy,
 )
 
 
@@ -119,13 +122,14 @@ def test_category_is_not_polluted_by_the_location_anchor() -> None:
 
     assert intent.action == "recommendations"
     assert intent.target_category == "cafe"
-    assert intent.category_values == (
+    assert intent.category_values[:5] == (
         "cafe",
         "café",
         "cafeteria",
         "coffee_shop",
         "coffee shop",
     )
+    assert "juice_bar" in intent.category_values
     assert intent.semantic_query == "cafe cafeteria"
     assert intent.location.scope == "target_results"
     assert intent.location.anchor_text == "parque central"
@@ -183,6 +187,43 @@ def test_continuation_inherits_category_and_adds_price_filter() -> None:
     }
 
 
+def test_new_open_activity_does_not_inherit_previous_category() -> None:
+    state = ConversationState(
+        target_category="park",
+        hard_filters={"price_preference": "lower"},
+        soft_preferences=("naturaleza",),
+        exclusions=("ruido",),
+        reference=PlaceReference(entity="parque central"),
+        explicit_target_location=ExplicitTargetLocation(
+            anchor_text="parque central"
+        ),
+    )
+
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message="quiero ir a nadar",
+        state=state,
+        has_user_location=True,
+    )
+
+    patch = intent.state_patch.as_dict()
+    assert intent.action == "recommendations"
+    assert intent.target_category is None
+    assert intent.category_source == "unresolved"
+    assert "nadar" in intent.semantic_query
+    assert "park" not in intent.semantic_query
+    assert "parque" not in intent.semantic_query
+    assert "naturaleza" not in intent.soft_preferences
+    assert "ruido" not in intent.exclusions
+    assert intent.reference is None
+    assert intent.location.source == "conversation_state"
+    assert patch["target_category"] is None
+    assert patch["hard_filters"] == {}
+    assert patch["soft_preferences"] == list(intent.soft_preferences)
+    assert patch["exclusions"] == []
+    assert patch["reference"] is None
+    assert "explicit_target_location" not in patch
+
+
 def test_new_category_clears_incompatible_reference_and_preferences() -> None:
     state = ConversationState(
         target_category="cafe",
@@ -203,6 +244,114 @@ def test_new_category_clears_incompatible_reference_and_preferences() -> None:
     assert intent.soft_preferences == ()
     assert intent.state_patch.clear_reference is True
     assert intent.location.source == "conversation_state"
+    assert "explicit_target_location" not in intent.state_patch.as_dict()
+
+
+def test_explicit_current_location_replaces_a_stored_anchor() -> None:
+    state = ConversationState(
+        target_category="cafe",
+        explicit_target_location=ExplicitTargetLocation(
+            anchor_text="parque central"
+        ),
+    )
+
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message="que sea mas barato cerca de mi",
+        state=state,
+        has_user_location=True,
+    )
+
+    assert intent.target_category == "cafe"
+    assert intent.location.source == "user_current"
+    assert intent.state_patch.as_dict()["explicit_target_location"] is None
+
+
+def test_open_activity_then_explicit_category_drops_stale_activity_preference() -> None:
+    parser = DeterministicPlaceChatIntentParser()
+    swimming = parser.parse(
+        message="quiero ir a nadar",
+        state=ConversationState(),
+        has_user_location=True,
+    )
+    state = ConversationState(
+        target_category=swimming.target_category,
+        soft_preferences=swimming.soft_preferences,
+    )
+
+    cafe = parser.parse(
+        message="ahora quiero una cafeteria tranquila",
+        state=state,
+        has_user_location=True,
+    )
+
+    assert cafe.target_category == "cafe"
+    assert "tranquilo" in cafe.soft_preferences
+    assert "para_refrescarse" not in cafe.soft_preferences
+    assert "para_refrescarse" not in cafe.semantic_query
+
+
+def test_new_search_for_same_category_clears_old_theme_and_reference() -> None:
+    state = ConversationState(
+        target_category="cafe",
+        soft_preferences=("hello_kitty", "tematica"),
+        reference=PlaceReference(entity="hello kitty"),
+    )
+
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message="ahora quiero una cafeteria tranquila",
+        state=state,
+        has_user_location=True,
+    )
+
+    assert intent.target_category == "cafe"
+    assert intent.reference is None
+    assert intent.soft_preferences == ("tranquilo",)
+    patch = intent.state_patch.as_dict()
+    assert patch["reference"] is None
+    assert patch["soft_preferences"] == ["tranquilo"]
+
+
+@pytest.mark.parametrize(
+    "message",
+    ("dame una opcion mas barata", "recomiendame otra"),
+)
+def test_common_continuation_commands_keep_the_current_category(
+    message: str,
+) -> None:
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message=message,
+        state=ConversationState(target_category="park"),
+        has_user_location=True,
+    )
+
+    assert intent.target_category == "park"
+    assert intent.category_source == "conversation_state"
+
+
+@pytest.mark.parametrize(
+    ("message", "preference"),
+    (
+        ("estacionamiento", "estacionamiento"),
+        ("banos", "banos"),
+        ("tenga banos", "banos"),
+        ("entretenimiento", "entretenimiento"),
+        ("pantallas", "pantallas"),
+        ("asientos", "asientos"),
+        ("comida exterior", "comida_exterior"),
+        ("mochila", "mochila"),
+    ),
+)
+def test_bare_attribute_requests_are_preserved_as_preferences(
+    message: str,
+    preference: str,
+) -> None:
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message=message,
+        state=ConversationState(),
+        has_user_location=True,
+    )
+
+    assert preference in intent.soft_preferences
 
 
 def test_explicit_radius_is_strict_and_removed_from_anchor_text() -> None:
@@ -254,7 +403,14 @@ def test_food_activity_defaults_to_restaurant_without_clarification() -> None:
 
     assert intent.action == "recommendations"
     assert intent.target_category == "restaurant"
-    assert intent.category_values == ("restaurant", "restaurante", "comedor")
+    assert {
+        "restaurant",
+        "restaurante",
+        "comedor",
+        "fast_food_restaurant",
+        "taqueria",
+        "seafood_restaurant",
+    } <= set(intent.category_values)
     assert intent.semantic_query == "restaurant restaurante comer"
     assert intent.state_patch.target_category == "restaurant"
     assert intent.confidence == 0.88
@@ -269,13 +425,14 @@ def test_explicit_category_wins_over_an_activity_default() -> None:
 
     assert intent.action == "recommendations"
     assert intent.target_category == "cafe"
-    assert intent.category_values == (
+    assert intent.category_values[:5] == (
         "cafe",
         "café",
         "cafeteria",
         "coffee_shop",
         "coffee shop",
     )
+    assert "juice_bar" in intent.category_values
     assert intent.state_patch.target_category == "cafe"
 
 
@@ -374,6 +531,113 @@ def test_new_clear_intent_cancels_a_stale_pending_clarification() -> None:
     assert intent.state_patch.clear_reference is True
     assert intent.state_patch.clear_pending_clarification is True
     assert intent.state_patch.as_dict()["pending_clarification"] is None
+
+
+def test_new_open_activity_cancels_a_stale_pending_clarification() -> None:
+    state = ConversationState(
+        target_category="park",
+        soft_preferences=("naturaleza",),
+        pending_clarification=PendingClarification(
+            clarification_id="pending-location-scope",
+            kind="location_scope",
+            location_anchor_text="parque central",
+        ),
+    )
+
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message="quiero ir a nadar",
+        state=state,
+        has_user_location=True,
+    )
+
+    patch = intent.state_patch.as_dict()
+    assert intent.action == "recommendations"
+    assert intent.clarification is None
+    assert intent.target_category is None
+    assert "nadar" in intent.semantic_query
+    assert "park" not in intent.semantic_query
+    assert "parque" not in intent.semantic_query
+    assert patch["target_category"] is None
+    assert patch["pending_clarification"] is None
+
+
+@pytest.mark.parametrize("message", ("nadar", "piscina"))
+def test_short_open_activity_escapes_a_stale_pending_clarification(
+    message: str,
+) -> None:
+    state = ConversationState(
+        target_category="park",
+        pending_clarification=PendingClarification(
+            clarification_id="pending-category",
+            kind="target_category",
+            options=(
+                PendingClarificationOption(
+                    option_id="park",
+                    value="park",
+                    label="Parques",
+                ),
+                PendingClarificationOption(
+                    option_id="cafe",
+                    value="cafe",
+                    label="Cafeterías",
+                ),
+            ),
+        ),
+    )
+
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message=message,
+        state=state,
+        has_user_location=True,
+    )
+
+    assert intent.action == "recommendations"
+    assert intent.clarification is None
+    assert intent.target_category is None
+    assert intent.state_patch.as_dict()["pending_clarification"] is None
+
+
+def test_refreshing_preference_is_not_promoted_to_sports_category() -> None:
+    base_taxonomy = load_place_chat_taxonomy()
+    taxonomy = PlaceChatTaxonomy(
+        version=base_taxonomy.version,
+        categories=base_taxonomy.categories,
+        preferences=(
+            *base_taxonomy.preferences,
+            PreferenceDefinition(
+                canonical="para_refrescarse",
+                aliases=("nadar", "natacion", "alberca", "piscina"),
+                implies=(),
+            ),
+        ),
+    )
+
+    class SportsClassifier:
+        def classify(self, _text: str) -> PlaceCategoryInference | None:
+            return PlaceCategoryInference(
+                category="sports",
+                confidence=0.99,
+                source="semantic_activity",
+                category_values=("sports",),
+            )
+
+        def rank_supported(self, _text: str, limit: int = 3) -> tuple[object, ...]:
+            return ()
+
+    intent = DeterministicPlaceChatIntentParser(
+        taxonomy=taxonomy,
+        activity_classifier=SportsClassifier(),
+    ).parse(
+        message="quiero ir a nadar",
+        state=ConversationState(target_category="park"),
+        has_user_location=True,
+    )
+
+    assert intent.target_category is None
+    assert intent.category_source == "unresolved"
+    assert "para_refrescarse" in intent.soft_preferences
+    assert "sports" not in intent.semantic_query
+    assert intent.state_patch.as_dict()["target_category"] is None
 
 
 def test_common_category_typo_is_normalized_by_the_taxonomy() -> None:
@@ -582,7 +846,7 @@ def test_bert_slots_drive_open_category_exclusion_and_location_before_legacy() -
     assert "ruido" not in intent.semantic_query
     assert intent.state_patch.target_category == "donas artesanales"
     assert intent.intent_model_version == (
-        "bert-token:places-intent-test@test-v1+deterministic-open-v2"
+        "bert-token:places-intent-test@test-v1+deterministic-open-v3"
     )
 
 
@@ -657,7 +921,7 @@ def test_bert_failure_falls_open_and_exposes_fallback_model_version() -> None:
     assert intent.target_category == "cafe"
     assert "tranquilo" in intent.soft_preferences
     assert intent.intent_model_version == (
-        "deterministic-open-v2+bert-fallback:broken-v1"
+        "deterministic-open-v3+bert-fallback:broken-v1"
     )
 
 
@@ -805,6 +1069,103 @@ def test_dynamic_category_clarification_selection_is_not_taxonomy_gated() -> Non
     assert intent.state_patch.target_category == "donas artesanales"
     assert intent.state_patch.clear_pending_clarification is True
     assert "dynamic-clarification-v1" in intent.intent_model_version
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    (
+        ("la primera opcion", "park"),
+        ("la segunda opcion", "cafe"),
+        ("no la primera, la segunda", "cafe"),
+        ("la primera, no la segunda", "park"),
+    ),
+)
+def test_category_clarification_accepts_textual_ordinal_choice(
+    message: str,
+    expected: str,
+) -> None:
+    pending = PendingClarification(
+        clarification_id="category-choice-1",
+        kind="intent_category",
+        options=(
+            PendingClarificationOption("park", "park", "Parques"),
+            PendingClarificationOption("cafe", "cafe", "Cafeterias"),
+        ),
+    )
+
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message=message,
+        state=ConversationState(pending_clarification=pending),
+        has_user_location=True,
+    )
+
+    assert intent.action == "recommendations"
+    assert intent.target_category == expected
+    assert intent.state_patch.clear_pending_clarification is True
+
+
+def test_pending_option_name_inside_a_new_request_is_not_auto_selected() -> None:
+    pending = PendingClarification(
+        clarification_id="incidental-category-1",
+        kind="intent_category",
+        options=(
+            PendingClarificationOption("park", "park", "Parques"),
+            PendingClarificationOption("cafe", "cafe", "Cafeterias"),
+        ),
+    )
+    parser = DeterministicPlaceChatIntentParser()
+
+    restaurant = parser.parse(
+        message="quiero un restaurante cerca del cafe central",
+        state=ConversationState(pending_clarification=pending),
+        has_user_location=True,
+    )
+    park = parser.parse(
+        message="no quiero cafe, quiero un parque",
+        state=ConversationState(pending_clarification=pending),
+        has_user_location=True,
+    )
+    cafe_with_pool = parser.parse(
+        message="quiero cafe con alberca",
+        state=ConversationState(pending_clarification=pending),
+        has_user_location=True,
+    )
+
+    assert restaurant.target_category == "restaurant"
+    assert restaurant.location.anchor_text == "cafe central"
+    assert park.target_category == "park"
+    assert "cafe" in park.exclusions
+    assert cafe_with_pool.target_category == "cafe"
+    assert "para_refrescarse" in cafe_with_pool.soft_preferences
+
+
+@pytest.mark.parametrize("message", ("un zoologico", "rio", "una playa"))
+def test_nominal_new_topic_escapes_a_stale_category_clarification(
+    message: str,
+) -> None:
+    pending = PendingClarification(
+        clarification_id="stale-category-1",
+        kind="intent_category",
+        options=(
+            PendingClarificationOption("park", "park", "Parques"),
+            PendingClarificationOption("cafe", "cafe", "Cafeterias"),
+        ),
+    )
+
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message=message,
+        state=ConversationState(
+            target_category="park",
+            pending_clarification=pending,
+        ),
+        has_user_location=True,
+    )
+
+    assert intent.action == "recommendations"
+    assert intent.clarification is None
+    assert intent.target_category is None
+    assert intent.state_patch.clear_pending_clarification is True
+    assert any(term in intent.semantic_query for term in ("zoologico", "rio", "playa"))
 
 
 def test_open_catalog_category_values_are_rehydrated_on_following_turn() -> None:

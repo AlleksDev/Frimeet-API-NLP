@@ -488,7 +488,7 @@ Para resolverla, Go reenvia el estado persistido y una seleccion estructurada:
       "radius_meters": null,
       "strict_radius": false
     },
-    "taxonomy_version": "places-taxonomy-v1"
+    "taxonomy_version": "places-taxonomy-v2"
   },
   "user_location": {"lat": 16.7531, "lng": -93.1156},
   "candidate_limit": 30,
@@ -527,9 +527,10 @@ frase abierta como `quiero salir` aun solicita aclaracion. Una categoria explici
 prioridad y una nueva intencion clara elimina un `pending_clarification` obsoleto.
 
 Las opciones de categoria conservan `option.id` y el `value` pendiente como valores
-tecnicos. NLP humaniza la etiqueta fallback y solo publica hipotesis respaldadas por
-candidatos locales con evidencia suficiente. La API principal debe localizar
-`label/message` mediante su catalogo sin alterar IDs, valores, orden ni allowlist.
+tecnicos. NLP usa el catalogo en español de la API principal, humaniza la etiqueta como
+fallback y solo publica hipotesis semanticas respaldadas por evidencia local. No expone
+conteos preliminares de candidatos, porque la API principal puede aplicar filtros
+adicionales. La API principal no debe alterar IDs, valores, orden ni allowlist.
 
 Cuando hay coordenadas y proveedor nearby, un radio implicito comienza en
 `PLACES_CHAT_DEFAULT_RADIUS_METERS` y puede ampliarse de forma acotada hasta

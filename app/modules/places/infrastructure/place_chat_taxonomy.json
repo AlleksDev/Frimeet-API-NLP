@@ -1,15 +1,15 @@
 {
-  "version": "places-taxonomy-v1",
+  "version": "places-taxonomy-v2",
   "categories": [
     {
       "canonical": "cafe",
       "aliases": ["cafe", "cafes", "cafeteria", "cafeterias", "cafetria", "coffee shop", "coffee shops", "casa de cafe"],
-      "storage_values": ["cafe", "café", "cafeteria", "coffee_shop", "coffee shop"]
+      "storage_values": ["cafe", "café", "cafeteria", "coffee_shop", "coffee shop", "juice_bar"]
     },
     {
       "canonical": "restaurant",
       "aliases": ["restaurante", "restaurantes", "restaurant", "resturante", "comedor", "lugar para comer"],
-      "storage_values": ["restaurant", "restaurante", "comedor"]
+      "storage_values": ["restaurant", "restaurante", "comedor", "fast_food_restaurant", "street_food", "cenaduria", "economical_kitchen", "mexican_restaurant", "regional_restaurant", "taqueria", "torteria", "antojitos_restaurant", "food_stall", "seafood_restaurant", "vegetarian_restaurant", "breakfast_restaurant", "fast_food", "food"]
     },
     {
       "canonical": "park",
@@ -33,22 +33,22 @@
     {
       "canonical": "culture",
       "aliases": ["museo", "galeria", "centro cultural", "lugar cultural"],
-      "storage_values": ["culture", "cultural", "museum", "museo", "gallery", "galeria", "arts_centre", "arts centre", "centro cultural"],
-      "compatible_storage_values": ["tourism", "community", "entertainment"],
+      "storage_values": ["culture", "cultural", "museum", "museo", "cultural_center", "gallery", "galeria", "arts_centre", "arts centre", "centro cultural"],
+      "compatible_storage_values": ["tourism", "community", "entertainment", "tourist_attraction"],
       "evidence_terms": ["museo", "museum", "galeria", "gallery", "centro cultural", "arte", "historia", "exposicion"]
     },
     {
       "canonical": "shopping",
       "aliases": ["plaza comercial", "centro comercial", "tienda", "compras"],
-      "storage_values": ["shopping", "shop", "mall", "store", "shopping_mall", "shopping mall", "centro comercial", "plaza comercial", "commercial_plaza", "commercial plaza", "compras", "supermarket"],
+      "storage_values": ["shopping", "shop", "mall", "store", "shopping_mall", "shopping mall", "centro comercial", "plaza", "plaza comercial", "commercial_plaza", "commercial plaza", "compras", "supermarket", "convenience_store", "clothing_store"],
       "compatible_storage_values": ["market"],
       "evidence_terms": ["compras", "shopping", "tienda", "store", "mall", "centro comercial", "plaza comercial"]
     },
     {
       "canonical": "sports",
       "aliases": ["gimnasio", "centro deportivo", "cancha", "deporte"],
-      "storage_values": ["sports", "sport", "deporte", "gym", "gimnasio", "fitness_centre", "fitness centre", "sports_centre", "sports centre", "stadium", "estadio", "cancha"],
-      "compatible_storage_values": ["outdoors", "family", "park"],
+      "storage_values": ["sports", "sport", "deporte", "gym", "gimnasio", "fitness_center", "fitness center", "fitness_centre", "fitness centre", "sports_center", "sports center", "sports_centre", "sports centre", "sports_complex", "stadium", "estadio", "cancha"],
+      "compatible_storage_values": ["outdoors", "family", "park", "recreation"],
       "evidence_terms": ["deporte", "sports", "gimnasio", "gym", "cancha", "estadio", "entrenamiento", "ejercicio"]
     },
     {
@@ -61,7 +61,7 @@
     {
       "canonical": "ice_cream",
       "aliases": ["heladeria", "helado", "postres"],
-      "storage_values": ["ice_cream", "ice cream", "ice_cream_shop", "ice cream shop", "heladeria", "dessert", "postres"],
+      "storage_values": ["ice_cream", "ice cream", "ice_cream_shop", "ice cream shop", "heladeria", "dessert", "dessert_shop", "postres"],
       "compatible_storage_values": ["shopping", "restaurant", "cafe"],
       "evidence_terms": ["heladeria", "helado", "ice cream", "postres", "dessert"]
     },
@@ -82,14 +82,14 @@
     {
       "canonical": "market",
       "aliases": ["mercado", "mercados", "tianguis"],
-      "storage_values": ["market", "marketplace", "mercado", "tianguis"],
+      "storage_values": ["market", "marketplace", "mercado", "tianguis", "supermarket"],
       "compatible_storage_values": ["shopping"],
       "evidence_terms": ["mercado", "market", "marketplace", "tianguis"]
     },
     {
       "canonical": "outdoors",
       "aliases": ["mirador", "sendero", "paraje natural", "lugar al aire libre"],
-      "storage_values": ["outdoors", "viewpoint", "mirador", "trail", "sendero", "nature", "paraje natural"],
+      "storage_values": ["outdoors", "viewpoint", "mirador", "trail", "sendero", "nature", "recreation", "tourist_attraction", "paraje natural"],
       "compatible_storage_values": ["tourism", "family", "park"],
       "evidence_terms": ["mirador", "viewpoint", "sendero", "trail", "paraje natural", "naturaleza", "aventura"]
     },
@@ -122,6 +122,46 @@
     {
       "canonical": "musica",
       "aliases": ["musica", "musica en vivo", "concierto"]
+    },
+    {
+      "canonical": "estacionamiento",
+      "aliases": ["estacionamiento", "parking", "con estacionamiento", "tenga estacionamiento", "con parking", "donde estacionar"]
+    },
+    {
+      "canonical": "banos",
+      "aliases": ["bano", "banos", "sanitario", "sanitarios", "con bano", "con banos", "tenga bano", "tenga banos", "banos disponibles", "con sanitarios"]
+    },
+    {
+      "canonical": "para_refrescarse",
+      "aliases": ["nadar", "natacion", "alberca", "piscina", "balneario", "actividades acuaticas", "refrescarme", "refrescarse"]
+    },
+    {
+      "canonical": "entretenimiento",
+      "aliases": ["entretenimiento", "con entretenimiento", "tenga entretenimiento", "actividades de entretenimiento"]
+    },
+    {
+      "canonical": "pantallas",
+      "aliases": ["pantalla", "pantallas", "con pantallas", "tenga pantallas", "ver el partido", "ver deportes"]
+    },
+    {
+      "canonical": "asientos",
+      "aliases": ["asiento", "asientos", "con asientos", "donde sentarse", "lugares para sentarse"]
+    },
+    {
+      "canonical": "area_infantil",
+      "aliases": ["area infantil", "juegos para ninos", "ludoteca", "area de juegos"]
+    },
+    {
+      "canonical": "para_amigos",
+      "aliases": ["para amigos", "con amigos", "espacio para amigos"]
+    },
+    {
+      "canonical": "comida_exterior",
+      "aliases": ["comida exterior", "comida del exterior", "permita comida", "llevar mi comida", "ingresar comida"]
+    },
+    {
+      "canonical": "mochila",
+      "aliases": ["mochila", "mochilas", "permita mochila", "entrar con mochila", "llevar mochila"]
     },
     {
       "canonical": "romantico",

@@ -70,6 +70,16 @@ STOPWORDS = {
 def place_tokens(place: PlaceCandidate) -> list[str]:
     tags = _as_text(place.metadata.get("tags"))
     category = place.category or ""
+    facet_document = " ".join(
+        value
+        for value in (
+            _as_text(place.metadata.get("attribute_terms")),
+            _as_text(place.metadata.get("entertainment_features")),
+            _as_text(place.metadata.get("contained_items")),
+            _as_text(place.metadata.get("menu_items")),
+        )
+        if value
+    )
     base_document = place.document or " ".join(
         value
         for value in [
@@ -84,7 +94,10 @@ def place_tokens(place: PlaceCandidate) -> list[str]:
         if value
     )
 
-    weighted_fields = [base_document]
+    # Metadata facets are appended even when a stored semantic document exists.
+    # This keeps lexical matching correct during rolling re-indexes from v3 to
+    # v4, while the content hash still guarantees eventual document refresh.
+    weighted_fields = [base_document, facet_document]
     weighted_fields.extend([category] * (CATEGORY_WEIGHT - 1))
     weighted_fields.extend([tags] * (TAG_WEIGHT - 1))
     return tokenize(" ".join(value for value in weighted_fields if value))

@@ -15,6 +15,7 @@ from app.modules.places.application.ports.place_anchor_resolver import (
     PlaceAnchorResolver,
 )
 from app.modules.places.domain.clarifications import (
+    category_display_label,
     new_anchor_clarification,
     new_category_clarification,
     to_public_clarification,
@@ -66,7 +67,7 @@ class ChatPlaceRecommendationsResult:
     guard_reason: str | None = None
     category_hypotheses: tuple[dict[str, Any], ...] = ()
     raw_category_phrase: str | None = None
-    intent_model_version: str = "deterministic-open-v2"
+    intent_model_version: str = "deterministic-open-v3"
 
 
 class ChatPlaceRecommendationsUseCase:
@@ -263,7 +264,6 @@ class ChatPlaceRecommendationsUseCase:
                     intent,
                     evidence_candidates,
                 )
-                or self._category_clarification_from_candidates(evidence_candidates)
             )
             if pending is not None:
                 clarified = self._with_pending_clarification(
@@ -742,6 +742,18 @@ class ChatPlaceRecommendationsUseCase:
             if alternative.description.strip():
                 labels[key] = alternative.description.strip()
 
+        # Prefer the source catalog's localized label over an English/static
+        # classifier label whenever a supporting candidate exposes one.
+        for category, values in category_values.items():
+            localized_labels = tuple(
+                str(candidate.metadata.get("category_label") or "").strip()
+                for candidate in candidates
+                if self._candidate_supports_category_values(candidate, values)
+                and str(candidate.metadata.get("category_label") or "").strip()
+            )
+            if localized_labels:
+                labels[category] = localized_labels[0]
+
         ranked = sorted(
             (
                 (category, score)
@@ -774,59 +786,15 @@ class ChatPlaceRecommendationsUseCase:
         )
 
     @staticmethod
-    def _category_clarification_from_candidates(
-        candidates: Sequence[PlaceChatCandidate],
-    ) -> PendingClarification | None:
-        counts: dict[str, int] = {}
-        best_scores: dict[str, float] = {}
-        display_labels: dict[str, str] = {}
-        for candidate in candidates:
-            diagnostics = candidate.metadata.get("retrieval_diagnostics", {})
-            if diagnostics.get("meets_minimum_content_score") is False:
-                continue
-            category = (candidate.category or "").strip()
-            if not category:
-                continue
-            counts[category] = counts.get(category, 0) + 1
-            best_scores[category] = max(
-                best_scores.get(category, 0.0),
-                candidate.content_score,
-            )
-            source_label = candidate.metadata.get("category_label")
-            if isinstance(source_label, str) and source_label.strip():
-                display_labels[category] = source_label.strip()
-        ordered = tuple(
-            category
-            for category, _ in sorted(
-                best_scores.items(),
-                key=lambda item: (-item[1], -counts[item[0]], item[0]),
-            )[:3]
-        )
-        if len(ordered) < 2:
-            return None
-        labels = {
-            category: (
-                f"{display_labels.get(category) or _display_category(category)} "
-                f"({counts[category]} opciones encontradas)"
-            )
-            for category in ordered
-        }
-        return new_category_clarification(
-            ordered,
-            kind="intent_category",
-            labels=labels,
-        )
-
-    @staticmethod
     def _uncertain_intent_message(
         intent: ParsedPlaceChatIntent,
         candidates: Sequence[PlaceChatCandidate],
     ) -> str:
         categories = tuple(
             dict.fromkeys(
-                candidate.category.replace("_", " ").strip().title()
+                str(candidate.metadata.get("category_label") or "").strip()
                 for candidate in candidates
-                if candidate.category and candidate.category.strip()
+                if str(candidate.metadata.get("category_label") or "").strip()
             )
         )[:3]
         if len(categories) > 1:
@@ -921,7 +889,11 @@ class ChatPlaceRecommendationsUseCase:
             return "Encontre opciones con coincidencias directas para el estilo que buscas."
         if family:
             return "Encontre opciones relacionadas con el tema y las preferencias que mencionaste."
-        category = intent.target_category or "lugar"
+        category = (
+            category_display_label(intent.target_category).casefold()
+            if intent.target_category
+            else "lugar"
+        )
         return f"Encontre opciones de {category} que pueden encajar con tu solicitud."
 
     @staticmethod
@@ -991,6 +963,14 @@ class ChatPlaceRecommendationsUseCase:
             "score": round(candidate.content_score, 4),
             "tags": candidate.metadata.get("tags"),
             "short_description": candidate.metadata.get("short_description"),
+            "category_label": candidate.metadata.get("category_label"),
+            "attribute_states": candidate.metadata.get("attribute_states"),
+            "attribute_terms": candidate.metadata.get("attribute_terms"),
+            "entertainment_features": candidate.metadata.get(
+                "entertainment_features"
+            ),
+            "contained_items": candidate.metadata.get("contained_items"),
+            "menu_items": candidate.metadata.get("menu_items"),
             "matched_reasons": list(candidate.matched_reasons),
             "match_level": candidate.match_level,
         }
@@ -1150,10 +1130,7 @@ def _normalized_category(value: str | None) -> str:
 
 
 def _display_category(value: str) -> str:
-    humanized = " ".join(value.replace("_", " ").replace("-", " ").split())
-    if not humanized:
-        return "Lugar"
-    return humanized[:1].upper() + humanized[1:]
+    return category_display_label(value)
 
 
 def _candidate_category_values(candidate: PlaceChatCandidate) -> set[str]:

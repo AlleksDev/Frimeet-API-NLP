@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Mapping
 import json
 import math
 import re
@@ -22,6 +23,23 @@ from app.shared.nlp.preprocessing.text import prepare_for_embedding
 
 
 _EXACT_ENTITY_PREFERENCES = {"hello_kitty"}
+_ATTRIBUTE_PREFERENCE_KEYS: dict[str, tuple[str, ...]] = {
+    "estacionamiento": ("has_parking",),
+    "banos": ("has_restrooms",),
+    "para_refrescarse": ("good_for_cooling_off",),
+    "entretenimiento": ("has_entertainment",),
+    "musica": ("has_entertainment",),
+    "pantallas": ("has_screens",),
+    "asientos": ("has_seating",),
+    "area_infantil": ("has_kids_playroom",),
+    "para_amigos": ("has_friends_space",),
+    "comida_exterior": ("allows_outside_food",),
+    "mochila": ("allows_backpack",),
+    "romantico": ("has_romantic_space",),
+    "familiar": ("has_family_space", "kid_friendly"),
+}
+_POSITIVE_ATTRIBUTE_STATES = {True, "true", "yes", "normal"}
+_NEGATIVE_ATTRIBUTE_STATES = {False, "false", "no"}
 
 
 class HybridContentPlaceChatRetriever:
@@ -157,33 +175,53 @@ class HybridContentPlaceChatRetriever:
                 candidate,
                 intent.exclusions,
             )
+            attribute_conflict_affinity, attribute_conflicts = (
+                self._attribute_conflict_affinity(candidate, intent)
+            )
             # Exclusions are negative ranking evidence, not a boolean gate. A
             # source description may mention an excluded concept in a negated
             # form ("sin ruido"), and removing that row would invert intent.
+            # Explicit false/no attribute values are also a modest penalty.
+            # Missing/NULL values never enter this calculation and stay neutral.
             content_score = max(
                 0.0,
-                base_content_score - 0.35 * exclusion_affinity,
+                base_content_score
+                - 0.35 * exclusion_affinity
+                - 0.18 * attribute_conflict_affinity,
+            )
+            effective_minimum_content_score = (
+                self._effective_minimum_content_score(candidate)
             )
             # Keep weak candidates so short or novel queries do not collapse to
             # zero results.  The old minimum remains a quality diagnostic for
             # downstream confidence/clarification policy, rather than a gate.
             metadata = dict(candidate.metadata)
-            metadata["retrieval_diagnostics"] = {
+            diagnostics = {
                 "category_affinity": round(category_score, 6),
                 "category_match": category_match,
                 "exclusion_affinity": round(exclusion_affinity, 6),
                 "exclusion_matches": list(exclusion_matches),
+                "attribute_conflict_affinity": round(
+                    attribute_conflict_affinity,
+                    6,
+                ),
+                "attribute_conflicts": list(attribute_conflicts),
                 "content_quality": (
                     "sufficient"
-                    if content_score >= self._minimum_content_score
+                    if content_score >= effective_minimum_content_score
                     else "weak"
                 ),
                 "meets_minimum_content_score": (
-                    content_score >= self._minimum_content_score
+                    content_score >= effective_minimum_content_score
                 ),
-                "minimum_content_score": self._minimum_content_score,
+                "minimum_content_score": effective_minimum_content_score,
                 "query_token_count": len(query_tokens),
             }
+            if effective_minimum_content_score != self._minimum_content_score:
+                diagnostics["configured_minimum_content_score"] = (
+                    self._minimum_content_score
+                )
+            metadata["retrieval_diagnostics"] = diagnostics
             ranked.append(
                 PlaceChatCandidate(
                     place_id=candidate.id,
@@ -201,6 +239,7 @@ class HybridContentPlaceChatRetriever:
         ranked.sort(
             key=lambda item: (
                 -item.content_score,
+                _attribute_conflict_sort_value(item),
                 -item.semantic_score,
                 -item.lexical_score,
                 _match_level_priority(item.match_level),
@@ -220,6 +259,32 @@ class HybridContentPlaceChatRetriever:
         if self._cache:
             self._cache.set(cache_key, result)
         return result
+
+    def _effective_minimum_content_score(
+        self,
+        candidate: PlaceCandidate,
+    ) -> float:
+        """Avoid treating unknown optional fields as negative relevance.
+
+        New sync records explicitly list which source fields were present.  A
+        sparse record still needs positive evidence, but it is evaluated
+        against a slightly lower decision threshold instead of losing points
+        merely because its description or tags are unknown.
+        """
+
+        raw_fields = candidate.metadata.get("source_fields_present")
+        if not isinstance(raw_fields, (list, tuple, set)):
+            return self._minimum_content_score
+        fields = {str(field).strip().casefold() for field in raw_fields}
+        missing_optional = sum(
+            field not in fields for field in ("description", "tags")
+        )
+        if missing_optional == 0:
+            return self._minimum_content_score
+        return max(
+            0.12,
+            self._minimum_content_score - 0.035 * missing_optional,
+        )
 
     async def _search_repository(
         self,
@@ -326,6 +391,7 @@ class HybridContentPlaceChatRetriever:
                     candidate.document or "",
                     _as_evidence_text(candidate.metadata.get("tags")),
                     _as_evidence_text(candidate.metadata.get("short_description")),
+                    _positive_facet_evidence(candidate),
                 )
                 if value
             )
@@ -344,6 +410,85 @@ class HybridContentPlaceChatRetriever:
         return len(unique_matches) / len(exclusions), unique_matches
 
     @staticmethod
+    def _attribute_conflict_affinity(
+        candidate: PlaceCandidate,
+        intent: ParsedPlaceChatIntent,
+    ) -> tuple[float, tuple[str, ...]]:
+        raw_states = candidate.metadata.get("attribute_states")
+        if not isinstance(raw_states, Mapping):
+            return 0.0, ()
+
+        known_preferences = 0
+        conflicts: list[str] = []
+        for preference in intent.soft_preferences:
+            canonical = str(preference).strip().casefold()
+            keys = _ATTRIBUTE_PREFERENCE_KEYS.get(canonical)
+            if keys is None and canonical == "economico":
+                price_tier = _normalized_attribute_state(
+                    raw_states.get("price_tier")
+                )
+                if not price_tier:
+                    continue
+                known_preferences += 1
+                if price_tier in {"expensive", "very_expensive", "deluxe"}:
+                    conflicts.append(canonical)
+                continue
+            if not keys:
+                continue
+
+            values = tuple(
+                _normalized_attribute_state(raw_states.get(key))
+                for key in keys
+                if key in raw_states
+            )
+            values = tuple(value for value in values if value != "")
+            if not values:
+                continue
+            known_preferences += 1
+            if any(value in _POSITIVE_ATTRIBUTE_STATES for value in values):
+                continue
+            if any(value in _NEGATIVE_ATTRIBUTE_STATES for value in values):
+                conflicts.append(canonical)
+
+        unique_conflicts = tuple(dict.fromkeys(conflicts))
+        if known_preferences == 0:
+            return 0.0, unique_conflicts
+        return len(unique_conflicts) / known_preferences, unique_conflicts
+
+    @staticmethod
+    def _positive_attribute_preferences(
+        candidate: PlaceCandidate,
+        preferences: tuple[str, ...],
+    ) -> set[str]:
+        raw_states = candidate.metadata.get("attribute_states")
+        if not isinstance(raw_states, Mapping):
+            return set()
+
+        matched: set[str] = set()
+        for preference in preferences:
+            canonical = str(preference).strip().casefold()
+            if canonical == "economico":
+                if _normalized_attribute_state(raw_states.get("price_tier")) in {
+                    "cheap",
+                    "accessible",
+                }:
+                    matched.add(canonical)
+                continue
+            # Generic entertainment does not prove that music is available;
+            # that preference still needs a feature/note lexical match.
+            if canonical == "musica":
+                continue
+            keys = _ATTRIBUTE_PREFERENCE_KEYS.get(canonical, ())
+            values = (
+                _normalized_attribute_state(raw_states.get(key))
+                for key in keys
+                if key in raw_states
+            )
+            if any(value in _POSITIVE_ATTRIBUTE_STATES for value in values):
+                matched.add(canonical)
+        return matched
+
+    @staticmethod
     def _facet_match(
         candidate: PlaceCandidate,
         intent: ParsedPlaceChatIntent,
@@ -357,9 +502,18 @@ class HybridContentPlaceChatRetriever:
             reasons.append(category_reason)
         matched_preferences = 0
         exact_preference = False
+        structured_matches = (
+            HybridContentPlaceChatRetriever._positive_attribute_preferences(
+                candidate,
+                intent.soft_preferences,
+            )
+        )
         for preference in intent.soft_preferences:
             preference_tokens = set(tokenize(preference.replace("_", " ")))
-            if preference_tokens and preference_tokens <= token_set:
+            if (
+                preference in structured_matches
+                or (preference_tokens and preference_tokens <= token_set)
+            ):
                 matched_preferences += 1
                 reasons.append(preference)
                 exact_preference = (
@@ -418,6 +572,7 @@ def _category_evidence_tokens(candidate: PlaceCandidate) -> set[str]:
             candidate.name,
             _as_evidence_text(candidate.metadata.get("tags")),
             _as_evidence_text(candidate.metadata.get("short_description")),
+            _positive_facet_evidence(candidate),
         )
         if value
     )
@@ -430,6 +585,36 @@ def _as_evidence_text(value: object) -> str:
     if isinstance(value, (list, tuple, set)):
         return " ".join(str(item) for item in value)
     return str(value)
+
+
+def _normalized_attribute_state(value: object) -> bool | str:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return ""
+    return str(value).strip().casefold()
+
+
+def _positive_facet_evidence(candidate: PlaceCandidate) -> str:
+    return " ".join(
+        _as_evidence_text(candidate.metadata.get(key))
+        for key in (
+            "attribute_terms",
+            "entertainment_features",
+            "contained_items",
+            "menu_items",
+        )
+    )
+
+
+def _attribute_conflict_sort_value(candidate: PlaceChatCandidate) -> float:
+    diagnostics = candidate.metadata.get("retrieval_diagnostics")
+    if not isinstance(diagnostics, Mapping):
+        return 0.0
+    value = diagnostics.get("attribute_conflict_affinity")
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return 0.0
+    return max(0.0, float(value))
 
 
 def _is_negated_in_evidence(evidence: str, concept: str) -> bool:

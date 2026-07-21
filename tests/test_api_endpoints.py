@@ -29,6 +29,10 @@ def test_places_search_endpoint() -> None:
         "category": 1,
         "description": 1,
         "name": 1,
+        "attributes": 1,
+        "entertainment": 1,
+        "contained_items": 1,
+        "menu": 1,
     }
     assert payload["metrics"]["returned_count"] == len(payload["places"])
     assert payload["metrics"]["max_score"] >= payload["metrics"]["mean_score"]
@@ -116,6 +120,7 @@ def test_places_chat_opt_in_uses_semantic_conversation_contract() -> None:
     payload = response.json()
     assert payload["action"] == "recommendations"
     assert payload["state_patch"]["target_category"] == "cafe"
+    assert payload["state_patch"]["taxonomy_version"] == "places-taxonomy-v2"
     assert payload["location_directive"]["source"] == "user_current"
     assert payload["uncertainty"]["decision"] == "auto"
     assert payload["metadata"]["pipeline"] == "places-chat-semantic-v2"

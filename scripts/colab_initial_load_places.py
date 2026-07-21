@@ -160,6 +160,8 @@ def _configure_environment(*, semantic: bool) -> None:
         "ENV": "local",
         "MAIN_API_BASE_URL": "http://3.212.166.108",
         "MAIN_API_PLACES_SEARCH_PATH": "/api/v1/places/search",
+        "MAIN_API_PLACE_CATEGORIES_PATH": "/api/v1/places/categories",
+        "MAIN_API_PLACE_CATALOG_LANGUAGE": "es",
         "MAIN_API_TIMEOUT_SECONDS": "60",
         "MAIN_API_PLACES_PAGE_LIMIT": "50",
         "MAIN_API_PLACES_PAGINATION_MODE": "cursor",
