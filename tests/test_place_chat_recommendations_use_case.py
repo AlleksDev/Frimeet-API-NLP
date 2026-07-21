@@ -134,6 +134,28 @@ def test_category_buttons_humanize_labels_without_changing_ids() -> None:
     ]
 
 
+def test_known_category_buttons_use_spanish_fallback_labels() -> None:
+    from app.modules.places.domain.clarifications import new_category_clarification
+
+    clarification = to_public_clarification(
+        new_category_clarification(
+            ("sports", "park", "shopping"),
+            kind="intent_category",
+        )
+    )
+
+    assert [option.option_id for option in clarification.options] == [
+        "sports",
+        "park",
+        "shopping",
+    ]
+    assert [option.label for option in clarification.options] == [
+        "Deportes",
+        "Parques",
+        "Compras",
+    ]
+
+
 @pytest.mark.asyncio
 async def test_llm_cannot_change_action_or_candidates() -> None:
     without_llm = await build_use_case(llm_enabled=False).execute(
@@ -341,6 +363,94 @@ async def test_low_confidence_without_top_k_uses_retrieval_evidence_not_fixed_me
     assert "cafeteria" not in result.message.casefold()
     assert "parque" not in result.message.casefold()
     assert result.state_patch["soft_preferences"] == ["tranquilo"]
+
+
+@pytest.mark.asyncio
+async def test_candidate_categories_do_not_become_arbitrary_clarification_options() -> None:
+    result = await build_use_case(
+        llm_enabled=False,
+        intent_parser=LowConfidenceIntentParser(alternatives=()),
+        retriever=CategoryEvidenceRetriever(
+            ("sports", "religious_organization", "office")
+        ),
+    ).execute(
+        message="quiero ir a nadar",
+        state=ConversationState(),
+        user_latitude=16.7531,
+        user_longitude=-93.1156,
+        candidate_limit=5,
+        result_limit=3,
+    )
+
+    assert result.action == "recommendations"
+    assert result.clarification is None
+    assert {candidate.category for candidate in result.candidates} == {
+        "sports",
+        "religious_organization",
+        "office",
+    }
+
+
+@pytest.mark.asyncio
+async def test_supported_clarification_uses_localized_labels_without_counts() -> None:
+    class LocalizedCategoryEvidenceRetriever(CategoryEvidenceRetriever):
+        async def retrieve(self, intent, limit):
+            candidates = await super().retrieve(intent, limit)
+            labels = {
+                "sports": "Deportes y centros acuaticos",
+                "recreation": "Recreacion y balnearios",
+            }
+            return [
+                replace(
+                    candidate,
+                    metadata={
+                        **candidate.metadata,
+                        "category_label": labels[candidate.category],
+                    },
+                )
+                for candidate in candidates
+            ]
+
+    parser = LowConfidenceIntentParser(
+        alternatives=(
+            IntentAlternative(
+                key="sports",
+                description="Sports",
+                confidence=0.68,
+                category_values=("sports",),
+            ),
+            IntentAlternative(
+                key="recreation",
+                description="Recreation",
+                confidence=0.65,
+                category_values=("recreation",),
+            ),
+        )
+    )
+    result = await build_use_case(
+        llm_enabled=False,
+        intent_parser=parser,
+        retriever=LocalizedCategoryEvidenceRetriever(
+            ("sports", "recreation")
+        ),
+    ).execute(
+        message="quiero ir a nadar",
+        state=ConversationState(),
+        user_latitude=16.7531,
+        user_longitude=-93.1156,
+        candidate_limit=5,
+        result_limit=3,
+    )
+
+    assert result.action == "clarification"
+    assert result.clarification is not None
+    labels = [option.label for option in result.clarification.options]
+    assert labels == [
+        "Deportes y centros acuaticos",
+        "Recreacion y balnearios",
+    ]
+    assert all("opciones encontradas" not in label.casefold() for label in labels)
+    assert all("coincidencias" not in label.casefold() for label in labels)
 
 
 @pytest.mark.asyncio

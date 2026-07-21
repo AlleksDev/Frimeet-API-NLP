@@ -32,6 +32,9 @@ from app.modules.places.application.use_cases.chat_place_recommendations import 
 )
 from app.modules.places.domain.chat_intent import ConversationState
 from app.modules.places.domain.errors import ClarificationStateMismatchError
+from app.modules.places.domain.taxonomy_version import (
+    is_compatible_place_chat_taxonomy,
+)
 from app.modules.places.application.use_cases.evaluate_place_search import (
     EvaluatePlaceSearchUseCase,
 )
@@ -127,9 +130,9 @@ async def chat_places(
             if payload.conversation_state
             else ConversationState()
         )
-        if (
-            state.taxonomy_version is not None
-            and state.taxonomy_version != settings.places_chat_taxonomy_version
+        if not is_compatible_place_chat_taxonomy(
+            state.taxonomy_version,
+            settings.places_chat_taxonomy_version,
         ):
             raise HTTPException(
                 status_code=409,

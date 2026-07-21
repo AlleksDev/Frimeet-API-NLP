@@ -24,6 +24,7 @@ from app.modules.places.domain.chat_intent import (
     IntentAlternative,
     LocationIntent,
     PendingClarification,
+    PendingClarificationOption,
     PlaceCategoryInference,
     ParsedPlaceChatIntent,
     PlaceReference,
@@ -60,7 +61,7 @@ _EXCLUSION_PATTERN = re.compile(
     r"\s+(?:pero|aunque|con)\b|\s+y\s+(?:con|que|quiero|busco)\b|$)"
 )
 _CURRENT_LOCATION_VALUES = {"mi", "aqui", "donde estoy", "mi ubicacion"}
-_DETERMINISTIC_INTENT_VERSION = "deterministic-open-v2"
+_DETERMINISTIC_INTENT_VERSION = "deterministic-open-v3"
 _RADIUS_VALUE_PATTERN = re.compile(
     r"(?P<value>\d+(?:[.,]\d+)?)\s*"
     r"(?P<unit>km|kilometros?|m|metros?)\b"
@@ -122,6 +123,63 @@ _GENERIC_REQUEST_TOKENS = {
     "recomiendame",
     "similar",
     "similares",
+}
+_OPEN_ACTIVITY_PREFERENCES = frozenset({"para_refrescarse"})
+_CONTINUATION_PREFIX_PATTERN = re.compile(
+    r"^(?:(?:y|pero)\s+)?"
+    r"(?:(?:quiero|dame|recomiendame|recomienda|muestrame)\s+)?"
+    r"(?:(?:un|una)\s+)?(?:"
+    r"otras?|otros?|mas|menos|tambien|"
+    r"opcion(?:es)?(?:\s+(?:mas|barata|barato|cercana|cercano))?|"
+    r"que\s+(?:sea|tenga|este|quede|cueste)|"
+    r"con|sin|cerca|lejos|aqui|ahi|alrededor|"
+    r"la\s+primera|la\s+segunda|opcion\s+(?:uno|dos)"
+    r")\b"
+)
+_NEW_SEARCH_LEAD_PATTERN = re.compile(
+    r"^(?:(?:ahora|mejor|cambiando\s+de\s+tema|en\s+lugar\s+de\s+eso)\s+)*"
+    r"(?:quiero|quisiera|busco|necesito|prefiero|"
+    r"me\s+gustaria|tengo\s+ganas\s+de|se\s+me\s+antoja|"
+    r"recomiendame|recomienda|dame|"
+    r"donde\s+(?:puedo|hay|encuentro|consigo|ir))\b"
+)
+_CONTINUATION_REQUEST_PHRASES = (
+    "otra opcion",
+    "otras opciones",
+    "dame mas",
+    "muestrame mas",
+    "algo parecido",
+    "algo similar",
+    "parecida",
+    "parecidas",
+    "parecido",
+    "parecidos",
+    "similar",
+    "similares",
+    "lugares parecidos",
+    "lugares similares",
+    "quiero que sea",
+    "quiero que tenga",
+)
+_GENERIC_CONTINUATION_TOKENS = _GENERIC_REQUEST_TOKENS | {
+    "algo",
+    "dame",
+    "la",
+    "las",
+    "lo",
+    "los",
+    "mas",
+    "me",
+    "muestra",
+    "muestrame",
+    "otra",
+    "otras",
+    "otro",
+    "otros",
+    "una",
+    "unas",
+    "uno",
+    "unos",
 }
 
 # High-precision activity intents that imply a useful place category even when
@@ -296,6 +354,23 @@ class DeterministicPlaceChatIntentParser:
         if state.pending_clarification:
             pending = ensure_legacy_pending_options(state.pending_clarification)
             state = replace(state, pending_clarification=pending)
+            selected_pending_option = self._pending_choice_option(
+                normalized,
+                pending,
+            )
+            if selected_pending_option is not None:
+                resolved = self._resolve_structured_clarification(
+                    choice=ClarificationChoice(
+                        clarification_id=pending.clarification_id,
+                        option_id=selected_pending_option.option_id,
+                    ),
+                    state=state,
+                    has_user_location=has_user_location,
+                )
+                return replace(
+                    resolved,
+                    intent_model_version=contextual.intent_model_version,
+                )
             categories = self._contextual_categories(contextual, target_clause)
             inferred = (
                 self._inferred_activity_category(
@@ -306,20 +381,27 @@ class DeterministicPlaceChatIntentParser:
                 else None
             )
             if (
-                (categories or inferred is not None)
+                (
+                    categories
+                    or inferred is not None
+                    or self._has_open_activity_preference(normalized)
+                    or self._starts_new_search_turn(normalized)
+                    or self._has_new_nominal_topic(target_clause)
+                )
                 and not self._has_explicit_pending_choice(normalized)
             ):
+                previous_state = state
                 fresh_intent = self.parse(
                     message=message,
-                    state=replace(state, pending_clarification=None),
+                    state=self._without_topic_context(state),
                     has_user_location=has_user_location,
                 )
                 return replace(
-                    fresh_intent,
-                    state_patch=replace(
-                        fresh_intent.state_patch,
-                        clear_pending_clarification=True,
+                    self._with_topic_reset(
+                        fresh_intent,
+                        previous_state=previous_state,
                     ),
+                    intent_model_version=contextual.intent_model_version,
                 )
             return replace(
                 self._resolve_pending_clarification(
@@ -377,6 +459,36 @@ class DeterministicPlaceChatIntentParser:
         )
         inferred_category = inferred.category if inferred else None
         requested_category = explicit_category or inferred_category
+        previous_state = state
+        starts_new_search = self._starts_new_search_turn(normalized)
+        continuation_turn = self._is_continuation_turn(
+            normalized=normalized,
+            target_clause=target_clause,
+            contextual=contextual,
+        )
+        category_changed = bool(
+            requested_category
+            and state.target_category
+            and requested_category != state.target_category
+        )
+        topic_reset = bool(
+            self._has_topic_context(state)
+            and (
+                category_changed
+                or starts_new_search
+                or (
+                    requested_category is not None
+                    and state.target_category is None
+                    and not continuation_turn
+                )
+                or (
+                    requested_category is None
+                    and not continuation_turn
+                )
+            )
+        )
+        if topic_reset:
+            state = self._without_topic_context(state)
         target_category = requested_category or state.target_category
         if explicit_category:
             category_source: CategoryInferenceSource = "explicit"
@@ -386,11 +498,6 @@ class DeterministicPlaceChatIntentParser:
             category_source = "conversation_state"
         else:
             category_source = "unresolved"
-        category_changed = bool(
-            requested_category
-            and state.target_category
-            and requested_category != state.target_category
-        )
 
         if location_text:
             location_text = _RADIUS_PATTERN.sub("", location_text).strip(" ,.;")
@@ -514,7 +621,7 @@ class DeterministicPlaceChatIntentParser:
             and location_text
             and prepare_for_embedding(location_text) not in _CURRENT_LOCATION_VALUES
         ):
-            return replace(
+            clarified = replace(
                 self._location_scope_clarification(
                     target_category=target_category,
                     category_values=category_values,
@@ -533,6 +640,14 @@ class DeterministicPlaceChatIntentParser:
                     has_user_location=has_user_location,
                 ),
                 intent_model_version=contextual.intent_model_version,
+            )
+            return (
+                self._with_topic_reset(
+                    clarified,
+                    previous_state=previous_state,
+                )
+                if topic_reset
+                else clarified
             )
 
         location, explicit_location = self._location_intent(
@@ -580,6 +695,11 @@ class DeterministicPlaceChatIntentParser:
             reference=reference if reference_text else None,
             explicit_target_location=explicit_location,
             clear_reference=category_changed and reference_text is None,
+            clear_explicit_target_location=(
+                previous_state.explicit_target_location is not None
+                and location_text is not None
+                and location.source == "user_current"
+            ),
             taxonomy_version=self._taxonomy.version,
         )
         if explicit_category and contextual.category_phrases:
@@ -590,14 +710,14 @@ class DeterministicPlaceChatIntentParser:
             confidence = inferred.confidence if inferred else 0.88
         elif target_category is None:
             # This confidence describes category resolution, not whether the
-            # query is searchable.  Keeping it below the automatic-decision band
-            # allows candidate-derived clarification without suppressing recall.
+            # query is searchable. Keeping it below the automatic-decision band
+            # exposes uncertainty while retrieval can still return evidence.
             confidence = 0.55
         else:
             confidence = 0.84
         if reference_text:
             confidence -= 0.05
-        return ParsedPlaceChatIntent(
+        parsed = ParsedPlaceChatIntent(
             action="recommendations",
             target_category=target_category,
             category_values=category_values,
@@ -625,6 +745,174 @@ class DeterministicPlaceChatIntentParser:
             ),
             intent_model_version=contextual.intent_model_version,
         )
+        return (
+            self._with_topic_reset(parsed, previous_state=previous_state)
+            if topic_reset
+            else parsed
+        )
+
+    @staticmethod
+    def _without_topic_context(state: ConversationState) -> ConversationState:
+        return replace(
+            state,
+            target_category=None,
+            hard_filters={
+                key: value
+                for key, value in state.hard_filters.items()
+                if key in {"city", "state"}
+            },
+            soft_preferences=(),
+            exclusions=(),
+            reference=None,
+            pending_clarification=None,
+        )
+
+    @staticmethod
+    def _has_topic_context(state: ConversationState) -> bool:
+        topic_filter_keys = set(state.hard_filters) - {"city", "state", "place_ids"}
+        return bool(
+            state.target_category
+            or topic_filter_keys
+            or state.soft_preferences
+            or state.exclusions
+            or state.reference
+            or state.explicit_target_location
+            or state.pending_clarification
+        )
+
+    @staticmethod
+    def _with_topic_reset(
+        intent: ParsedPlaceChatIntent,
+        *,
+        previous_state: ConversationState,
+    ) -> ParsedPlaceChatIntent:
+        patch = intent.state_patch
+        return replace(
+            intent,
+            state_patch=replace(
+                patch,
+                clear_target_category=(
+                    patch.clear_target_category
+                    or (
+                        previous_state.target_category is not None
+                        and intent.target_category is None
+                        and patch.target_category is None
+                    )
+                ),
+                hard_filters=(
+                    dict(intent.hard_filters)
+                    if intent.hard_filters != previous_state.hard_filters
+                    else patch.hard_filters
+                ),
+                soft_preferences=(
+                    intent.soft_preferences
+                    if intent.soft_preferences != previous_state.soft_preferences
+                    else patch.soft_preferences
+                ),
+                exclusions=(
+                    intent.exclusions
+                    if intent.exclusions != previous_state.exclusions
+                    else patch.exclusions
+                ),
+                clear_reference=(
+                    patch.clear_reference
+                    or (
+                        previous_state.reference is not None
+                        and intent.reference is None
+                        and patch.reference is None
+                    )
+                ),
+                clear_explicit_target_location=(
+                    patch.clear_explicit_target_location
+                    or (
+                        previous_state.explicit_target_location is not None
+                        and patch.explicit_target_location is None
+                        and intent.location.source != "conversation_state"
+                    )
+                ),
+                clear_pending_clarification=(
+                    patch.clear_pending_clarification
+                    or (
+                        previous_state.pending_clarification is not None
+                        and patch.pending_clarification is None
+                    )
+                ),
+            ),
+        )
+
+    def _has_open_activity_preference(self, normalized: str) -> bool:
+        return any(
+            preference.canonical in _OPEN_ACTIVITY_PREFERENCES
+            and any(
+                _contains_phrase(normalized, alias)
+                for alias in preference.aliases
+            )
+            for preference in self._taxonomy.preferences
+        )
+
+    @staticmethod
+    def _starts_new_search_turn(normalized: str) -> bool:
+        standalone = re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+        if not standalone:
+            return False
+        if _contains_any(standalone, _CONTINUATION_REQUEST_PHRASES):
+            return False
+        if _CONTINUATION_PREFIX_PATTERN.search(standalone):
+            return False
+        return bool(_NEW_SEARCH_LEAD_PATTERN.search(standalone))
+
+    @staticmethod
+    def _has_new_nominal_topic(target_clause: str) -> bool:
+        tokens = set(tokenize_for_embeddings(target_clause))
+        ignored = _GENERIC_CONTINUATION_TOKENS | {
+            "cerca",
+            "esa",
+            "ese",
+            "identificar",
+            "no",
+            "opcion",
+            "primera",
+            "referencia",
+            "se",
+            "segunda",
+            "solo",
+            "zona",
+        }
+        return bool(tokens - ignored)
+
+    def _is_continuation_turn(
+        self,
+        *,
+        normalized: str,
+        target_clause: str,
+        contextual: _ContextualSignals,
+    ) -> bool:
+        if self._has_open_activity_preference(normalized):
+            return False
+        if self._starts_new_search_turn(normalized):
+            return False
+
+        standalone = re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+        if _contains_any(standalone, _CONTINUATION_REQUEST_PHRASES):
+            return True
+        if _CONTINUATION_PREFIX_PATTERN.search(standalone):
+            return True
+        if (
+            contextual.reference
+            or contextual.location
+            or contextual.radius_meters is not None
+            or contextual.exclusions
+            or self._extract_reference(normalized)
+            or self._extract_location(normalized)
+            or self._extract_radius_meters(normalized) is not None
+            or _EXCLUSION_PATTERN.search(normalized)
+        ):
+            return True
+        if self._matched_preferences(normalized):
+            return True
+
+        tokens = set(tokenize_for_embeddings(target_clause))
+        return bool(tokens) and tokens <= _GENERIC_CONTINUATION_TOKENS
 
     def _direct_response(
         self,
@@ -882,6 +1170,18 @@ class DeterministicPlaceChatIntentParser:
         if pending is None:
             raise RuntimeError("pending clarification is required")
 
+        pending = ensure_legacy_pending_options(pending)
+        selected = self._pending_choice_option(normalized, pending)
+        if selected is not None:
+            return self._resolve_structured_clarification(
+                choice=ClarificationChoice(
+                    clarification_id=pending.clarification_id,
+                    option_id=selected.option_id,
+                ),
+                state=replace(state, pending_clarification=pending),
+                has_user_location=has_user_location,
+            )
+
         reference_choice = _contains_any(
             normalized,
             (
@@ -922,6 +1222,40 @@ class DeterministicPlaceChatIntentParser:
             state=state,
             has_user_location=has_user_location,
         )
+
+    @staticmethod
+    def _pending_choice_option(
+        normalized: str,
+        pending: PendingClarification,
+    ) -> PendingClarificationOption | None:
+        if not pending.options:
+            return None
+
+        first_position = _last_affirmed_phrase_position(
+            normalized,
+            ("primera", "opcion uno"),
+        )
+        second_position = _last_affirmed_phrase_position(
+            normalized,
+            ("segunda", "opcion dos"),
+        )
+        if first_position >= 0 or second_position >= 0:
+            if second_position > first_position:
+                return pending.options[1] if len(pending.options) > 1 else None
+            return pending.options[0]
+
+        choice_text = re.sub(
+            r"^(?:(?:elijo|escojo|selecciono|prefiero|quiero)\s+)?"
+            r"(?:(?:la|el|un|una)\s+)?(?:opcion\s+)?(?:de\s+)?",
+            "",
+            normalized,
+        ).strip()
+        for option in pending.options:
+            for raw_value in (option.label, option.value, option.option_id):
+                value = prepare_for_embedding(raw_value)
+                if value and choice_text == value:
+                    return option
+        return None
 
     def _resolve_location_scope_value(
         self,
@@ -1200,6 +1534,10 @@ class DeterministicPlaceChatIntentParser:
 
         categories: list[str] = []
         for phrase in contextual.category_phrases:
+            if self._has_open_activity_preference(
+                prepare_for_embedding(phrase)
+            ):
+                continue
             aligned = (
                 self._activity_classifier.classify(phrase)
                 if self._activity_classifier is not None
@@ -1262,6 +1600,8 @@ class DeterministicPlaceChatIntentParser:
     ) -> PlaceCategoryInference | None:
         # Prefer the injected semantic/open-vocabulary model.  Lexical activity
         # rules remain a compatibility fallback during rollout, never a gate.
+        if self._has_open_activity_preference(normalized):
+            return None
         if self._activity_classifier is not None:
             inferred = self._activity_classifier.classify(normalized)
             if inferred is not None:
@@ -1280,6 +1620,8 @@ class DeterministicPlaceChatIntentParser:
         self,
         normalized: str,
     ) -> tuple[IntentAlternative, ...]:
+        if self._has_open_activity_preference(normalized):
+            return ()
         if self._activity_classifier is None:
             return ()
         rank_supported = getattr(
@@ -1552,6 +1894,26 @@ def _contains_any(text: str, values: tuple[str, ...]) -> bool:
         _contains_phrase(text, prepare_for_embedding(value))
         for value in values
     )
+
+
+def _last_affirmed_phrase_position(
+    text: str,
+    values: tuple[str, ...],
+) -> int:
+    position = -1
+    for value in values:
+        normalized = prepare_for_embedding(value)
+        if not normalized:
+            continue
+        pattern = re.compile(
+            rf"(?<![a-z0-9]){re.escape(normalized)}(?![a-z0-9])"
+        )
+        for match in pattern.finditer(text):
+            prefix = text[max(0, match.start() - 12) : match.start()]
+            if re.search(r"\bno(?:\s+(?:la|el))?\s*$", prefix):
+                continue
+            position = max(position, match.start())
+    return position
 
 
 def _ordered_unique(values: Iterable[str]) -> tuple[str, ...]:
