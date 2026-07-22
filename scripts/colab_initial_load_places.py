@@ -159,12 +159,12 @@ def _configure_environment(*, semantic: bool) -> None:
         # explicitly requires aws_pgvector and writer credentials.
         "ENV": "local",
         "MAIN_API_BASE_URL": "http://3.212.166.108",
-        "MAIN_API_PLACES_SEARCH_PATH": "/api/v1/places/search",
+        "MAIN_API_PLACES_SNAPSHOT_PATH": "/api/v1/internal/places/snapshot",
+        "MAIN_API_PLACES_CHANGES_PATH": "/api/v1/internal/places/changes",
         "MAIN_API_PLACE_CATEGORIES_PATH": "/api/v1/places/categories",
         "MAIN_API_PLACE_CATALOG_LANGUAGE": "es",
         "MAIN_API_TIMEOUT_SECONDS": "60",
         "MAIN_API_PLACES_PAGE_LIMIT": "50",
-        "MAIN_API_PLACES_PAGINATION_MODE": "cursor",
         "VECTOR_STORE_PROVIDER": "aws_pgvector",
         "PGVECTOR_HOST": "nlp-vector-db.c2jwncm87zsa.us-east-1.rds.amazonaws.com",
         "PGVECTOR_PORT": "5432",
@@ -252,9 +252,11 @@ def _configure_environment(*, semantic: bool) -> None:
         "PGVECTOR_WRITER_PASSWORD"
     )
 
+    os.environ["MAIN_API_INTERNAL_TOKEN"] = _read_required_secret(
+        "MAIN_API_INTERNAL_TOKEN"
+    )
+
     for optional_name in (
-        "MAIN_API_INTERNAL_TOKEN",
-        "MAIN_API_AUTH_TOKEN",
         "HF_TOKEN",
     ):
         value = _read_setting(optional_name)
@@ -302,12 +304,15 @@ def _read_colab_secret(name: str) -> str | None:
 
 def _check_main_api() -> None:
     base_url = os.environ["MAIN_API_BASE_URL"].rstrip("/")
-    path = os.environ["MAIN_API_PLACES_SEARCH_PATH"]
+    path = os.environ["MAIN_API_PLACES_SNAPSHOT_PATH"]
     url = f"{base_url}/{path.lstrip('/')}?{urlencode({'limit': 1})}"
     headers: dict[str, str] = {}
-    token = os.getenv("MAIN_API_INTERNAL_TOKEN") or os.getenv("MAIN_API_AUTH_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    token = os.getenv("MAIN_API_INTERNAL_TOKEN")
+    if not token:
+        raise RuntimeError(
+            "Configura MAIN_API_INTERNAL_TOKEN para consultar el snapshot interno."
+        )
+    headers["Authorization"] = f"Bearer {token}"
 
     try:
         with urlopen(Request(url, headers=headers), timeout=30) as response:

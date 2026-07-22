@@ -221,6 +221,27 @@ class MockPlaceVectorRepository(PlaceVectorRepository):
         metadata_filters = filters.as_metadata_filter()
         for key, expected in metadata_filters.items():
             actual = place.get(key)
+            if key == "required_attribute_states":
+                actual_states = place.get("attribute_states")
+                if not isinstance(actual_states, dict) or any(
+                    actual_states.get(state_key) != state_value
+                    for state_key, state_value in expected.items()
+                ):
+                    return False
+                continue
+            if key in {
+                "attribute_terms_any",
+                "entertainment_features_any",
+                "contained_items_any",
+                "menu_items_any",
+            }:
+                actual_values = place.get(key.removesuffix("_any"), [])
+                normalized_actual = {_normalize(str(item)) for item in actual_values}
+                if not normalized_actual.intersection(
+                    _normalize(str(item)) for item in expected
+                ):
+                    return False
+                continue
             if key == "place_ids":
                 if str(place.get("id")) not in {str(item) for item in expected}:
                     return False

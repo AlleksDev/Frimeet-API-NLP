@@ -21,9 +21,13 @@ class Settings(BaseSettings):
         default="http://3.212.166.108",
         alias="MAIN_API_BASE_URL",
     )
-    main_api_places_search_path: str = Field(
-        default="/api/v1/places/search",
-        alias="MAIN_API_PLACES_SEARCH_PATH",
+    main_api_places_snapshot_path: str = Field(
+        default="/api/v1/internal/places/snapshot",
+        alias="MAIN_API_PLACES_SNAPSHOT_PATH",
+    )
+    main_api_places_changes_path: str = Field(
+        default="/api/v1/internal/places/changes",
+        alias="MAIN_API_PLACES_CHANGES_PATH",
     )
     main_api_place_categories_path: str = Field(
         default="/api/v1/places/categories",

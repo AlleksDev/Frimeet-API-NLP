@@ -22,8 +22,9 @@ CREATE TABLE IF NOT EXISTS place_embeddings (
 );
 ```
 
-`VECTOR(300)` corresponde al modelo preentrenado
-`facebook/fasttext-es-vectors` usado por `FastTextEmbeddingProvider`.
+`VECTOR(300)` es el indice legacy FastText. El chat de lugares puede usar en paralelo
+`place_embeddings_semantic_v1` con `VECTOR(768)`; se crea con
+`sql/migrations/20260716_02_places_semantic_v1.sql`.
 
 Antes de generar el vector, los IDs de tags se resuelven con el catalogo incluido en
 el servicio y se construye un documento ponderado: `tags x6`, `category x4`,
@@ -53,6 +54,7 @@ El job guarda estos campos en `metadata` cuando existen:
 {
   "name": "Nombre del lugar",
   "category": "cafe",
+  "category_label": "Cafeteria",
   "city": "Tuxtla Gutierrez",
   "state": "Chiapas",
   "source": "osm",
@@ -60,9 +62,24 @@ El job guarda estos campos en `metadata` cuando existen:
   "is_active": true,
   "occasion": "pareja,amigos",
   "tags": "cafe,tranquilo",
-  "short_description": "Descripcion corta..."
+  "short_description": "Descripcion corta...",
+  "attribute_states": {
+    "has_restrooms": true,
+    "has_parking": false,
+    "good_for_cooling_off": "yes"
+  },
+  "attribute_terms": ["banos y sanitarios", "refrescarse y nadar"],
+  "negative_attribute_terms": ["estacionamiento"],
+  "entertainment_features": ["Musica en vivo live music"],
+  "contained_items": ["Alberca semiolimpica actividad acuatica"],
+  "menu_items": ["Agua fresca bebidas"],
+  "source_fields_present": ["name", "category", "facets"]
 }
 ```
+
+Los campos ausentes significan **desconocido**, no `false`. Por eso la falta de
+descripcion, tags o atributos no resta confianza ni excluye automaticamente un lugar.
+Solo `false` o `no` explicitos se guardan como evidencia negativa.
 
 ## Document
 
@@ -123,3 +140,15 @@ El SQL completo de referencia esta en:
 ```text
 sql/aws_pgvector_contract.sql
 ```
+
+## Facetas e incremental
+
+Ejecuta despues de la migracion semantica:
+
+```text
+sql/migrations/20260721_03_place_facets_and_incremental_sync.sql
+```
+
+Esta migracion agrega indices de expresion sobre las facetas JSONB, filtros SQL
+`required_attribute_states` y `*_any`, `place_sync_checkpoints` y la desactivacion
+incremental. Es aditiva: no contiene `DROP`, `TRUNCATE` ni borrado de embeddings.

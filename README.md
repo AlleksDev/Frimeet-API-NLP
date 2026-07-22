@@ -114,7 +114,7 @@ POST /search
 Probar sin escribir:
 
 ```powershell
-python -m app.jobs.sync_place_embeddings --dry-run --max-pages 1
+python -m app.jobs.sync_place_embeddings --mode snapshot --dry-run --max-pages 1
 python -m app.jobs.sync_post_embeddings --mode snapshot --max-pages 1
 python -m app.jobs.sync_search_embeddings --resource all --dry-run --max-pages 1
 ```
@@ -130,7 +130,7 @@ python -m app.jobs.initial_load_search_embeddings --resource all
 Sincronizaciones posteriores:
 
 ```powershell
-python -m app.jobs.sync_place_embeddings
+python -m app.jobs.sync_place_embeddings --mode incremental
 python -m app.jobs.sync_post_embeddings --mode incremental
 python -m app.jobs.sync_feed_interactions
 python -m app.jobs.rebuild_user_interest_profiles
@@ -140,10 +140,10 @@ python -m app.jobs.sync_search_embeddings --resource all
 
 Los jobs calculan un `content_hash` versionado con el contenido, modelo, version y
 dimension. Un cambio de modelo fuerza la regeneracion aunque el texto no haya cambiado.
-El job de lugares tambien consulta `GET /api/v1/places/categories?lang=es` una vez por
-ejecucion y sincroniza etiquetas localizadas, atributos, entretenimiento, elementos
-contenidos y menu. Por ello, despues de desplegar cambios del catalogo principal se debe
-volver a ejecutar `python -m app.jobs.sync_place_embeddings`. Si el catalogo espanol no
+El job de lugares consume `GET /api/v1/internal/places/snapshot` para la carga inicial y
+`GET /api/v1/internal/places/changes` para sincronizaciones posteriores. Tambien consulta
+`GET /api/v1/places/categories?lang=es` una vez por ejecucion y sincroniza etiquetas
+localizadas, atributos, entretenimiento, elementos contenidos y menu. Si el catalogo espanol no
 esta disponible o llega vacio, el job falla sin reindexar con etiquetas en ingles; se
 debe desplegar primero la API principal y volver a intentarlo.
 
@@ -159,6 +159,10 @@ internos de la API principal:
 
 Estos clientes requieren `MAIN_API_INTERNAL_TOKEN`; nunca usan un JWT de usuario ni
 hacen fallback a `MAIN_API_AUTH_TOKEN`.
+
+Antes del primer job semantico ejecuta, en orden,
+`sql/migrations/20260716_02_places_semantic_v1.sql` y
+`sql/migrations/20260721_03_place_facets_and_incremental_sync.sql` en la base pgvector.
 
 ## Busqueda Global Hibrida
 

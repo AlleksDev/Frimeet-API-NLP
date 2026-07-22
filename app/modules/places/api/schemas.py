@@ -29,6 +29,11 @@ class PlaceFiltersSchema(BaseModel):
     price_range: str | None = Field(default=None, max_length=30)
     is_active: bool | None = True
     occasion: str | None = Field(default=None, max_length=80)
+    required_attribute_states: dict[str, bool | str] | None = None
+    attribute_terms_any: list[str] | None = Field(default=None, max_length=20)
+    entertainment_features_any: list[str] | None = Field(default=None, max_length=20)
+    contained_items_any: list[str] | None = Field(default=None, max_length=20)
+    menu_items_any: list[str] | None = Field(default=None, max_length=20)
 
 
 class PlaceSearchRequest(BaseModel):
@@ -57,6 +62,13 @@ class PlaceSearchRequest(BaseModel):
             price_range=self.filters.price_range,
             is_active=self.filters.is_active,
             occasion=self.filters.occasion,
+            required_attribute_states=self.filters.required_attribute_states,
+            attribute_terms_any=_optional_tuple(self.filters.attribute_terms_any),
+            entertainment_features_any=_optional_tuple(
+                self.filters.entertainment_features_any
+            ),
+            contained_items_any=_optional_tuple(self.filters.contained_items_any),
+            menu_items_any=_optional_tuple(self.filters.menu_items_any),
         )
 
 
@@ -87,6 +99,13 @@ class PlaceChatRequest(BaseModel):
             price_range=self.filters.price_range,
             is_active=self.filters.is_active,
             occasion=self.filters.occasion,
+            required_attribute_states=self.filters.required_attribute_states,
+            attribute_terms_any=_optional_tuple(self.filters.attribute_terms_any),
+            entertainment_features_any=_optional_tuple(
+                self.filters.entertainment_features_any
+            ),
+            contained_items_any=_optional_tuple(self.filters.contained_items_any),
+            menu_items_any=_optional_tuple(self.filters.menu_items_any),
         )
 
 
@@ -98,6 +117,13 @@ class PlaceResultSchema(BaseModel):
     city: str | None = None
     state: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+def _optional_tuple(values: list[str] | None) -> tuple[str, ...] | None:
+    if values is None:
+        return None
+    normalized = tuple(value.strip() for value in values if value.strip())
+    return normalized or None
 
 
 class PlaceSearchEngineMetricsSchema(BaseModel):
