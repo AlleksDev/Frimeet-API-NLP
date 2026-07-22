@@ -22,11 +22,12 @@ class SyncCounters:
     processed: int = 0
     skipped: int = 0
     upserted: int = 0
+    deactivated: int = 0
     errors: int = 0
 
 
-async def main() -> None:
-    args = _parse_args()
+async def main(default_mode: str = "incremental") -> None:
+    args = _parse_args(default_mode)
     settings = get_settings()
     configure_logging(settings.log_level)
 
@@ -51,41 +52,145 @@ async def main() -> None:
         settings.places_embedding_fix_mistral_regex,
     )
 
-    async for place in source.iter_places(
-        page_limit=args.page_limit,
-        max_pages=args.max_pages,
-    ):
-        batch.append(place)
-        if len(batch) >= args.batch_size:
-            await _flush_batch(
-                batch,
-                vector_client,
-                embedding_provider,
-                settings,
-                counters,
-                args.dry_run,
-            )
-            batch = []
+    if args.mode == "incremental":
+        await _sync_incremental(
+            source,
+            vector_client,
+            embedding_provider,
+            settings,
+            counters,
+            args,
+        )
+    else:
+        async for place in source.iter_places(
+            page_limit=args.page_limit,
+            max_pages=args.max_pages,
+        ):
+            batch.append(place)
+            if len(batch) >= args.batch_size:
+                await _flush_batch(
+                    batch,
+                    vector_client,
+                    embedding_provider,
+                    settings,
+                    counters,
+                    args.dry_run,
+                )
+                batch = []
 
-    await _flush_batch(
-        batch,
-        vector_client,
-        embedding_provider,
-        settings,
-        counters,
-        args.dry_run,
-    )
+        await _flush_batch(
+            batch,
+            vector_client,
+            embedding_provider,
+            settings,
+            counters,
+            args.dry_run,
+        )
     logger.info(
-        "Finished place sync processed=%s skipped=%s upserted=%s errors=%s",
+        "Finished place sync mode=%s processed=%s skipped=%s upserted=%s "
+        "deactivated=%s errors=%s",
+        args.mode,
         counters.processed,
         counters.skipped,
         counters.upserted,
+        counters.deactivated,
         counters.errors,
     )
     if counters.errors:
         raise RuntimeError(
             f"Place embedding sync finished with {counters.errors} failed records"
         )
+
+
+async def _sync_incremental(
+    source: MainApiPlacesClient,
+    vector_client: AwsPgvectorClient,
+    embedding_provider: EmbeddingProvider,
+    settings: Settings,
+    counters: SyncCounters,
+    args: argparse.Namespace,
+) -> None:
+    consumer = f"place-embeddings:{settings.places_pgvector_upsert_function}"
+    deactivate_function = (
+        "deactivate_place_embedding_semantic_v1"
+        if settings.places_pgvector_upsert_function
+        == "upsert_place_embedding_semantic_v1"
+        else "deactivate_place_embedding"
+    )
+    checkpoint = await vector_client.get_place_sync_checkpoint(consumer)
+    batch: list[PlaceSourceRecord] = []
+    batch_last_event_id = checkpoint
+
+    async for change in source.iter_changes(
+        after_event_id=checkpoint,
+        page_limit=args.page_limit,
+        max_pages=args.max_pages,
+    ):
+        if change.operation == "deactivate":
+            if batch:
+                if not await _flush_batch(
+                    batch,
+                    vector_client,
+                    embedding_provider,
+                    settings,
+                    counters,
+                    args.dry_run,
+                ):
+                    return
+                if not args.dry_run:
+                    await vector_client.save_place_sync_checkpoint(
+                        consumer, batch_last_event_id
+                    )
+                batch = []
+            counters.processed += 1
+            if not args.dry_run:
+                await vector_client.deactivate_place_embedding(
+                    change.place_id,
+                    function_name=deactivate_function,
+                )
+                await vector_client.save_place_sync_checkpoint(
+                    consumer, change.event_id
+                )
+            counters.deactivated += 1
+            continue
+
+        if change.place is None:
+            counters.errors += 1
+            logger.error(
+                "Place change event_id=%s is missing its source record",
+                change.event_id,
+            )
+            return
+        batch.append(change.place)
+        batch_last_event_id = change.event_id
+        if len(batch) >= args.batch_size:
+            if not await _flush_batch(
+                batch,
+                vector_client,
+                embedding_provider,
+                settings,
+                counters,
+                args.dry_run,
+            ):
+                return
+            if not args.dry_run:
+                await vector_client.save_place_sync_checkpoint(
+                    consumer, batch_last_event_id
+                )
+            batch = []
+
+    if batch and await _flush_batch(
+        batch,
+        vector_client,
+        embedding_provider,
+        settings,
+        counters,
+        args.dry_run,
+    ):
+        if not args.dry_run:
+            await vector_client.save_place_sync_checkpoint(
+                consumer, batch_last_event_id
+            )
 
 
 async def _flush_batch(
@@ -95,9 +200,9 @@ async def _flush_batch(
     settings: Settings,
     counters: SyncCounters,
     dry_run: bool,
-) -> None:
+) -> bool:
     if not batch:
-        return
+        return True
 
     counters.processed += len(batch)
     try:
@@ -128,7 +233,7 @@ async def _flush_batch(
         ]
         counters.skipped += len(batch) - len(changed)
         if not changed:
-            return
+            return True
 
         embeddings = embedding_provider.embed_batch(
             [record.document for record in changed]
@@ -154,9 +259,11 @@ async def _flush_batch(
                 embedding_version=settings.places_embedding_version,
             )
             counters.upserted += len(upserts)
+        return True
     except Exception:
         counters.errors += len(batch)
         logger.exception("Failed to sync place embedding batch")
+        return False
 
 
 def _validate_backfill_configuration(settings: Settings) -> None:
@@ -204,8 +311,13 @@ def _validate_backfill_configuration(settings: Settings) -> None:
         )
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(default_mode: str = "incremental") -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sync place embeddings into AWS RDS pgvector.")
+    parser.add_argument(
+        "--mode",
+        choices=("snapshot", "incremental"),
+        default=default_mode,
+    )
     parser.add_argument("--batch-size", type=int, default=100)
     parser.add_argument("--page-limit", type=int, default=None)
     parser.add_argument("--max-pages", type=int, default=None)

@@ -77,8 +77,8 @@ os.environ["PLACES_EMBEDDING_DEVICE"] = "cpu"
 os.environ["PLACES_EMBEDDING_BATCH_SIZE"] = "8"
 
 os.environ["MAIN_API_BASE_URL"] = "https://URL-DE-TU-API-PRINCIPAL"
-os.environ["MAIN_API_PLACES_SEARCH_PATH"] = "/api/v1/places/search"
-os.environ["MAIN_API_PLACES_PAGINATION_MODE"] = "cursor"
+os.environ["MAIN_API_PLACES_SNAPSHOT_PATH"] = "/api/v1/internal/places/snapshot"
+os.environ["MAIN_API_PLACES_CHANGES_PATH"] = "/api/v1/internal/places/changes"
 
 os.environ["PGVECTOR_HOST"] = "HOST-DE-RDS"
 os.environ["PGVECTOR_PORT"] = "5432"
@@ -92,6 +92,16 @@ Colab como una regla `/32`. Nunca abras `0.0.0.0/0` y elimina la regla al
 terminar.
 
 ## 3. Ensayo sin escritura
+
+Antes del ensayo ejecuta en la base pgvector, en este orden:
+
+```text
+sql/migrations/20260716_02_places_semantic_v1.sql
+sql/migrations/20260721_03_place_facets_and_incremental_sync.sql
+```
+
+La segunda migracion es aditiva: crea indices de facetas, validaciones `NOT VALID`,
+checkpoint incremental y funciones auxiliares. No borra ni reescribe embeddings.
 
 El modo `--semantic` configura automaticamente el proveedor de 768d, los
 prefijos E5 y las funciones SQL de la tabla nueva:
@@ -140,6 +150,14 @@ El job trabaja por lotes y es idempotente. Si Colab se desconecta, ejecuta el
 mismo comando otra vez; no trunques la tabla. Una segunda corrida sin cambios
 debe mostrar aproximadamente `processed=N`, `skipped=N`, `upserted=0`,
 `errors=0`.
+
+Despues del snapshot, programa la sincronizacion incremental:
+
+```bash
+python -m app.jobs.sync_place_embeddings --mode incremental
+```
+
+El checkpoint se guarda en `place_sync_checkpoints`; un fallo no adelanta el cursor.
 
 ## 5. Verificar PostgreSQL
 
