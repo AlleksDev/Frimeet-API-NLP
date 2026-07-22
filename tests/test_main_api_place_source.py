@@ -215,9 +215,11 @@ def _place_source_client() -> MainApiPlacesClient:
     return MainApiPlacesClient(
         SimpleNamespace(
             main_api_base_url="https://main-api.test",
-            main_api_places_search_path="/api/v1/places/search",
+            main_api_places_snapshot_path="/api/v1/internal/places/snapshot",
+            main_api_places_changes_path="/api/v1/internal/places/changes",
             main_api_place_categories_path="/api/v1/places/categories",
             main_api_place_catalog_language="es",
+            main_api_internal_token="internal-token",
         )
     )
 
@@ -344,3 +346,13 @@ def test_place_source_extracts_nested_cursor_metadata() -> None:
 
     assert MainApiPlacesClient._extract_next_cursor(payload) == "cursor_nested"
     assert MainApiPlacesClient._extract_has_more(payload) is True
+
+
+def test_place_source_uses_internal_snapshot_and_service_token() -> None:
+    client = _place_source_client()
+
+    assert client._path == "api/v1/internal/places/snapshot"
+    assert client._changes_path == "api/v1/internal/places/changes"
+    assert client._build_headers() == {
+        "Authorization": "Bearer internal-token"
+    }

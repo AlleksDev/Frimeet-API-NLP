@@ -135,6 +135,16 @@ Campos de `filters`:
 | `price_range` | `string \| null` | `null` |
 | `is_active` | `boolean \| null` | `true` |
 | `occasion` | `string \| null` | `null` |
+| `required_attribute_states` | `object \| null` | `null` |
+| `attribute_terms_any` | `string[] \| null` | `null` |
+| `entertainment_features_any` | `string[] \| null` | `null` |
+| `contained_items_any` | `string[] \| null` | `null` |
+| `menu_items_any` | `string[] \| null` | `null` |
+
+En el ranking conversacional, la ausencia de descripcion, tags o atributos opcionales
+permanece neutral. `required_attribute_states` es un filtro duro solicitado
+explicitamente: excluye tanto valores incompatibles como estados desconocidos. Los
+arreglos `*_any` aceptan el lugar si coincide al menos una de sus senales indexadas.
 
 Si `city` o `state` aparecen tanto en el nivel principal como dentro de `filters`, tiene
 prioridad el valor del nivel principal.

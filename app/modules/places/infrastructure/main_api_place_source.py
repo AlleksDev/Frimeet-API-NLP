@@ -29,13 +29,22 @@ class PlaceSourceRecord:
     is_active: bool
 
 
+@dataclass(frozen=True)
+class PlaceChangeRecord:
+    event_id: int
+    place_id: str
+    operation: str
+    place: PlaceSourceRecord | None
+
+
 class MainApiPlacesClient:
     """Reads real places from the main product API for offline embedding jobs."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._base_url = settings.main_api_base_url.rstrip("/") + "/"
-        self._path = settings.main_api_places_search_path.lstrip("/")
+        self._path = settings.main_api_places_snapshot_path.lstrip("/")
+        self._changes_path = settings.main_api_places_changes_path.lstrip("/")
         self._categories_path = settings.main_api_place_categories_path.lstrip("/")
         self._catalog_language = settings.main_api_place_catalog_language
 
@@ -46,11 +55,9 @@ class MainApiPlacesClient:
     ) -> AsyncIterator[PlaceSourceRecord]:
         limit = page_limit or self._settings.main_api_places_page_limit
         page = 1
-        offset = 0
         cursor: str | None = None
         headers = self._build_headers()
         seen_ids: set[str] = set()
-        pagination_mode = self._settings.main_api_places_pagination_mode
 
         async with httpx.AsyncClient(
             base_url=self._base_url,
@@ -61,8 +68,6 @@ class MainApiPlacesClient:
             while True:
                 params = self._build_pagination_params(
                     limit=limit,
-                    page=page,
-                    offset=offset,
                     cursor=cursor,
                 )
                 response = await client.get(self._path, params=params)
@@ -87,15 +92,68 @@ class MainApiPlacesClient:
                 if yielded_this_page == 0 or (max_pages is not None and page >= max_pages):
                     break
 
-                if pagination_mode == "cursor":
-                    cursor = self._extract_next_cursor(payload)
-                    if not self._extract_has_more(payload) or not cursor:
-                        break
-                elif len(places) < limit:
+                cursor = self._extract_next_cursor(payload)
+                if not self._extract_has_more(payload) or not cursor:
                     break
 
                 page += 1
-                offset += limit
+
+    async def iter_changes(
+        self,
+        after_event_id: int,
+        page_limit: int | None = None,
+        max_pages: int | None = None,
+    ) -> AsyncIterator[PlaceChangeRecord]:
+        limit = page_limit or self._settings.main_api_places_page_limit
+        current_event_id = max(after_event_id, 0)
+        page = 1
+        headers = self._build_headers()
+
+        async with httpx.AsyncClient(
+            base_url=self._base_url,
+            timeout=self._settings.main_api_timeout_seconds,
+            headers=headers,
+        ) as client:
+            category_labels = await self._load_category_labels(client)
+            while True:
+                response = await client.get(
+                    self._changes_path,
+                    params={"after_id": current_event_id, "limit": limit},
+                )
+                response.raise_for_status()
+                payload = response.json()
+                changes = self._extract_places(payload)
+                if not changes:
+                    break
+
+                for change in changes:
+                    event_id = _as_int(change.get("event_id"))
+                    place_id = str(change.get("place_id") or "").strip()
+                    operation = str(change.get("operation") or "upsert").strip().lower()
+                    raw_place = change.get("place")
+                    place = (
+                        place_to_source_record(
+                            raw_place,
+                            category_labels=category_labels,
+                        )
+                        if isinstance(raw_place, dict)
+                        else None
+                    )
+                    if event_id is None or not place_id:
+                        raise ValueError("invalid place change returned by main API")
+                    current_event_id = max(current_event_id, event_id)
+                    yield PlaceChangeRecord(
+                        event_id=event_id,
+                        place_id=place_id,
+                        operation=operation,
+                        place=place,
+                    )
+
+                if not self._extract_has_more(payload):
+                    break
+                if max_pages is not None and page >= max_pages:
+                    break
+                page += 1
 
     async def _load_category_labels(
         self,
@@ -146,27 +204,21 @@ class MainApiPlacesClient:
         return labels
 
     def _build_headers(self) -> dict[str, str]:
-        token = self._settings.main_api_internal_token or self._settings.main_api_auth_token
+        token = self._settings.main_api_internal_token
         if not token:
-            return {}
+            raise RuntimeError(
+                "MAIN_API_INTERNAL_TOKEN is required for the internal Places snapshot"
+            )
         return {"Authorization": f"Bearer {token}"}
 
     def _build_pagination_params(
         self,
         limit: int,
-        page: int,
-        offset: int,
         cursor: str | None,
     ) -> dict[str, int | str]:
         params: dict[str, int | str] = {"limit": limit}
-        mode = self._settings.main_api_places_pagination_mode
-        if mode == "cursor":
-            if cursor:
-                params["cursor"] = cursor
-        elif mode == "offset":
-            params["offset"] = offset
-        else:
-            params["page"] = page
+        if cursor:
+            params["cursor"] = cursor
         return params
 
     @staticmethod
@@ -271,7 +323,7 @@ def place_to_source_record(
     description = str(_first_present(place, "description", "summary", "about", default=""))
     address = str(_first_present(place, "address", "formatted_address", default=""))
 
-    raw_tags = _first_present(place, "tags", "keywords", default=[])
+    raw_tags = _first_present(place, "tag_ids", "tags", "keywords", default=[])
     resolved_source_tags = resolve_place_tags(raw_tags)
     localized_tag_values = _first_present(place, "tag_labels", "tagLabels")
     resolved_localized_tags = (
@@ -402,6 +454,13 @@ def _as_bool(value: Any, *, default: bool) -> bool:
         if normalized in {"false", "0", "no", ""}:
             return False
     return bool(value)
+
+
+def _as_int(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _to_metadata_value(value: Any) -> str | int | float | bool | None:

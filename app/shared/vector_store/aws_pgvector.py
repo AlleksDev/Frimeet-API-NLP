@@ -255,6 +255,30 @@ class AwsPgvectorClient:
             embedding_version=embedding_version,
         )
 
+    async def deactivate_place_embedding(
+        self,
+        external_id: str,
+        function_name: str = "deactivate_place_embedding_semantic_v1",
+    ) -> None:
+        query = f"SELECT {quote_identifier(function_name)}($1::text)"
+        async with self.connection() as connection:
+            await connection.execute(query, external_id)
+
+    async def get_place_sync_checkpoint(self, consumer: str) -> int:
+        async with self.connection() as connection:
+            value = await connection.fetchval(
+                "SELECT get_place_sync_checkpoint($1::text)", consumer
+            )
+        return int(value or 0)
+
+    async def save_place_sync_checkpoint(self, consumer: str, event_id: int) -> None:
+        async with self.connection() as connection:
+            await connection.execute(
+                "SELECT save_place_sync_checkpoint($1::text, $2::bigint)",
+                consumer,
+                event_id,
+            )
+
     async def upsert_post_embeddings(
         self,
         records: list[VectorUpsertRecord],

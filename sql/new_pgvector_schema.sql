@@ -121,6 +121,12 @@ CREATE TABLE IF NOT EXISTS post_sync_checkpoints (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS place_sync_checkpoints (
+    consumer TEXT PRIMARY KEY,
+    last_event_id BIGINT NOT NULL DEFAULT 0 CHECK (last_event_id >= 0),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS post_embedding_tombstones (
     post_id TEXT PRIMARY KEY,
     source_version BIGINT NOT NULL CHECK (source_version >= 0),
@@ -331,6 +337,18 @@ AS $$
         embedding_version = EXCLUDED.embedding_version,
         is_active = EXCLUDED.is_active,
         updated_at = now();
+$$;
+
+CREATE OR REPLACE FUNCTION deactivate_place_embedding(p_external_id TEXT)
+RETURNS VOID
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    UPDATE public.place_embeddings
+    SET is_active = FALSE,
+        updated_at = now()
+    WHERE external_id = p_external_id;
 $$;
 
 CREATE OR REPLACE FUNCTION upsert_post_embedding(
@@ -1014,6 +1032,34 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
     DELETE FROM public.post_sync_checkpoints WHERE consumer = p_consumer;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_place_sync_checkpoint(p_consumer TEXT)
+RETURNS BIGINT
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT COALESCE(
+        (SELECT last_event_id FROM public.place_sync_checkpoints WHERE consumer = p_consumer),
+        0
+    );
+$$;
+
+CREATE OR REPLACE FUNCTION public.save_place_sync_checkpoint(
+    p_consumer TEXT,
+    p_last_event_id BIGINT
+) RETURNS VOID
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    INSERT INTO public.place_sync_checkpoints (consumer, last_event_id, updated_at)
+    VALUES (p_consumer, p_last_event_id, now())
+    ON CONFLICT (consumer) DO UPDATE SET
+        last_event_id = GREATEST(place_sync_checkpoints.last_event_id, EXCLUDED.last_event_id),
+        updated_at = now();
 $$;
 
 CREATE OR REPLACE FUNCTION public.get_post_feed_features(
@@ -1716,7 +1762,7 @@ BEGIN
               'place_embeddings','post_embeddings','user_embeddings',
               'club_embeddings','group_embeddings','event_embeddings',
               'post_cluster_runs','post_clusters','post_cluster_memberships',
-              'user_interest_embeddings','post_sync_checkpoints',
+              'user_interest_embeddings','post_sync_checkpoints','place_sync_checkpoints',
               'post_embedding_tombstones'
           ])
     LOOP
@@ -1730,12 +1776,13 @@ BEGIN
         JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
         WHERE namespace.nspname = 'public'
           AND procedure.proname = ANY(ARRAY[
-              'match_places','match_posts','upsert_place_embedding',
+              'match_places','match_posts','upsert_place_embedding','deactivate_place_embedding',
               'upsert_post_embedding','get_place_content_hashes',
               'get_post_content_hashes','search_resource_embeddings',
               'get_resource_content_hashes','upsert_resource_embedding',
-              'deactivate_post_embedding','get_post_sync_checkpoint',
-              'save_post_sync_checkpoint','reset_post_sync_checkpoint',
+               'deactivate_post_embedding','get_post_sync_checkpoint',
+               'save_post_sync_checkpoint','reset_post_sync_checkpoint',
+               'get_place_sync_checkpoint','save_place_sync_checkpoint',
               'get_post_feed_features','get_post_embeddings_for_profile',
               'get_user_interest_states','upsert_user_interest_state',
               'reset_user_interest_profiles','create_post_cluster_run',
@@ -1758,12 +1805,20 @@ GRANT EXECUTE ON FUNCTION public.search_resource_embeddings(text, text, vector, 
 GRANT EXECUTE ON FUNCTION public.get_post_feed_features(text, text[]) TO nlp_reader;
 
 GRANT EXECUTE ON FUNCTION public.upsert_place_embedding(text, text, jsonb, vector, text, text, text, boolean) TO nlp_writer;
+GRANT EXECUTE ON FUNCTION public.deactivate_place_embedding(text) TO nlp_writer;
 GRANT EXECUTE ON FUNCTION public.upsert_post_embedding(text, text, jsonb, vector, text, text, text, boolean, text, text, timestamptz, bigint) TO nlp_writer;
 GRANT EXECUTE ON FUNCTION public.get_place_content_hashes(text[]) TO nlp_writer;
 GRANT EXECUTE ON FUNCTION public.get_post_content_hashes(text[]) TO nlp_writer;
 GRANT EXECUTE ON FUNCTION public.get_resource_content_hashes(text, text[]) TO nlp_writer;
 GRANT EXECUTE ON FUNCTION public.upsert_resource_embedding(text, text, text, jsonb, vector, text, text, text, boolean) TO nlp_writer;
+GRANT EXECUTE ON FUNCTION public.get_place_sync_checkpoint(text) TO nlp_writer;
+GRANT EXECUTE ON FUNCTION public.save_place_sync_checkpoint(text, bigint) TO nlp_writer;
 
 -- Configura contrasenas fuera de este archivo:
 -- ALTER ROLE nlp_reader PASSWORD '<secreto-reader>';
 -- ALTER ROLE nlp_writer PASSWORD '<secreto-writer>';
+
+-- El retriever semantico de Places se despliega de forma aditiva despues de
+-- este esquema base. Ejecuta, en orden:
+--   sql/migrations/20260716_02_places_semantic_v1.sql
+--   sql/migrations/20260721_03_place_facets_and_incremental_sync.sql

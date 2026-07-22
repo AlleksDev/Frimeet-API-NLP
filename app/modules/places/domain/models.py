@@ -12,6 +12,11 @@ class PlaceFilters:
     is_active: bool | None = True
     occasion: str | None = None
     place_ids: tuple[str, ...] | None = None
+    required_attribute_states: dict[str, bool | str] | None = None
+    attribute_terms_any: tuple[str, ...] | None = None
+    entertainment_features_any: tuple[str, ...] | None = None
+    contained_items_any: tuple[str, ...] | None = None
+    menu_items_any: tuple[str, ...] | None = None
 
     def as_metadata_filter(self) -> dict[str, Any]:
         return {
@@ -25,6 +30,11 @@ class PlaceFilters:
                 "is_active": self.is_active,
                 "occasion": self.occasion,
                 "place_ids": self.place_ids,
+                "required_attribute_states": self.required_attribute_states,
+                "attribute_terms_any": self.attribute_terms_any,
+                "entertainment_features_any": self.entertainment_features_any,
+                "contained_items_any": self.contained_items_any,
+                "menu_items_any": self.menu_items_any,
             }.items()
             if value is not None
         }
