@@ -7,6 +7,9 @@ from app.modules.places.application.ports.ranker import PlaceRanker
 from app.modules.places.domain.models import PlaceCandidate, PlaceFilters
 from app.modules.places.domain.search_text import (
     CATEGORY_WEIGHT,
+    DESCRIPTION_WEIGHT,
+    MENU_WEIGHT,
+    NAME_WEIGHT,
     TAG_WEIGHT,
     place_tokens,
     tokenize,
@@ -19,6 +22,9 @@ class Bm25PlaceRanker(PlaceRanker):
     engine_name = "bm25"
     score_metric = "bm25"
     field_weights = {
+        "name": NAME_WEIGHT,
+        "description": DESCRIPTION_WEIGHT,
+        "menu": MENU_WEIGHT,
         "tags": TAG_WEIGHT,
         "category": CATEGORY_WEIGHT,
         "other_text": 1,

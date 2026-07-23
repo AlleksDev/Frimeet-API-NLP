@@ -25,15 +25,17 @@ class MockLLMProvider(LLMProvider):
             )
         elif response_mode == "low_confidence" and names:
             message = (
-                "Quizá no sean exactamente lo que estás buscando, pero podrían interesarte: "
+                "Encontré algunas posibilidades cercanas a tu idea: "
                 + ", ".join(names[:3])
-                + ". Échales un vistazo y decide si alguna encaja con tu plan."
+                + ". Todavía no tengo señales suficientes para asegurarte que sean "
+                "justo lo que buscas; cuéntame qué detalle no puede faltar y lo "
+                "afinamos juntos."
             )
         elif names:
             message = (
-                "Encontré algunas opciones reales que pueden encajar con tu plan: "
+                "¡Claro! Encontré algunas opciones que se acercan bastante a tu plan: "
                 + ", ".join(names[:3])
-                + ". Revisa sus detalles y elige la que mejor vaya con la salida."
+                + ". Ojalá alguna se convierta en una buena salida para ti."
             )
         else:
             message = (

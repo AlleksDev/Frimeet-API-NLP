@@ -3,16 +3,17 @@ import re
 
 
 DEFAULT_PLACE_CHAT_FALLBACK = (
-    "Encontré algunas opciones que coinciden con lo que buscas. "
-    "Puedes revisar sus detalles y elegir la que mejor se adapte a tu plan."
+    "¡Claro! Encontré algunas opciones que se acercan bastante a lo que tienes "
+    "en mente. Ojalá alguna se convierta en un buen plan para ti."
 )
 NO_MATCH_PLACE_CHAT_FALLBACK = (
-    "Por ahora no hay lugares que se acoplen a tus necesidades. "
-    "Prueba con otro tipo de plan, zona u ocasión y lo intentamos de nuevo."
+    "Esta vez no encontré un lugar que encaje bien con lo que buscas. "
+    "Si quieres, probamos en otra zona o con una idea parecida."
 )
 LOW_CONFIDENCE_PLACE_CHAT_FALLBACK = (
-    "Quizá estas opciones no sean exactamente lo que buscas, pero podrían interesarte. "
-    "Revísalas y decide si alguna encaja con tu plan."
+    "Encontré algunas posibilidades cercanas a tu idea, aunque todavía no tengo "
+    "señales suficientes para asegurarte que sean justo lo que buscas. "
+    "Cuéntame qué detalle no puede faltar y lo afinamos juntos."
 )
 
 

@@ -24,6 +24,8 @@ def test_place_chat_prompt_requires_evidence_linked_explanations() -> None:
     assert "evidencia" in system.casefold()
     assert "enlaza" in system.casefold()
     assert "no nombres ni enumeres lugares" in system.casefold()
+    assert "tono calido" in system.casefold()
+    assert "revisa las cards" in system.casefold()
     assert payload["candidate_places"][0]["matched_reasons"] == [
         "baguettes",
         "panaderia",

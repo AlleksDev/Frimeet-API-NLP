@@ -400,13 +400,27 @@ class ChatPlaceRecommendationsUseCase:
             candidate
             for candidate in candidates
             if self._meets_content_threshold(candidate)
+            and self._candidate_supports_target_category(intent, candidate)
         )
         if supported_candidates:
             # Do not pad a sound recommendation set with weak candidates merely
-            # to fill the requested card limit. If every candidate is weak we
-            # keep them and communicate low confidence instead of collapsing
-            # an open-vocabulary request to zero results.
+            # to fill the requested card limit.
             candidates = supported_candidates
+        elif intent.target_category:
+            category_label = self._display_category(intent.target_category)
+            return self._result(
+                action="no_match",
+                message=(
+                    f"No encontré opciones de {category_label} con evidencia "
+                    "suficiente en su nombre, descripción, categoría o menú. "
+                    "Si quieres, probamos en otra zona o con una alternativa parecida."
+                ),
+                intent=intent,
+                directive=directive,
+                candidates=(),
+                unresolved=("retrieval_evidence",),
+                trace_id=trace_id,
+            )
         if not candidates:
             return self._result(
                 action="no_match",
@@ -889,34 +903,44 @@ class ChatPlaceRecommendationsUseCase:
             evidence = ChatPlaceRecommendationsUseCase._evidence_summary(candidates)
             if evidence:
                 return (
-                    "Estas opciones tienen una relacion aproximada con "
-                    f"{evidence}, aunque la evidencia todavia es debil. "
-                    "Revisa sus detalles y ajusta tu busqueda si no encajan."
+                    "Encontré algunas opciones que se acercan a tu idea por "
+                    f"{evidence}, aunque todavía no tengo evidencia suficiente "
+                    "para asegurarte que sean justo lo que buscas. Si me dices "
+                    "qué detalle es indispensable, lo afinamos juntos."
                 )
             return (
-                "Encontre opciones semanticamente relacionadas, aunque la evidencia "
-                "todavia es debil. Revisalas como sugerencias y ajusta tu busqueda "
-                "si no representan el plan que tienes en mente."
+                "Tengo algunas posibilidades, pero todavía no hay señales suficientes "
+                "para decirte que encajan bien con tu plan. Cuéntame qué detalle no "
+                "puede faltar y lo intentamos de nuevo."
             )
         evidence = ChatPlaceRecommendationsUseCase._evidence_summary(candidates)
         if evidence:
             return (
-                "Estas opciones aparecen porque sus datos se relacionan con "
-                f"{evidence}. Revisa las cards para comparar cual encaja mejor "
-                "con tu plan."
+                "¡Claro! Encontré opciones que se acercan bastante a lo que buscas. "
+                f"Lo que más las conecta con tu idea es {evidence}; ojalá alguna "
+                "se convierta en tu próximo plan."
             )
         exact = sum(candidate.match_level == "exact" for candidate in candidates)
         family = sum(candidate.match_level == "family" for candidate in candidates)
         if exact:
-            return "Encontre opciones con coincidencias directas para el estilo que buscas."
+            return (
+                "¡Claro! Encontré algunas opciones que van bastante bien con la idea "
+                "que tienes en mente. Ojalá alguna te inspire para tu próximo plan."
+            )
         if family:
-            return "Encontre opciones relacionadas con el tema y las preferencias que mencionaste."
+            return (
+                "Encontré algunas alternativas cercanas al estilo y las preferencias "
+                "que mencionaste. Si quieres afinar más, dime qué detalle es esencial."
+            )
         category = (
             category_display_label(intent.target_category).casefold()
             if intent.target_category
             else "lugar"
         )
-        return f"Encontre opciones de {category} que pueden encajar con tu solicitud."
+        return (
+            f"¡Vamos con ese plan! Encontré opciones de {category} que parecen "
+            "acercarse a lo que tienes en mente."
+        )
 
     @staticmethod
     def _evidence_summary(
@@ -975,23 +999,49 @@ class ChatPlaceRecommendationsUseCase:
         if not intent.target_category:
             return True
 
+        return any(
+            ChatPlaceRecommendationsUseCase._candidate_supports_target_category(
+                intent,
+                candidate,
+            )
+            for candidate in candidates
+        )
+
+    @staticmethod
+    def _candidate_supports_target_category(
+        intent: ParsedPlaceChatIntent,
+        candidate: PlaceChatCandidate,
+    ) -> bool:
+        if not intent.target_category:
+            return True
+
+        diagnostics = candidate.metadata.get("retrieval_diagnostics", {})
+        category_match = diagnostics.get("category_match")
+        if category_match in {
+            "exact",
+            "compatible_with_evidence",
+            "textual_evidence",
+        }:
+            return True
+        if category_match in {
+            "none",
+            "not_requested",
+            "compatible",
+            "compatible_tag_only",
+            "compatible_without_evidence",
+            "tag_only_evidence",
+        }:
+            return False
+
         requested_values = {
             normalized
             for value in (
                 intent.target_category,
                 *intent.category_values,
-                *intent.compatible_category_values,
             )
             if (normalized := _normalized_category(value))
         }
-        for candidate in candidates:
-            diagnostics = candidate.metadata.get("retrieval_diagnostics", {})
-            category_match = diagnostics.get("category_match")
-            if category_match not in {None, "none", "not_requested"}:
-                return True
-            if _candidate_has_category_evidence(candidate, requested_values):
-                return True
-        return False
+        return _candidate_has_category_evidence(candidate, requested_values)
 
     @staticmethod
     def _display_category(value: str) -> str:
@@ -1187,8 +1237,6 @@ def _candidate_category_values(candidate: PlaceChatCandidate) -> set[str]:
     for raw_value in (
         candidate.category,
         candidate.metadata.get("category_label"),
-        candidate.metadata.get("tags"),
-        candidate.metadata.get("tag_names"),
     ):
         for value in _text_values(raw_value):
             normalized = _normalized_category(value)
@@ -1210,8 +1258,10 @@ def _candidate_has_category_evidence(
     for raw_value in (
         candidate.category,
         candidate.metadata.get("category_label"),
-        candidate.metadata.get("tags"),
-        candidate.metadata.get("tag_names"),
+        candidate.name,
+        candidate.metadata.get("short_description"),
+        candidate.metadata.get("menu_items"),
+        candidate.metadata.get("contained_items"),
     ):
         raw_evidence.extend(_text_values(raw_value))
     haystack = f" {' '.join(_normalized_category(value) for value in raw_evidence)} "

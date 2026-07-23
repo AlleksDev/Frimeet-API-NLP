@@ -223,7 +223,8 @@ async def test_recommend_places_uses_cautious_message_below_threshold() -> None:
     assert result.places
     assert result.metrics.match_quality == "low_confidence"
     assert result.metadata["response_mode"] == "low_confidence"
-    assert "quizá" in result.message.casefold()
+    assert "afinamos juntos" in result.message.casefold()
+    assert "revisa" not in result.message.casefold()
 
 
 @pytest.mark.asyncio

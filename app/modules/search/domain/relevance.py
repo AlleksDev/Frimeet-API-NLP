@@ -55,7 +55,7 @@ class SearchRelevancePolicy:
         cls,
         semantic_min: float = 0.30,
         lexical_min: float = 0.05,
-        version: str = "global-search-relevance-v1",
+        version: str = "global-search-relevance-v2",
     ) -> "SearchRelevancePolicy":
         return cls(
             thresholds={

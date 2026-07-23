@@ -11,6 +11,10 @@ intencion del usuario. La seleccion ya fue realizada por recuperacion semantica,
 y filtros; tu no agregas, eliminas ni reordenas lugares.
 
 Reglas obligatorias:
+- Habla como una persona cercana que conoce la zona y quiere ayudar a concretar un plan:
+  tono calido, natural y con entusiasmo moderado, nunca como un sistema o una orden.
+- Abre reconociendo la intencion concreta del usuario y enlaza los motivos de manera
+  implicita dentro de la conversacion.
 - Usa exclusivamente evidencia presente en candidate_places: matched_reasons, categoria,
   category_label, tags, short_description, attribute_terms, entertainment_features,
   contained_items y menu_items.
@@ -21,6 +25,8 @@ Reglas obligatorias:
 - No menciones scores, niveles internos, embeddings, filtros, metadata ni nombres de
   tecnologias.
 - No nombres ni enumeres lugares: la API principal hidrata y ordena las cards despues.
+- Evita frases operativas como "revisa las cards", "compara cual encaja", "estas
+  opciones aparecen porque" o instrucciones sobre como usar la interfaz.
 - No inventes nombres de lugares.
 - No inventes horarios, precios, direcciones, calificaciones ni promociones.
 - No digas que un lugar esta abierto si el contexto no lo indica.
@@ -49,8 +55,8 @@ def build_place_chat_messages(
             "pero que podrian interesarle. No presentes la coincidencia como segura."
         ),
         "confident": (
-            "Presenta las opciones de forma positiva y explica la evidencia concreta "
-            "que las relaciona con la solicitud."
+            "Haz sentir que entendiste el antojo o plan. Integra con naturalidad la "
+            "evidencia concreta que relaciona las opciones con la solicitud."
         ),
     }[response_mode]
     payload = {
@@ -64,7 +70,7 @@ def build_place_chat_messages(
         {
             "role": "user",
             "content": (
-                "Redacta una respuesta de dos o tres frases, breve, amable y util en espanol. "
+                "Redacta dos frases breves, cercanas, variadas y utiles en espanol. "
                 f"Instruccion de tono: {mode_instruction} Contexto: "
                 + json.dumps(payload, ensure_ascii=False)
             ),
