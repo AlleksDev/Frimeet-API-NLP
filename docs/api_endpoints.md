@@ -337,7 +337,7 @@ Respuesta:
 {
   "response_id": "uuid-de-respuesta",
   "nlp_trace_id": "uuid-de-traza",
-  "message": "Estas opciones pueden funcionar para tu salida.",
+  "message": "Estas opciones aparecen porque sus datos se relacionan con musica y planes para amigos. Revisa las cards para comparar cual encaja mejor con tu plan.",
   "places": [],
   "metadata": {}
 }
@@ -407,6 +407,13 @@ una solicitud de lugares, se procesa como busqueda normal.
 `state` puede incluir `target_category`, `hard_filters`, `soft_preferences`,
 `exclusions`, `reference`, `explicit_target_location` y `pending_clarification`. Si
 `taxonomy_version` no coincide con la version desplegada, el endpoint responde `409`.
+
+Para `action="recommendations"`, `message` enlaza la solicitud con evidencia
+verificada de los candidatos (`matched_reasons`, categoria, etiquetas, atributos,
+entretenimiento, elementos contenidos o menu). No menciona nombres ni posiciones
+porque Go hidrata y reordena las cards posteriormente. Cuando existe al menos un
+candidato con evidencia suficiente, NLP no completa el limite con candidatos debiles;
+si todos son debiles, los conserva como sugerencias y comunica baja confianza.
 
 Cuando `action="clarification"`, la respuesta incluye entre 2 y 5 botones y persiste
 la allowlist correspondiente en `state_patch.pending_clarification`:
@@ -498,7 +505,7 @@ Para resolverla, Go reenvia el estado persistido y una seleccion estructurada:
       "radius_meters": null,
       "strict_radius": false
     },
-    "taxonomy_version": "places-taxonomy-v2"
+    "taxonomy_version": "places-taxonomy-v3"
   },
   "user_location": {"lat": 16.7531, "lng": -93.1156},
   "candidate_limit": 30,
@@ -682,11 +689,13 @@ Busca en paralelo sobre:
 - `groups`;
 - `events`.
 
-Calcula una sola representacion FastText de la consulta. Para `places` utiliza el mismo
-motor que `/places/recommendations`: similitud coseno mediante `match_places(...)`, sin
-fusion lexical ni RRF. Para `posts`, `users`, `clubs`, `groups` y `events` combina
-busqueda semantica pgvector con full-text search de PostgreSQL mediante Reciprocal Rank
-Fusion (RRF).
+Calcula una sola representacion FastText de la consulta. En una busqueda normal,
+`places`, `posts`, `users`, `clubs`, `groups` y `events` combinan similitud semantica
+pgvector con full-text search de PostgreSQL mediante Reciprocal Rank Fusion (RRF).
+Por eso un lugar puede aparecer por su nombre o por texto indexado aunque su similitud
+FastText aislada sea baja. Para `places` con `location.mode=strict` se conserva
+`match_places(...)`, porque aplica el allowlist geografico directamente sobre el ID del
+lugar y evita ampliar accidentalmente el radio solicitado.
 
 No recibe query parameters. Toda la entrada se envia en el body.
 
@@ -1007,8 +1016,8 @@ finalizados. Los cursores quedan ligados a query, recursos, filtros, ubicacion,
 | `PLACES_CHAT_AMBIGUITY_DELTA` | Diferencia maxima para considerar ambiguos dos anchors |
 | `PLACES_CHAT_DEFAULT_RADIUS_METERS` | Radio inicial para ubicacion implicita; default `5000` |
 | `PLACES_CHAT_MAX_AUTO_RADIUS_METERS` | Limite de expansion automatica no estricta; default `50000` |
-| `PLACES_CHAT_RANKING_VERSION` | Version observable de la politica de ranking |
-| `PLACES_CHAT_TAXONOMY_VERSION` | Version del parser y del estado conversacional |
+| `PLACES_CHAT_RANKING_VERSION` | Version observable de la politica de ranking; valor actual `places-chat-v4` |
+| `PLACES_CHAT_TAXONOMY_VERSION` | Version del parser y del estado conversacional; valor actual `places-taxonomy-v3` |
 | `MAX_REQUEST_BODY_BYTES` | Debe ser al menos `131072`; valor recomendado `262144` para 500 candidatos |
 | `REQUEST_TIMEOUT_SECONDS` | Presupuesto maximo para search interno y timeout de conexion/consulta pgvector |
 | `RATE_LIMIT_REQUESTS_PER_WINDOW` | Limite local por IP/ruta para endpoints publicos |

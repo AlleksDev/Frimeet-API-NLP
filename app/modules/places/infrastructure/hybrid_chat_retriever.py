@@ -357,7 +357,14 @@ class HybridContentPlaceChatRetriever:
         if not has_category_hypothesis:
             return 0.0, "not_requested", None
 
-        reason = intent.target_category or next(iter(intent.category_values), None)
+        # Preserve the user's wording as the public explanation. Canonical
+        # storage values such as ``bakery`` remain useful for ranking but make
+        # poor Spanish-facing reasons when the user asked for "baguettes".
+        reason = (
+            intent.raw_category_phrase
+            or intent.target_category
+            or next(iter(intent.category_values), None)
+        )
         if actual and actual in exact:
             return 1.0, "exact", reason or candidate.category
 

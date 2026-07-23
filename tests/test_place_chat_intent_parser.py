@@ -56,6 +56,32 @@ def test_greeting_with_a_place_request_remains_actionable() -> None:
     assert "non_search_input" not in intent.unresolved
 
 
+@pytest.mark.parametrize(
+    "message",
+    (
+        "quiero ir por baguettes",
+        "busco un lugar que venda baguete",
+        "donde venden baggets",
+    ),
+)
+def test_baguette_variants_resolve_to_bakery_without_losing_product_text(
+    message: str,
+) -> None:
+    intent = DeterministicPlaceChatIntentParser().parse(
+        message=message,
+        state=ConversationState(),
+        has_user_location=True,
+    )
+
+    assert intent.action == "recommendations"
+    assert intent.target_category == "bakery"
+    assert intent.raw_category_phrase
+    assert any(
+        term in intent.semantic_query
+        for term in ("baguette", "baguete", "baggets")
+    )
+
+
 def test_greeting_repeats_the_same_pending_clarification() -> None:
     pending = PendingClarification(
         clarification_id="pending-category-1",

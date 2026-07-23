@@ -342,13 +342,13 @@ class Settings(BaseSettings):
         alias="PLACES_CHAT_MAX_AUTO_RADIUS_METERS",
     )
     places_chat_ranking_version: str = Field(
-        default="places-chat-v3",
+        default="places-chat-v4",
         min_length=1,
         max_length=64,
         alias="PLACES_CHAT_RANKING_VERSION",
     )
     places_chat_taxonomy_version: str = Field(
-        default="places-taxonomy-v2",
+        default="places-taxonomy-v3",
         min_length=1,
         max_length=64,
         alias="PLACES_CHAT_TAXONOMY_VERSION",

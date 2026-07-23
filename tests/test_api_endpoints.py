@@ -120,7 +120,7 @@ def test_places_chat_opt_in_uses_semantic_conversation_contract() -> None:
     payload = response.json()
     assert payload["action"] == "recommendations"
     assert payload["state_patch"]["target_category"] == "cafe"
-    assert payload["state_patch"]["taxonomy_version"] == "places-taxonomy-v2"
+    assert payload["state_patch"]["taxonomy_version"] == "places-taxonomy-v3"
     assert payload["location_directive"]["source"] == "user_current"
     assert payload["uncertainty"]["decision"] == "auto"
     assert payload["metadata"]["pipeline"] == "places-chat-semantic-v2"

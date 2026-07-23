@@ -2,7 +2,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.modules.search.domain.filters import SearchCriteria
+from app.modules.search.domain.filters import (
+    LocationSearchMode,
+    SearchCriteria,
+    SearchLocation,
+)
 from app.modules.search.domain.models import SearchResourceType
 from app.modules.search.infrastructure.pgvector_provider import (
     PgvectorHybridSearchProvider,
@@ -15,6 +19,7 @@ from app.shared.vector_store.models import VectorMatch
 class RecordingVectorClient:
     def __init__(self) -> None:
         self.match_places_calls: list[dict[str, object]] = []
+        self.hybrid_calls: list[dict[str, object]] = []
 
     async def match_places(
         self,
@@ -41,11 +46,28 @@ class RecordingVectorClient:
         ][:limit]
 
     async def search_resource_embeddings(self, **kwargs: object) -> list[VectorMatch]:
-        raise AssertionError("Places must not use the hybrid RRF search function")
+        self.hybrid_calls.append(dict(kwargs))
+        return [
+            VectorMatch(
+                id="place-1",
+                score=0.82,
+                semantic_score=0.62,
+                lexical_score=0.15,
+                metadata={"name": "Cafe Central", "category": "cafe"},
+                document="cafe tranquilo para trabajar",
+            ),
+            VectorMatch(
+                id="place-2",
+                score=0.75,
+                semantic_score=0.55,
+                metadata={"name": "Cafe Sur", "category": "cafe"},
+                document="cafe para conversar",
+            ),
+        ][: int(kwargs["limit"])]
 
 
 @pytest.mark.asyncio
-async def test_places_use_same_cosine_match_function_as_recommendations() -> None:
+async def test_places_use_hybrid_search_with_query_text_and_thresholds() -> None:
     vector_client = RecordingVectorClient()
     provider = PgvectorPlaceSearchProvider(vector_client)  # type: ignore[arg-type]
 
@@ -58,18 +80,56 @@ async def test_places_use_same_cosine_match_function_as_recommendations() -> Non
         criteria=SearchCriteria(),
     )
 
-    assert vector_client.match_places_calls == [
+    assert vector_client.match_places_calls == []
+    assert vector_client.hybrid_calls == [
         {
+            "resource_type": "places",
+            "query_text": "cafe tranquilo",
             "embedding": [0.1, 0.2, 0.3],
-            "filters": {"is_active": True},
+            "filters": {
+                "is_active": True,
+                "min_semantic_score": 0.30,
+                "min_lexical_score": 0.05,
+            },
             "limit": 2,
         }
     ]
     assert hits[0].id == "place-2"
     assert hits[0].resource_type == SearchResourceType.PLACES
     assert hits[0].score == 0.75
-    assert hits[0].semantic_score == 0.75
+    assert hits[0].semantic_score == 0.55
     assert hits[0].lexical_score is None
+
+
+@pytest.mark.asyncio
+async def test_places_keep_external_id_filter_for_strict_location() -> None:
+    vector_client = RecordingVectorClient()
+    provider = PgvectorPlaceSearchProvider(vector_client)  # type: ignore[arg-type]
+
+    await provider.search(
+        query="cafe",
+        embedding=[0.1, 0.2, 0.3],
+        limit=5,
+        offset=0,
+        requester_id=None,
+        criteria=SearchCriteria(
+            location=SearchLocation(
+                latitude=16.75,
+                longitude=-93.11,
+                mode=LocationSearchMode.STRICT,
+            ),
+            nearby_place_ids=frozenset({"place-1"}),
+        ),
+    )
+
+    assert vector_client.hybrid_calls == []
+    assert vector_client.match_places_calls == [
+        {
+            "embedding": [0.1, 0.2, 0.3],
+            "filters": {"is_active": True, "place_ids": ["place-1"]},
+            "limit": 100,
+        }
+    ]
 
 
 class RecordingHybridVectorClient:
