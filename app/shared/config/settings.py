@@ -129,7 +129,7 @@ class Settings(BaseSettings):
         alias="GLOBAL_SEARCH_RESOURCE_THRESHOLDS_JSON",
     )
     global_search_threshold_policy_version: str = Field(
-        default="global-search-relevance-v1",
+        default="global-search-relevance-v2",
         min_length=1,
         max_length=64,
         alias="GLOBAL_SEARCH_THRESHOLD_POLICY_VERSION",
@@ -342,7 +342,7 @@ class Settings(BaseSettings):
         alias="PLACES_CHAT_MAX_AUTO_RADIUS_METERS",
     )
     places_chat_ranking_version: str = Field(
-        default="places-chat-v4",
+        default="places-chat-v5",
         min_length=1,
         max_length=64,
         alias="PLACES_CHAT_RANKING_VERSION",

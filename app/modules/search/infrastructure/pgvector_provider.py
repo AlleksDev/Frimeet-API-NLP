@@ -1,5 +1,7 @@
-from typing import Sequence
+from dataclasses import replace
+from typing import Any, Sequence
 
+from app.modules.places.domain.search_text import tokenize
 from app.modules.search.application.ports.search_provider import SearchProvider
 from app.modules.search.domain.filters import (
     LocationSearchMode,
@@ -70,7 +72,10 @@ class PgvectorPlaceSearchProvider(SearchProvider):
                 limit=fetch_limit,
             )
         hits = [
-            _to_search_hit(self.resource_type, match)
+            _with_place_field_relevance(
+                query,
+                _to_search_hit(self.resource_type, match),
+            )
             for match in matches
         ]
         relevant_hits = [hit for hit in hits if self._relevance_policy.accepts(hit)]
@@ -141,6 +146,9 @@ def _candidate_limit(
     resource_type: SearchResourceType,
 ) -> int:
     requested = offset + limit
+    if resource_type == SearchResourceType.PLACES:
+        minimum = 100 if criteria.requires_extended_candidates(resource_type) else 40
+        return min(max(requested * 8, minimum), 1000)
     if not criteria.requires_extended_candidates(resource_type):
         return requested
     return min(max(requested * 5, 100), 1000)
@@ -235,6 +243,74 @@ def _to_search_hit(resource_type: SearchResourceType, match: VectorMatch) -> Sea
         lexical_score=match.lexical_score,
         metadata=metadata,
     )
+
+
+def _with_place_field_relevance(query: str, hit: SearchHit) -> SearchHit:
+    """Prefer direct place content without treating missing fields as negative.
+
+    The database still supplies independent semantic and lexical candidates.
+    This bounded rerank only changes their order: name and description carry
+    most of the field evidence, while broad tags contribute a small tie-break.
+    """
+
+    query_tokens = set(tokenize(query))
+    if not query_tokens:
+        return hit
+    metadata = hit.metadata
+    field_score = (
+        0.42 * _field_coverage(query_tokens, hit.title)
+        + 0.30
+        * _field_coverage(
+            query_tokens,
+            metadata.get("short_description") or metadata.get("description"),
+        )
+        + 0.12
+        * _field_coverage(
+            query_tokens,
+            (
+                metadata.get("category"),
+                metadata.get("category_label"),
+            ),
+        )
+        + 0.10
+        * _field_coverage(
+            query_tokens,
+            (
+                metadata.get("menu_items"),
+                metadata.get("contained_items"),
+            ),
+        )
+        + 0.04
+        * _field_coverage(
+            query_tokens,
+            (
+                metadata.get("attribute_terms"),
+                metadata.get("entertainment_features"),
+            ),
+        )
+        + 0.02 * _field_coverage(query_tokens, metadata.get("tags"))
+    )
+    blended_score = min(1.0, max(0.0, 0.55 * hit.score + 0.45 * field_score))
+    return replace(hit, score=blended_score)
+
+
+def _field_coverage(query_tokens: set[str], value: Any) -> float:
+    if not query_tokens:
+        return 0.0
+    field_tokens = set(tokenize(_field_text(value)))
+    if not field_tokens:
+        return 0.0
+    return len(query_tokens & field_tokens) / len(query_tokens)
+
+
+def _field_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        return " ".join(_field_text(item) for item in value.values())
+    if isinstance(value, (list, tuple, set)):
+        return " ".join(_field_text(item) for item in value)
+    return str(value)
 
 
 def _subtitle(resource_type: SearchResourceType, metadata: dict[str, object]) -> str | None:

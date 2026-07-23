@@ -17,6 +17,8 @@ def _intent(
     *,
     target_category: str | None = None,
     category_values: tuple[str, ...] = (),
+    compatible_category_values: tuple[str, ...] = (),
+    category_evidence_terms: tuple[str, ...] = (),
     hard_filters: dict[str, object] | None = None,
     soft_preferences: tuple[str, ...] = (),
     exclusions: tuple[str, ...] = (),
@@ -25,6 +27,8 @@ def _intent(
         action="recommendations",
         target_category=target_category,
         category_values=category_values,
+        compatible_category_values=compatible_category_values,
+        category_evidence_terms=category_evidence_terms,
         hard_filters=hard_filters or {},
         soft_preferences=soft_preferences,
         exclusions=exclusions,
@@ -142,6 +146,56 @@ async def test_category_boosts_ranking_but_does_not_remove_other_categories() ->
     assert candidates[1].metadata["retrieval_diagnostics"]["category_match"] == (
         "none"
     )
+
+
+@pytest.mark.asyncio
+async def test_primary_content_outranks_tag_only_category_evidence() -> None:
+    repository = RecordingRepository(
+        [
+            PlaceCandidate(
+                id="tag_only",
+                name="Tienda General",
+                category="restaurant",
+                score=0.80,
+                metadata={"tags": "baggets pan"},
+            ),
+            PlaceCandidate(
+                id="described",
+                name="Casa Artesanal",
+                category="restaurant",
+                score=0.20,
+                metadata={
+                    "short_description": "Preparamos baggets artesanales al momento",
+                },
+            ),
+        ]
+    )
+    retriever = HybridContentPlaceChatRetriever(
+        embedding_provider=MockEmbeddingProvider(dimension=16),
+        place_repository=repository,
+    )
+
+    candidates = await retriever.retrieve(
+        intent=_intent(
+            "baggets",
+            target_category="bakery",
+            category_values=("bakery",),
+            compatible_category_values=("restaurant",),
+            category_evidence_terms=("baggets",),
+        ),
+        limit=5,
+    )
+
+    assert [candidate.place_id for candidate in candidates] == [
+        "described",
+        "tag_only",
+    ]
+    diagnostics = {
+        candidate.place_id: candidate.metadata["retrieval_diagnostics"]
+        for candidate in candidates
+    }
+    assert diagnostics["described"]["category_match"] == "compatible_with_evidence"
+    assert diagnostics["tag_only"]["category_match"] == "compatible_tag_only"
 
 
 class HybridRepository:

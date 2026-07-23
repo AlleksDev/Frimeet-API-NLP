@@ -5,8 +5,11 @@ from app.modules.places.domain.models import PlaceCandidate
 from app.shared.nlp.preprocessing.text import prepare_for_embedding
 
 
-TAG_WEIGHT = 6
+NAME_WEIGHT = 5
+DESCRIPTION_WEIGHT = 3
 CATEGORY_WEIGHT = 2
+MENU_WEIGHT = 3
+TAG_WEIGHT = 1
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 STOPWORDS = {
     "a",
@@ -70,13 +73,15 @@ STOPWORDS = {
 def place_tokens(place: PlaceCandidate) -> list[str]:
     tags = _as_text(place.metadata.get("tags"))
     category = place.category or ""
+    description = _as_text(place.metadata.get("short_description"))
+    menu = _as_text(place.metadata.get("menu_items"))
     facet_document = " ".join(
         value
         for value in (
             _as_text(place.metadata.get("attribute_terms")),
             _as_text(place.metadata.get("entertainment_features")),
             _as_text(place.metadata.get("contained_items")),
-            _as_text(place.metadata.get("menu_items")),
+            menu,
         )
         if value
     )
@@ -89,7 +94,7 @@ def place_tokens(place: PlaceCandidate) -> list[str]:
             place.state or "",
             tags,
             _as_text(place.metadata.get("occasion")),
-            _as_text(place.metadata.get("short_description")),
+            description,
         ]
         if value
     )
@@ -98,8 +103,12 @@ def place_tokens(place: PlaceCandidate) -> list[str]:
     # This keeps lexical matching correct during rolling re-indexes from v3 to
     # v4, while the content hash still guarantees eventual document refresh.
     weighted_fields = [base_document, facet_document]
+    weighted_fields.extend([place.name] * (NAME_WEIGHT - 1))
+    weighted_fields.extend([description] * (DESCRIPTION_WEIGHT - 1))
     weighted_fields.extend([category] * (CATEGORY_WEIGHT - 1))
-    weighted_fields.extend([tags] * (TAG_WEIGHT - 1))
+    weighted_fields.extend([menu] * (MENU_WEIGHT - 1))
+    # Tags remain searchable once through base_document. Repeating them used
+    # to let broad or noisy labels dominate the actual name and description.
     return tokenize(" ".join(value for value in weighted_fields if value))
 
 

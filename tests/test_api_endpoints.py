@@ -26,13 +26,13 @@ def test_places_search_endpoint() -> None:
     assert payload["metrics"]["ranking_parameters"] == {"dimension": 16.0}
     assert payload["metrics"]["field_weights"] == {
         "tags": 1,
-        "category": 1,
-        "description": 1,
-        "name": 1,
+        "category": 2,
+        "description": 3,
+        "name": 5,
         "attributes": 1,
         "entertainment": 1,
         "contained_items": 1,
-        "menu": 1,
+        "menu": 3,
     }
     assert payload["metrics"]["returned_count"] == len(payload["places"])
     assert payload["metrics"]["max_score"] >= payload["metrics"]["mean_score"]

@@ -337,7 +337,7 @@ Respuesta:
 {
   "response_id": "uuid-de-respuesta",
   "nlp_trace_id": "uuid-de-traza",
-  "message": "Estas opciones aparecen porque sus datos se relacionan con musica y planes para amigos. Revisa las cards para comparar cual encaja mejor con tu plan.",
+  "message": "¡Claro! Encontré opciones que se acercan bastante a lo que buscas. Lo que más las conecta con tu idea es música y planes para amigos; ojalá alguna se convierta en tu próximo plan.",
   "places": [],
   "metadata": {}
 }
@@ -413,7 +413,15 @@ verificada de los candidatos (`matched_reasons`, categoria, etiquetas, atributos
 entretenimiento, elementos contenidos o menu). No menciona nombres ni posiciones
 porque Go hidrata y reordena las cards posteriormente. Cuando existe al menos un
 candidato con evidencia suficiente, NLP no completa el limite con candidatos debiles;
-si todos son debiles, los conserva como sugerencias y comunica baja confianza.
+si el usuario pidio una categoria explicita y ninguno tiene evidencia primaria
+suficiente, responde `no_match` sin cards irrelevantes. En busquedas abiertas todavia
+puede conservar sugerencias debiles y comunicar baja confianza.
+
+Nombre, descripcion y menu tienen mayor peso lexical que las etiquetas. Para una
+categoria explicita, una categoria compatible solo se acepta si el nombre, descripcion,
+menu o contenido estructurado contiene evidencia especifica; un tag aislado puede
+ayudar a ordenar candidatos, pero no basta para devolver la card ni para justificar el
+mensaje.
 
 Cuando `action="clarification"`, la respuesta incluye entre 2 y 5 botones y persiste
 la allowlist correspondiente en `state_patch.pending_clarification`:
@@ -696,6 +704,10 @@ Por eso un lugar puede aparecer por su nombre o por texto indexado aunque su sim
 FastText aislada sea baja. Para `places` con `location.mode=strict` se conserva
 `match_places(...)`, porque aplica el allowlist geografico directamente sobre el ID del
 lugar y evita ampliar accidentalmente el radio solicitado.
+
+Dentro del reranking de Places, nombre y descripcion concentran la mayor parte de la
+evidencia de campos; categoria y menu aportan respaldo adicional, mientras las tags se
+usan solo como una señal secundaria. Un campo ausente queda neutral y no resta puntos.
 
 No recibe query parameters. Toda la entrada se envia en el body.
 
@@ -1016,7 +1028,7 @@ finalizados. Los cursores quedan ligados a query, recursos, filtros, ubicacion,
 | `PLACES_CHAT_AMBIGUITY_DELTA` | Diferencia maxima para considerar ambiguos dos anchors |
 | `PLACES_CHAT_DEFAULT_RADIUS_METERS` | Radio inicial para ubicacion implicita; default `5000` |
 | `PLACES_CHAT_MAX_AUTO_RADIUS_METERS` | Limite de expansion automatica no estricta; default `50000` |
-| `PLACES_CHAT_RANKING_VERSION` | Version observable de la politica de ranking; valor actual `places-chat-v4` |
+| `PLACES_CHAT_RANKING_VERSION` | Version observable de la politica de ranking; valor actual `places-chat-v5` |
 | `PLACES_CHAT_TAXONOMY_VERSION` | Version del parser y del estado conversacional; valor actual `places-taxonomy-v3` |
 | `MAX_REQUEST_BODY_BYTES` | Debe ser al menos `131072`; valor recomendado `262144` para 500 candidatos |
 | `REQUEST_TIMEOUT_SECONDS` | Presupuesto maximo para search interno y timeout de conexion/consulta pgvector |
