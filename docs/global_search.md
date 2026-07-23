@@ -38,7 +38,7 @@ Variables:
 GLOBAL_SEARCH_MIN_SEMANTIC_SCORE=0.30
 GLOBAL_SEARCH_MIN_LEXICAL_SCORE=0.05
 GLOBAL_SEARCH_RESOURCE_THRESHOLDS_JSON={}
-GLOBAL_SEARCH_THRESHOLD_POLICY_VERSION=global-search-relevance-v1
+GLOBAL_SEARCH_THRESHOLD_POLICY_VERSION=global-search-relevance-v2
 ```
 
 Ejemplo de override completo:
@@ -143,6 +143,11 @@ Esto permite recuperar por nombre, categoria, etiquetas, atributos o productos
 incluidos en el documento aun cuando la similitud vectorial aislada sea baja. El
 modo geografico `strict` conserva `match_places`, porque ese contrato restringe
 directamente por `external_id` y garantiza que no entren lugares fuera del radio.
+
+La politica `global-search-relevance-v2` recupera un pool ampliado y lo reordena por
+campos. Nombre y descripcion tienen prioridad, categoria y menu tienen peso intermedio,
+y las tags solo sirven como señal secundaria. La ausencia de descripcion u otro campo
+no genera penalizacion; simplemente no aporta evidencia por ese canal.
 
 `textsearch` es una columna generada a partir de `document`: los registros cargados
 por el snapshot ya quedan disponibles para la busqueda lexical. Desplegar esta

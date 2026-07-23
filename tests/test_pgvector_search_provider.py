@@ -91,12 +91,12 @@ async def test_places_use_hybrid_search_with_query_text_and_thresholds() -> None
                 "min_semantic_score": 0.30,
                 "min_lexical_score": 0.05,
             },
-            "limit": 2,
+            "limit": 40,
         }
     ]
     assert hits[0].id == "place-2"
     assert hits[0].resource_type == SearchResourceType.PLACES
-    assert hits[0].score == 0.75
+    assert hits[0].score == pytest.approx(0.534)
     assert hits[0].semantic_score == 0.55
     assert hits[0].lexical_score is None
 
@@ -130,6 +130,54 @@ async def test_places_keep_external_id_filter_for_strict_location() -> None:
             "limit": 100,
         }
     ]
+
+
+class PlaceFieldWeightVectorClient:
+    async def search_resource_embeddings(self, **kwargs: object) -> list[VectorMatch]:
+        del kwargs
+        return [
+            VectorMatch(
+                id="tag-only",
+                score=0.90,
+                semantic_score=0.60,
+                lexical_score=0.10,
+                metadata={
+                    "name": "Tienda General",
+                    "category": "shopping",
+                    "tags": "baggets",
+                },
+            ),
+            VectorMatch(
+                id="primary-content",
+                score=0.60,
+                semantic_score=0.50,
+                lexical_score=0.10,
+                metadata={
+                    "name": "Casa de Baggets",
+                    "category": "restaurant",
+                    "short_description": "Baggets artesanales preparados al momento",
+                },
+            ),
+        ]
+
+
+@pytest.mark.asyncio
+async def test_places_rank_name_and_description_above_tag_only_match() -> None:
+    provider = PgvectorPlaceSearchProvider(  # type: ignore[arg-type]
+        PlaceFieldWeightVectorClient()
+    )
+
+    hits = await provider.search(
+        query="baggets",
+        embedding=[0.1, 0.2, 0.3],
+        limit=5,
+        offset=0,
+        requester_id=None,
+        criteria=SearchCriteria(),
+    )
+
+    assert [hit.id for hit in hits] == ["primary-content", "tag-only"]
+    assert hits[0].score > hits[1].score
 
 
 class RecordingHybridVectorClient:

@@ -124,7 +124,7 @@ class GlobalSearchRequest(BaseModel):
     def cursor_context_payload(
         self,
         nearby_boost: float = 0.12,
-        policy_version: str = "global-search-relevance-v1",
+        policy_version: str = "global-search-relevance-v2",
     ) -> dict[str, Any]:
         filters = self.filters.model_dump(mode="json")
         for key in ("categories", "price_ranges", "tags", "user_roles"):

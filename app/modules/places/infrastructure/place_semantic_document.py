@@ -11,13 +11,13 @@ from app.modules.places.infrastructure.place_facets import ResolvedPlaceFacets
 
 PLACE_SEMANTIC_FIELD_WEIGHTS = {
     "tags": 1,
-    "category": 1,
-    "description": 1,
-    "name": 1,
+    "category": 2,
+    "description": 3,
+    "name": 5,
     "attributes": 1,
     "entertainment": 1,
     "contained_items": 1,
-    "menu": 1,
+    "menu": 3,
 }
 PLACE_SEMANTIC_DOCUMENT_VERSION = "structured-place-v4"
 

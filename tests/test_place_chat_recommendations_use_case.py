@@ -523,17 +523,19 @@ class MixedEvidenceRetriever:
                 },
             ),
             PlaceChatCandidate(
-                place_id="weak_filler",
-                name="Resultado sin evidencia",
-                category="shopping",
-                content_score=0.08,
-                semantic_score=0.10,
-                lexical_score=0.0,
+                place_id="tag_only_filler",
+                name="Resultado respaldado solo por tag",
+                category="restaurant",
+                content_score=0.78,
+                semantic_score=0.70,
+                lexical_score=0.60,
                 match_level="broad",
                 matched_reasons=(),
                 metadata={
+                    "tags": ["baggets"],
                     "retrieval_diagnostics": {
-                        "meets_minimum_content_score": False,
+                        "category_match": "compatible_tag_only",
+                        "meets_minimum_content_score": True,
                     },
                 },
             ),
@@ -559,11 +561,12 @@ async def test_strong_results_are_not_padded_with_weak_candidates_and_explain_ev
         "baguette_shop"
     ]
     assert "baggets" in result.message.casefold()
-    assert "porque" in result.message.casefold()
+    assert "¡claro!" in result.message.casefold()
+    assert "cards" not in result.message.casefold()
 
 
 @pytest.mark.asyncio
-async def test_weak_candidates_are_returned_as_reviewable_not_confident() -> None:
+async def test_explicit_category_does_not_return_weak_candidates() -> None:
     result = await build_use_case(
         llm_enabled=False,
         retriever=WeakEvidenceRetriever(),
@@ -576,9 +579,9 @@ async def test_weak_candidates_are_returned_as_reviewable_not_confident() -> Non
         result_limit=3,
     )
 
-    assert result.action == "recommendations"
+    assert result.action == "no_match"
     assert result.unresolved == ("retrieval_evidence",)
-    assert [candidate.place_id for candidate in result.candidates] == ["weak_1"]
+    assert result.candidates == ()
     assert "evidencia" in result.message.casefold()
 
 

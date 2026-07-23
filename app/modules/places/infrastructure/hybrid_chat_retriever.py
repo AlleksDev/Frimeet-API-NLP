@@ -178,6 +178,10 @@ class HybridContentPlaceChatRetriever:
             attribute_conflict_affinity, attribute_conflicts = (
                 self._attribute_conflict_affinity(candidate, intent)
             )
+            category_alignment_penalty = _category_alignment_penalty(
+                intent.target_category,
+                category_match,
+            )
             # Exclusions are negative ranking evidence, not a boolean gate. A
             # source description may mention an excluded concept in a negated
             # form ("sin ruido"), and removing that row would invert intent.
@@ -187,7 +191,8 @@ class HybridContentPlaceChatRetriever:
                 0.0,
                 base_content_score
                 - 0.35 * exclusion_affinity
-                - 0.18 * attribute_conflict_affinity,
+                - 0.18 * attribute_conflict_affinity
+                - category_alignment_penalty,
             )
             effective_minimum_content_score = (
                 self._effective_minimum_content_score(candidate)
@@ -220,6 +225,11 @@ class HybridContentPlaceChatRetriever:
             if effective_minimum_content_score != self._minimum_content_score:
                 diagnostics["configured_minimum_content_score"] = (
                     self._minimum_content_score
+                )
+            if category_alignment_penalty:
+                diagnostics["category_alignment_penalty"] = round(
+                    category_alignment_penalty,
+                    6,
                 )
             metadata["retrieval_diagnostics"] = diagnostics
             ranked.append(
@@ -368,18 +378,31 @@ class HybridContentPlaceChatRetriever:
         if actual and actual in exact:
             return 1.0, "exact", reason or candidate.category
 
-        candidate_evidence_tokens = _category_evidence_tokens(candidate)
-        has_specific_evidence = any(
-            term_tokens and term_tokens <= candidate_evidence_tokens
+        primary_evidence_tokens = _category_primary_evidence_tokens(candidate)
+        secondary_evidence_tokens = _category_secondary_evidence_tokens(candidate)
+        has_primary_evidence = any(
+            term_tokens and term_tokens <= primary_evidence_tokens
+            for term in intent.category_evidence_terms
+            if (term_tokens := set(tokenize(term)))
+        )
+        has_secondary_evidence = any(
+            term_tokens and term_tokens <= secondary_evidence_tokens
             for term in intent.category_evidence_terms
             if (term_tokens := set(tokenize(term)))
         )
         if actual and actual in compatible:
-            if has_specific_evidence:
+            if has_primary_evidence:
                 return 0.80, "compatible_with_evidence", reason
-            return 0.35, "compatible", reason
-        if has_specific_evidence:
+            if has_secondary_evidence:
+                # A broad tag can help order the candidate pool, but it is not
+                # enough to claim that the place satisfies an explicit
+                # category or product request.
+                return 0.15, "compatible_tag_only", None
+            return 0.05, "compatible_without_evidence", None
+        if has_primary_evidence:
             return 0.65, "textual_evidence", reason
+        if has_secondary_evidence:
+            return 0.10, "tag_only_evidence", None
         return 0.0, "none", None
 
     @staticmethod
@@ -556,6 +579,23 @@ def _match_level_priority(level: str) -> int:
     return {"exact": 0, "family": 1, "broad": 2}.get(level, 3)
 
 
+def _category_alignment_penalty(
+    target_category: str | None,
+    category_match: str,
+) -> float:
+    if not target_category:
+        return 0.0
+    if category_match in {"compatible_tag_only", "tag_only_evidence", "compatible"}:
+        return 0.30
+    if category_match in {
+        "compatible_without_evidence",
+        "none",
+        "not_requested",
+    }:
+        return 0.35
+    return 0.0
+
+
 def _optional_string(value: object) -> str | None:
     if value is None:
         return None
@@ -569,17 +609,30 @@ def _normalized_category(value: object) -> str:
     return prepare_for_embedding(str(value)).replace(" ", "_")
 
 
-def _category_evidence_tokens(candidate: PlaceCandidate) -> set[str]:
+def _category_primary_evidence_tokens(candidate: PlaceCandidate) -> set[str]:
     # Do not inspect candidate.document here: indexed documents intentionally
     # contain broad category profiles (for example, all `entertainment` records
-    # mention cinema). Compatibility must be proven by place-specific fields.
+    # mention cinema). Compatibility must be proven by place-specific content.
     evidence = " ".join(
         value
         for value in (
             candidate.name,
-            _as_evidence_text(candidate.metadata.get("tags")),
             _as_evidence_text(candidate.metadata.get("short_description")),
-            _positive_facet_evidence(candidate),
+            _as_evidence_text(candidate.metadata.get("menu_items")),
+            _as_evidence_text(candidate.metadata.get("contained_items")),
+            _as_evidence_text(candidate.metadata.get("entertainment_features")),
+        )
+        if value
+    )
+    return set(tokenize(evidence))
+
+
+def _category_secondary_evidence_tokens(candidate: PlaceCandidate) -> set[str]:
+    evidence = " ".join(
+        value
+        for value in (
+            _as_evidence_text(candidate.metadata.get("tags")),
+            _as_evidence_text(candidate.metadata.get("attribute_terms")),
         )
         if value
     )
