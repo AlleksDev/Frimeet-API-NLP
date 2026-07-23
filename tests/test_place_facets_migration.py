@@ -32,6 +32,13 @@ def test_place_facet_migration_is_additive_and_idempotent() -> None:
         assert destructive not in sql
 
 
+def test_place_facet_migration_disambiguates_jsonb_operator_precedence() -> None:
+    sql = MIGRATION.read_text(encoding="utf-8").lower()
+
+    assert "@> (filters->'required_attribute_states')" in sql
+    assert "@> filters->'required_attribute_states'" not in sql
+
+
 def test_place_filters_forward_structured_facets_to_pgvector() -> None:
     filters = PlaceFilters(
         required_attribute_states={"has_parking": True},
