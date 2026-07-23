@@ -34,9 +34,13 @@ class PlaceChatOutputGuard:
         allowed_place_names: list[str],
         response_mode: str = "confident",
     ) -> GuardedLLMMessage:
-        cleaned = " ".join((message or "").split())
+        raw_message = message or ""
+        cleaned = " ".join(raw_message.split())
         if len(cleaned) < 10:
             return self.fallback("empty_or_too_short", response_mode)
+
+        if self._contains_meta_or_non_plain_response(raw_message, cleaned):
+            return self.fallback("meta_or_non_plain_response", response_mode)
 
         if self._contains_unsupported_claims(cleaned):
             return self.fallback("unsupported_claims", response_mode)
@@ -81,6 +85,37 @@ class PlaceChatOutputGuard:
             r"\b\d{1,2}:\d{2}\b",
         ]
         return any(re.search(pattern, message, flags=re.IGNORECASE) for pattern in patterns)
+
+    @staticmethod
+    def _contains_meta_or_non_plain_response(raw_message: str, cleaned: str) -> bool:
+        stripped = raw_message.strip()
+        lowered = cleaned.casefold()
+        if not stripped:
+            return False
+
+        if stripped.startswith(("```", "{", "[", "#")):
+            return True
+        if re.search(r"(?m)^\s*(?:[-*]|\d+[.)])\s+", raw_message):
+            return True
+        if (
+            len(cleaned) >= 2
+            and cleaned[0] in {'"', "'", "“", "«"}
+            and cleaned[-1] in {'"', "'", "”", "»"}
+        ):
+            return True
+
+        meta_patterns = (
+            r"\b(?:aqui|aquí)\s+(?:te\s+dejo|tienes|van|hay)\b",
+            r"\b(?:dos|2)\s+(?:opciones|alternativas|versiones)\b",
+            r"\b(?:opcion|opción|alternativa|version|versión)\s*(?:\d+|uno|dos)?\s*:",
+            r"\b(?:ambas|las\s+dos)\s+opciones\b",
+            r"\b(?:redactar|redaccion|redacción)\b",
+            r"\b(?:busca|buscan)\s+transmitir\b",
+        )
+        return any(
+            re.search(pattern, lowered, flags=re.IGNORECASE)
+            for pattern in meta_patterns
+        )
 
     @staticmethod
     def _mentions_explicit_place(message: str) -> bool:
