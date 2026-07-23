@@ -8,6 +8,11 @@ _COMPATIBLE_PREVIOUS_VERSIONS: dict[str, frozenset[str]] = {
     # V1 canonical IDs and clarification option IDs keep the same meaning, so a
     # turn can safely consume V1 state and re-emit a V2 state patch.
     "places-taxonomy-v2": frozenset({"places-taxonomy-v1"}),
+    # V3 extends bakery vocabulary with baguette variants and common spelling
+    # mistakes. Canonical IDs keep their V2 meaning.
+    "places-taxonomy-v3": frozenset(
+        {"places-taxonomy-v1", "places-taxonomy-v2"}
+    ),
 }
 
 
