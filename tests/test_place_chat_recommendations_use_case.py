@@ -502,6 +502,66 @@ class WeakEvidenceRetriever:
         ]
 
 
+class MixedEvidenceRetriever:
+    async def retrieve(self, intent, limit):
+        del intent, limit
+        return [
+            PlaceChatCandidate(
+                place_id="baguette_shop",
+                name="Lugar con baguettes",
+                category="bakery",
+                content_score=0.72,
+                semantic_score=0.70,
+                lexical_score=0.66,
+                match_level="exact",
+                matched_reasons=("baggets", "menu de baguettes"),
+                metadata={
+                    "menu_items": ["Baguette artesanal"],
+                    "retrieval_diagnostics": {
+                        "meets_minimum_content_score": True,
+                    },
+                },
+            ),
+            PlaceChatCandidate(
+                place_id="weak_filler",
+                name="Resultado sin evidencia",
+                category="shopping",
+                content_score=0.08,
+                semantic_score=0.10,
+                lexical_score=0.0,
+                match_level="broad",
+                matched_reasons=(),
+                metadata={
+                    "retrieval_diagnostics": {
+                        "meets_minimum_content_score": False,
+                    },
+                },
+            ),
+        ]
+
+
+@pytest.mark.asyncio
+async def test_strong_results_are_not_padded_with_weak_candidates_and_explain_evidence() -> None:
+    result = await build_use_case(
+        llm_enabled=False,
+        retriever=MixedEvidenceRetriever(),
+    ).execute(
+        message="quiero comer baggets",
+        state=ConversationState(),
+        user_latitude=16.7531,
+        user_longitude=-93.1156,
+        candidate_limit=5,
+        result_limit=3,
+    )
+
+    assert result.action == "recommendations"
+    assert [candidate.place_id for candidate in result.candidates] == [
+        "baguette_shop"
+    ]
+    assert "baggets" in result.message.casefold()
+    assert "porque" in result.message.casefold()
+
+
 @pytest.mark.asyncio
 async def test_weak_candidates_are_returned_as_reviewable_not_confident() -> None:
     result = await build_use_case(

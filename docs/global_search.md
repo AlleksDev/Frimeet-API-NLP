@@ -123,6 +123,31 @@ MAIN_API_GROUPS_SNAPSHOT_PATH=/api/v1/internal/search/groups/snapshot
 MAIN_API_EVENTS_SNAPSHOT_PATH=/api/v1/internal/search/events/snapshot
 ```
 
+`sync_search_embeddings --resource all` significa todos los recursos administrados
+por ese job: users, clubs, groups y events. Places y posts conservan sus propios
+contratos y se actualizan por separado:
+
+```bash
+python -m app.jobs.sync_place_embeddings --mode incremental
+python -m app.jobs.sync_post_embeddings --mode incremental
+python -m app.jobs.sync_search_embeddings --resource all
+```
+
+Para Search global, Places usa `place_embeddings` de 300 dimensiones. La tabla
+`place_embeddings_semantic_v1` de 768 dimensiones pertenece al buscador y chat
+especializados de Places; poblarla no sustituye la carga FastText de Search global.
+
+Las consultas normales de Places en Search global combinan dos evidencias sobre
+`place_embeddings`: similitud FastText y coincidencia lexical contra `textsearch`.
+Esto permite recuperar por nombre, categoria, etiquetas, atributos o productos
+incluidos en el documento aun cuando la similitud vectorial aislada sea baja. El
+modo geografico `strict` conserva `match_places`, porque ese contrato restringe
+directamente por `external_id` y garantiza que no entren lugares fuera del radio.
+
+`textsearch` es una columna generada a partir de `document`: los registros cargados
+por el snapshot ya quedan disponibles para la busqueda lexical. Desplegar esta
+version de la API no exige volver a ejecutar el initial load ni una migracion SQL.
+
 Los jobs de search no aceptan `MAIN_API_AUTH_TOKEN` como reemplazo. La identidad de un
 usuario final no debe controlar la construccion del indice derivado.
 

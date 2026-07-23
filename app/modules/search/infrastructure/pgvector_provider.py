@@ -15,7 +15,7 @@ _PRIVATE_METADATA_KEYS = {"authorized_user_ids", "creator_id"}
 
 
 class PgvectorPlaceSearchProvider(SearchProvider):
-    """Use the same FastText cosine retrieval path as place recommendations."""
+    """Combine lexical and FastText evidence for global place search."""
 
     resource_type = SearchResourceType.PLACES
 
@@ -36,7 +36,7 @@ class PgvectorPlaceSearchProvider(SearchProvider):
         requester_id: str | None,
         criteria: SearchCriteria,
     ) -> Sequence[SearchHit]:
-        del query, requester_id
+        del requester_id
         if (
             criteria.location is not None
             and criteria.location.mode == LocationSearchMode.STRICT
@@ -45,11 +45,30 @@ class PgvectorPlaceSearchProvider(SearchProvider):
             return []
         metadata_filters = _place_metadata_filters(criteria)
         fetch_limit = _candidate_limit(offset, limit, criteria, self.resource_type)
-        matches = await self._vector_client.match_places(
-            embedding=embedding,
-            filters=metadata_filters,
-            limit=fetch_limit,
-        )
+        if (
+            criteria.location is not None
+            and criteria.location.mode == LocationSearchMode.STRICT
+        ):
+            # The legacy matcher filters Places by external_id. The generic
+            # hybrid contract uses metadata.place_id, which belongs to related
+            # resources such as clubs and events, so strict radius keeps the
+            # existing SQL path to avoid widening the requested area.
+            matches = await self._vector_client.match_places(
+                embedding=embedding,
+                filters=metadata_filters,
+                limit=fetch_limit,
+            )
+        else:
+            threshold = self._relevance_policy.threshold_for(self.resource_type)
+            metadata_filters["min_semantic_score"] = threshold.semantic_min
+            metadata_filters["min_lexical_score"] = threshold.lexical_min
+            matches = await self._vector_client.search_resource_embeddings(
+                resource_type=self.resource_type.value,
+                query_text=query,
+                embedding=embedding,
+                filters=metadata_filters,
+                limit=fetch_limit,
+            )
         hits = [
             _to_search_hit(self.resource_type, match)
             for match in matches

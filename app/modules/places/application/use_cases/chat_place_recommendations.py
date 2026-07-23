@@ -396,6 +396,17 @@ class ChatPlaceRecommendationsUseCase:
                 unresolved=("category_availability",),
                 trace_id=trace_id,
             )
+        supported_candidates = tuple(
+            candidate
+            for candidate in candidates
+            if self._meets_content_threshold(candidate)
+        )
+        if supported_candidates:
+            # Do not pad a sound recommendation set with weak candidates merely
+            # to fill the requested card limit. If every candidate is weak we
+            # keep them and communicate low confidence instead of collapsing
+            # an open-vocabulary request to zero results.
+            candidates = supported_candidates
         if not candidates:
             return self._result(
                 action="no_match",
@@ -846,10 +857,7 @@ class ChatPlaceRecommendationsUseCase:
             return fallback, False, "llm_disabled"
         try:
             result = await self._llm_provider.generate_place_chat_response(
-                user_intent=(
-                    intent.semantic_query
-                    + ". Redacta de forma general y no menciones nombres propios."
-                ),
+                user_intent=intent.semantic_query,
                 region=state.city or state.state,
                 places=[self._candidate_context(candidate) for candidate in candidates],
                 response_mode=response_mode,
@@ -878,10 +886,24 @@ class ChatPlaceRecommendationsUseCase:
         response_mode: str = "confident",
     ) -> str:
         if response_mode == "low_confidence":
+            evidence = ChatPlaceRecommendationsUseCase._evidence_summary(candidates)
+            if evidence:
+                return (
+                    "Estas opciones tienen una relacion aproximada con "
+                    f"{evidence}, aunque la evidencia todavia es debil. "
+                    "Revisa sus detalles y ajusta tu busqueda si no encajan."
+                )
             return (
                 "Encontre opciones semanticamente relacionadas, aunque la evidencia "
                 "todavia es debil. Revisalas como sugerencias y ajusta tu busqueda "
                 "si no representan el plan que tienes en mente."
+            )
+        evidence = ChatPlaceRecommendationsUseCase._evidence_summary(candidates)
+        if evidence:
+            return (
+                "Estas opciones aparecen porque sus datos se relacionan con "
+                f"{evidence}. Revisa las cards para comparar cual encaja mejor "
+                "con tu plan."
             )
         exact = sum(candidate.match_level == "exact" for candidate in candidates)
         family = sum(candidate.match_level == "family" for candidate in candidates)
@@ -895,6 +917,33 @@ class ChatPlaceRecommendationsUseCase:
             else "lugar"
         )
         return f"Encontre opciones de {category} que pueden encajar con tu solicitud."
+
+    @staticmethod
+    def _evidence_summary(
+        candidates: Sequence[PlaceChatCandidate],
+        maximum: int = 3,
+    ) -> str:
+        reasons: list[str] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            for reason in candidate.matched_reasons:
+                normalized = " ".join(str(reason).replace("_", " ").split()).strip()
+                key = normalized.casefold()
+                if not normalized or key in seen:
+                    continue
+                seen.add(key)
+                reasons.append(
+                    category_display_label(normalized).casefold()
+                )
+                if len(reasons) >= maximum:
+                    break
+            if len(reasons) >= maximum:
+                break
+        if not reasons:
+            return ""
+        if len(reasons) == 1:
+            return reasons[0]
+        return ", ".join(reasons[:-1]) + f" y {reasons[-1]}"
 
     @staticmethod
     def _meets_content_threshold(candidate: PlaceChatCandidate) -> bool:

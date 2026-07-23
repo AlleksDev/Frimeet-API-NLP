@@ -1,5 +1,5 @@
 {
-  "version": "places-taxonomy-v2",
+  "version": "places-taxonomy-v3",
   "categories": [
     {
       "canonical": "cafe",
@@ -53,10 +53,10 @@
     },
     {
       "canonical": "bakery",
-      "aliases": ["panaderia", "pasteleria", "reposteria"],
+      "aliases": ["panaderia", "pasteleria", "reposteria", "baguette", "baguettes", "baguete", "baguetes", "bagget", "baggets"],
       "storage_values": ["bakery", "panaderia", "pasteleria", "reposteria", "pastry_shop", "pastry shop"],
       "compatible_storage_values": ["shopping", "restaurant", "cafe"],
-      "evidence_terms": ["panaderia", "bakery", "pasteleria", "reposteria", "pan", "pastel"]
+      "evidence_terms": ["panaderia", "bakery", "pasteleria", "reposteria", "pan", "pastel", "baguette", "baguettes", "baguete", "baguetes", "bagget", "baggets"]
     },
     {
       "canonical": "ice_cream",
