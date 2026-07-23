@@ -417,6 +417,10 @@ si el usuario pidio una categoria explicita y ninguno tiene evidencia primaria
 suficiente, responde `no_match` sin cards irrelevantes. En busquedas abiertas todavia
 puede conservar sugerencias debiles y comunicar baja confianza.
 
+`message` siempre es un unico texto plano listo para mostrarse. NLP rechaza respuestas
+del modelo que incluyan alternativas, versiones, encabezados, listas, Markdown, JSON o
+explicaciones sobre como fue redactado el mensaje y utiliza el fallback seguro.
+
 Nombre, descripcion y menu tienen mayor peso lexical que las etiquetas. Para una
 categoria explicita, una categoria compatible solo se acepta si el nombre, descripcion,
 menu o contenido estructurado contiene evidencia especifica; un tag aislado puede
