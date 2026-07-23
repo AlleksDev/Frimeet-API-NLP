@@ -94,35 +94,46 @@ AS $$
     SELECT
         (
             (filters ? 'required_attribute_states') IS FALSE
-            OR COALESCE(place_metadata->'attribute_states', '{}'::jsonb)
-               @> filters->'required_attribute_states'
+            OR COALESCE((place_metadata->'attribute_states'), '{}'::jsonb)
+               @> (filters->'required_attribute_states')
         )
         AND (
             (filters ? 'attribute_terms_any') IS FALSE
-            OR COALESCE(place_metadata->'attribute_terms', '[]'::jsonb)
+            OR COALESCE((place_metadata->'attribute_terms'), '[]'::jsonb)
                ?| ARRAY(
-                    SELECT jsonb_array_elements_text(filters->'attribute_terms_any')
+                    SELECT jsonb_array_elements_text(
+                        (filters->'attribute_terms_any')
+                    )
                )
         )
         AND (
             (filters ? 'entertainment_features_any') IS FALSE
-            OR COALESCE(place_metadata->'entertainment_features', '[]'::jsonb)
+            OR COALESCE(
+                    (place_metadata->'entertainment_features'),
+                    '[]'::jsonb
+               )
                ?| ARRAY(
-                    SELECT jsonb_array_elements_text(filters->'entertainment_features_any')
+                    SELECT jsonb_array_elements_text(
+                        (filters->'entertainment_features_any')
+                    )
                )
         )
         AND (
             (filters ? 'contained_items_any') IS FALSE
-            OR COALESCE(place_metadata->'contained_items', '[]'::jsonb)
+            OR COALESCE((place_metadata->'contained_items'), '[]'::jsonb)
                ?| ARRAY(
-                    SELECT jsonb_array_elements_text(filters->'contained_items_any')
+                    SELECT jsonb_array_elements_text(
+                        (filters->'contained_items_any')
+                    )
                )
         )
         AND (
             (filters ? 'menu_items_any') IS FALSE
-            OR COALESCE(place_metadata->'menu_items', '[]'::jsonb)
+            OR COALESCE((place_metadata->'menu_items'), '[]'::jsonb)
                ?| ARRAY(
-                    SELECT jsonb_array_elements_text(filters->'menu_items_any')
+                    SELECT jsonb_array_elements_text(
+                        (filters->'menu_items_any')
+                    )
                )
         );
 $$;
